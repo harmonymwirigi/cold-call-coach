@@ -1,0 +1,555 @@
+/* ===== STATIC/CSS/DASHBOARD.CSS (COMPLETE) ===== */
+
+/* Dashboard Layout */
+.dashboard-container {
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    min-height: 100vh;
+    padding: 2rem 0;
+}
+
+.dashboard-card {
+    background: white;
+    border-radius: 20px;
+    padding: 2rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    transition: all 0.3s ease;
+}
+
+.dashboard-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
+}
+
+/* Welcome Section */
+.welcome-section {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 20px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.welcome-section::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -50%;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+    animation: float 6s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0px) rotate(0deg); }
+    50% { transform: translateY(-20px) rotate(180deg); }
+}
+
+.welcome-section h1 {
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.welcome-section .lead {
+    opacity: 0.9;
+    font-weight: 300;
+}
+
+/* Access Level Badge */
+.access-level-badge {
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 25px;
+    padding: 0.5rem 1rem;
+    display: inline-flex;
+    align-items: center;
+    color: white;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.access-level-badge:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.05);
+}
+
+.access-level-badge.access-level-limited_trial {
+    background: linear-gradient(45deg, #ffc107, #fd7e14);
+    border-color: #ffc107;
+}
+
+.access-level-badge.access-level-unlimited_basic {
+    background: linear-gradient(45deg, #17a2b8, #007bff);
+    border-color: #17a2b8;
+}
+
+.access-level-badge.access-level-unlimited_pro {
+    background: linear-gradient(45deg, #28a745, #20c997);
+    border-color: #28a745;
+}
+
+/* Stats Grid */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background: white;
+    border-radius: 15px;
+    padding: 1.5rem;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+    text-align: center;
+    transition: all 0.3s ease;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
+}
+
+.stat-card:hover::before {
+    opacity: 1;
+}
+
+.stat-icon {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    display: block;
+}
+
+.stat-number {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 0.5rem;
+}
+
+.stat-label {
+    color: #6c757d;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+}
+
+/* Usage Meter */
+.usage-meter {
+    background: white;
+    border-radius: 15px;
+    padding: 1.5rem;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+    margin-bottom: 2rem;
+}
+
+.usage-meter h6 {
+    color: #495057;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.progress {
+    height: 12px;
+    border-radius: 10px;
+    background: #e9ecef;
+    overflow: hidden;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.progress-bar {
+    border-radius: 10px;
+    transition: all 0.5s ease;
+    background: linear-gradient(90deg, #28a745, #20c997);
+    position: relative;
+    overflow: hidden;
+}
+
+.progress-bar.bg-warning {
+    background: linear-gradient(90deg, #ffc107, #fd7e14);
+}
+
+.progress-bar.bg-danger {
+    background: linear-gradient(90deg, #dc3545, #c82333);
+}
+
+.progress-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.2) 50%, transparent 70%);
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+/* Roleplay Grid */
+.roleplay-grid {
+    margin-bottom: 3rem;
+}
+
+.roleplay-card {
+    transition: all 0.3s ease;
+    cursor: pointer;
+    height: 100%;
+}
+
+.roleplay-card .card {
+    border: none;
+    border-radius: 20px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+    transition: all 0.3s ease;
+    height: 100%;
+    overflow: hidden;
+    position: relative;
+}
+
+.roleplay-card.unlocked .card {
+    border: 2px solid transparent;
+    background: linear-gradient(white, white) padding-box,
+                linear-gradient(45deg, #28a745, #20c997) border-box;
+}
+
+.roleplay-card.locked .card {
+    opacity: 0.7;
+    background: #f8f9fa;
+}
+
+.roleplay-card:hover .card {
+    transform: translateY(-8px);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+}
+
+.roleplay-card.locked:hover .card {
+    transform: translateY(-3px);
+}
+
+.roleplay-icon {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+}
+
+.card-title {
+    font-weight: 700;
+    color: #2c3e50;
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+}
+
+.card-text {
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin-bottom: 1rem;
+}
+
+.difficulty-badge .badge {
+    font-size: 0.75rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: 12px;
+    font-weight: 500;
+}
+
+.card-footer {
+    border-top: 1px solid rgba(0,0,0,0.05);
+    background: rgba(0,0,0,0.02);
+    padding: 1rem;
+}
+
+.card-footer .btn {
+    border-radius: 12px;
+    font-weight: 600;
+    padding: 0.7rem 1.5rem;
+    transition: all 0.3s ease;
+}
+
+.card-footer .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+}
+
+/* Unlock Status */
+.unlock-status {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    font-size: 1.2rem;
+}
+
+.unlock-status.unlocked {
+    color: #28a745;
+}
+
+.unlock-status.locked {
+    color: #6c757d;
+}
+
+/* Recent Sessions Table */
+.sessions-table {
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+}
+
+.sessions-table .table {
+    margin-bottom: 0;
+}
+
+.sessions-table .table thead th {
+    border-top: none;
+    border-bottom: 2px solid #e9ecef;
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #495057;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    padding: 1rem;
+}
+
+.sessions-table .table tbody td {
+    border-top: 1px solid #f1f3f4;
+    padding: 1rem;
+    vertical-align: middle;
+}
+
+.sessions-table .table tbody tr {
+    transition: background-color 0.2s ease;
+}
+
+.sessions-table .table tbody tr:hover {
+    background-color: rgba(0,0,0,0.02);
+}
+
+/* Session Result Icons */
+.result-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    margin-right: 0.5rem;
+}
+
+.result-icon.success {
+    background: #d4edda;
+    color: #155724;
+}
+
+.result-icon.danger {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+/* Badge Styles */
+.badge {
+    font-weight: 500;
+    padding: 0.5rem 0.75rem;
+    border-radius: 10px;
+}
+
+.badge.bg-success {
+    background: linear-gradient(45deg, #28a745, #20c997) !important;
+}
+
+.badge.bg-secondary {
+    background: linear-gradient(45deg, #6c757d, #495057) !important;
+}
+
+.badge.bg-primary {
+    background: linear-gradient(45deg, #007bff, #0056b3) !important;
+}
+
+/* Loading States */
+.loading-skeleton {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: loading 1.5s infinite;
+    border-radius: 8px;
+    height: 20px;
+}
+
+@keyframes loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.spinner-border {
+    border-color: #667eea;
+    border-right-color: transparent;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .dashboard-container {
+        padding: 1rem 0;
+    }
+    
+    .welcome-section,
+    .dashboard-card,
+    .usage-meter,
+    .sessions-table {
+        border-radius: 15px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .stats-grid {
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1rem;
+    }
+    
+    .stat-card {
+        padding: 1rem;
+    }
+    
+    .stat-number {
+        font-size: 1.5rem;
+    }
+    
+    .stat-icon {
+        font-size: 1.5rem;
+    }
+    
+    .roleplay-icon {
+        font-size: 2rem;
+    }
+    
+    .card-title {
+        font-size: 1rem;
+    }
+    
+    .sessions-table .table thead th,
+    .sessions-table .table tbody td {
+        padding: 0.75rem 0.5rem;
+        font-size: 0.9rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .welcome-section h1 {
+        font-size: 1.5rem;
+    }
+    
+    .welcome-section .lead {
+        font-size: 1rem;
+    }
+    
+    .access-level-badge {
+        font-size: 0.8rem;
+        padding: 0.4rem 0.8rem;
+    }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .dashboard-container {
+        background: linear-gradient(135deg, #1a1a1a 0%, #2d3748 100%);
+    }
+    
+    .dashboard-card,
+    .usage-meter,
+    .sessions-table {
+        background: #2d3748;
+        color: #e2e8f0;
+        border-color: #4a5568;
+    }
+    
+    .stat-card {
+        background: #2d3748;
+        color: #e2e8f0;
+        border-color: #4a5568;
+    }
+    
+    .card-title {
+        color: #e2e8f0;
+    }
+    
+    .sessions-table .table thead th {
+        background: #1a202c;
+        color: #e2e8f0;
+        border-color: #4a5568;
+    }
+    
+    .sessions-table .table tbody td {
+        border-color: #4a5568;
+    }
+    
+    .sessions-table .table tbody tr:hover {
+        background-color: rgba(255,255,255,0.05);
+    }
+}
+
+/* Animation Classes */
+.fade-in {
+    animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.slide-up {
+    animation: slideUp 0.5s ease-out;
+}
+
+@keyframes slideUp {
+    from { transform: translateY(30px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+/* Utility Classes */
+.text-gradient {
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.shadow-hover {
+    transition: box-shadow 0.3s ease;
+}
+
+.shadow-hover:hover {
+    box-shadow: 0 15px 35px rgba(0,0,0,0.15);
+}
+
+.border-gradient {
+    border: 2px solid transparent;
+    background: linear-gradient(white, white) padding-box,
+                linear-gradient(45deg, #667eea, #764ba2) border-box;
+}

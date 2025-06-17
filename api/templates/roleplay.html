@@ -1,0 +1,735 @@
+<!-- ===== TEMPLATES/ROLEPLAY.HTML (COMPLETE) ===== -->
+{% extends "base.html" %}
+
+{% block title %}{{ roleplay_config.name if roleplay_config else 'Roleplay Training' }} - Cold Calling Coach{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/roleplay.css') }}">
+<style>
+/* Additional roleplay-specific styles */
+.roleplay-container {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    padding: 1rem 0;
+}
+
+.roleplay-header {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border-radius: 20px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.back-button {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    border-radius: 10px;
+    padding: 0.5rem 1rem;
+    text-decoration: none;
+    transition: all 0.3s ease;
+}
+
+.back-button:hover {
+    background: rgba(255, 255, 255, 0.3);
+    color: white;
+    text-decoration: none;
+    transform: translateY(-2px);
+}
+
+.prospect-card {
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    margin-bottom: 2rem;
+    transition: transform 0.3s ease;
+}
+
+.prospect-card:hover {
+    transform: translateY(-5px);
+}
+
+.prospect-header {
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    color: white;
+    padding: 1rem;
+    text-align: center;
+}
+
+.prospect-avatar {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    object-fit: cover;
+    margin-bottom: 1rem;
+    transition: transform 0.3s ease;
+}
+
+.prospect-avatar:hover {
+    transform: scale(1.05);
+}
+
+.conversation-container {
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    max-height: 500px;
+}
+
+.conversation-header {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-bottom: 1px solid #dee2e6;
+    font-weight: 600;
+    color: #495057;
+}
+
+.voice-control-card {
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+    padding: 2rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.voice-control-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #667eea, #764ba2, #667eea);
+    background-size: 200% 100%;
+    animation: shimmer 3s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+    0%, 100% { background-position: 0% 0%; }
+    50% { background-position: 100% 0%; }
+}
+
+.mode-selection-card {
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+    padding: 2rem;
+    margin-bottom: 2rem;
+}
+
+.coaching-card {
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    animation: slideInUp 0.5s ease;
+}
+
+@keyframes slideInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.alert-banner {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1050;
+    max-width: 400px;
+    border-radius: 10px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+
+.session-progress {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 1rem;
+    margin-top: 1rem;
+    color: white;
+}
+
+.progress-indicator {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.loading-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.95);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+
+.loading-spinner {
+    width: 60px;
+    height: 60px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #667eea;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 1rem;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .roleplay-container {
+        padding: 0.5rem 0;
+    }
+    
+    .roleplay-header {
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    
+    .prospect-avatar {
+        width: 80px;
+        height: 80px;
+    }
+    
+    .voice-control-card,
+    .mode-selection-card,
+    .coaching-card {
+        margin-bottom: 1rem;
+        padding: 1.5rem;
+    }
+    
+    .conversation-container {
+        max-height: 300px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="roleplay-container">
+    <div class="container-fluid">
+        <!-- Header Section -->
+        <div class="roleplay-header">
+            <div class="row align-items-center">
+                <div class="col-auto">
+                    <a href="{{ url_for('dashboard.dashboard') }}" class="back-button">
+                        <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
+                    </a>
+                </div>
+                <div class="col">
+                    <h1 id="roleplay-title" class="mb-1">Loading...</h1>
+                    <p id="roleplay-description" class="mb-0 opacity-75">Loading roleplay information...</p>
+                </div>
+                <div class="col-auto">
+                    <div class="session-progress" id="session-progress" style="display: none;">
+                        <div class="progress-indicator">
+                            <span id="session-mode">Practice</span>
+                            <span id="call-counter">Call 1/1</span>
+                        </div>
+                        <div class="progress" style="height: 4px;">
+                            <div class="progress-bar bg-light" id="session-progress-bar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Left Column: Prospect Info & Conversation -->
+            <div class="col-lg-4 order-lg-1 order-2">
+                <!-- Prospect Information Card -->
+                <div class="prospect-card">
+                    <div class="prospect-header">
+                        <img src="/static/images/prospect-avatars/default.jpg" 
+                             alt="Prospect" 
+                             class="prospect-avatar" 
+                             id="prospect-avatar">
+                        <h5 id="prospect-name" class="mb-1">Alex Morgan</h5>
+                        <p id="prospect-title" class="mb-0 opacity-75">CEO</p>
+                        <small id="prospect-industry" class="opacity-75">Technology</small>
+                    </div>
+                    <div class="p-3">
+                        <!-- AI Status Indicator -->
+                        <div class="ai-status-indicator text-center">
+                            <div id="ai-status" class="ai-status listening">
+                                <i class="fas fa-circle me-1"></i>
+                                AI is ready
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Conversation Log -->
+                <div class="conversation-container">
+                    <div class="conversation-header">
+                        <i class="fas fa-comments me-2"></i>Conversation Log
+                        <button class="btn btn-sm btn-outline-secondary float-end" onclick="clearConversation()">
+                            <i class="fas fa-eraser"></i>
+                        </button>
+                    </div>
+                    <div class="conversation-log" id="conversation-log">
+                        <div class="text-center text-muted p-4">
+                            <i class="fas fa-phone-alt fa-2x mb-2 opacity-50"></i>
+                            <div>Start the roleplay to begin conversation</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Main Training Interface -->
+            <div class="col-lg-8 order-lg-2 order-1">
+                <!-- Mode Selection Section -->
+                <div id="mode-selection-section">
+                    <div class="mode-selection-card">
+                        <h3 class="text-center mb-4">
+                            <i class="fas fa-play-circle text-primary me-2"></i>
+                            Choose Your Training Mode
+                        </h3>
+                        
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <button class="btn btn-outline-primary w-100 h-100 mode-btn" 
+                                        data-mode="practice"
+                                        style="min-height: 120px;">
+                                    <div class="d-flex flex-column align-items-center">
+                                        <i class="fas fa-user-graduate fa-2x mb-2"></i>
+                                        <strong>Practice Mode</strong>
+                                        <small class="mt-1 opacity-75">Single call + coaching feedback</small>
+                                    </div>
+                                </button>
+                            </div>
+                            <div class="col-md-4">
+                                <button class="btn btn-outline-warning w-100 h-100 mode-btn" 
+                                        data-mode="marathon"
+                                        style="min-height: 120px;">
+                                    <div class="d-flex flex-column align-items-center">
+                                        <i class="fas fa-running fa-2x mb-2"></i>
+                                        <strong>Marathon Mode</strong>
+                                        <small class="mt-1 opacity-75">10 calls, need 6 to pass</small>
+                                    </div>
+                                </button>
+                            </div>
+                            <div class="col-md-4">
+                                <button class="btn btn-outline-danger w-100 h-100 mode-btn" 
+                                        data-mode="legend"
+                                        style="min-height: 120px;">
+                                    <div class="d-flex flex-column align-items-center">
+                                        <i class="fas fa-trophy fa-2x mb-2"></i>
+                                        <strong>Legend Mode</strong>
+                                        <small class="mt-1 opacity-75">6 perfect calls (sudden death)</small>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="text-center mt-4">
+                            <button id="start-training-btn" class="btn btn-success btn-lg" disabled>
+                                <i class="fas fa-rocket me-2"></i>
+                                Select a mode to start training
+                            </button>
+                        </div>
+
+                        <!-- Mode Information -->
+                        <div class="alert alert-info mt-3" id="mode-info" style="display: none;">
+                            <div id="mode-details"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Active Training Section -->
+                <div id="active-training-section" style="display: none;">
+                    <div class="voice-control-card">
+                        <h3 class="mb-3">
+                            <i class="fas fa-microphone text-primary me-2"></i>
+                            Cold Call in Progress
+                        </h3>
+                        
+                        <p class="text-muted mb-4">
+                            Use the microphone button or press <kbd>Ctrl</kbd> + <kbd>Space</kbd> to speak
+                        </p>
+
+                        <!-- Main Microphone Button -->
+                        <div class="mb-4">
+                            <button id="mic-button" class="mic-button btn btn-primary" disabled>
+                                <i class="fas fa-microphone"></i>
+                            </button>
+                        </div>
+
+                        <!-- Live Transcript Display -->
+                        <div class="transcript-display mb-4">
+                            <div id="live-transcript" class="live-transcript">
+                                Waiting for training to start...
+                            </div>
+                        </div>
+
+                        <!-- Voice Error Display -->
+                        <div id="voice-error" class="alert alert-warning" style="display: none;">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <span id="voice-error-text"></span>
+                        </div>
+
+                        <!-- Training Controls -->
+                        <div class="d-flex justify-content-center gap-3">
+                            <button id="pause-training-btn" class="btn btn-outline-warning" style="display: none;">
+                                <i class="fas fa-pause me-2"></i>Pause
+                            </button>
+                            <button id="end-training-btn" class="btn btn-outline-danger">
+                                <i class="fas fa-stop me-2"></i>End Training
+                            </button>
+                        </div>
+
+                        <!-- Quick Tips -->
+                        <div class="mt-4">
+                            <small class="text-muted">
+                                <strong>Tips:</strong> Speak clearly, wait for AI responses, be natural and confident
+                            </small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Coaching Feedback Section -->
+                <div id="coaching-feedback-section" class="coaching-card" style="display: none;">
+                    <div class="card-header bg-primary text-white">
+                        <h4 class="mb-0">
+                            <i class="fas fa-chalkboard-teacher me-2"></i>
+                            Your Coaching Feedback
+                        </h4>
+                    </div>
+                    <div class="card-body" id="coaching-content">
+                        <!-- Coaching content will be populated here -->
+                    </div>
+                    <div class="card-footer bg-light">
+                        <div class="d-flex justify-content-center gap-3">
+                            <button id="try-again-btn" class="btn btn-primary">
+                                <i class="fas fa-redo me-2"></i>Try Again
+                            </button>
+                            <button id="change-mode-btn" class="btn btn-outline-secondary">
+                                <i class="fas fa-cog me-2"></i>Change Mode
+                            </button>
+                            <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-outline-primary">
+                                <i class="fas fa-home me-2"></i>Dashboard
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Screen -->
+<div id="loading-screen" class="loading-screen" style="display: none;">
+    <div class="loading-spinner"></div>
+    <h4 id="loading-text">Loading...</h4>
+    <p id="loading-subtext" class="text-muted"></p>
+</div>
+
+<!-- Alert Banner Container -->
+<div id="alert-container"></div>
+
+<!-- Audio Element for TTS Playback -->
+<audio id="tts-audio" preload="none"></audio>
+
+<!-- Hidden Data -->
+<div id="roleplay-data" 
+     data-roleplay-id="{{ roleplay_id if roleplay_id else 1 }}"
+     data-user-authenticated="{{ 'true' if session.get('user_id') else 'false' }}"
+     style="display: none;">
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Include Voice Handler -->
+<script src="{{ url_for('static', filename='js/voice-handler.js') }}"></script>
+
+<!-- Include Main Roleplay Script -->
+<script src="{{ url_for('static', filename='js/roleplay.js') }}"></script>
+
+<!-- Additional Roleplay Template Script -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize roleplay template specific functionality
+    initializeRoleplayTemplate();
+});
+
+function initializeRoleplayTemplate() {
+    // Get roleplay data from template
+    const roleplayData = document.getElementById('roleplay-data');
+    const roleplayId = parseInt(roleplayData.dataset.roleplayId);
+    const isAuthenticated = roleplayData.dataset.userAuthenticated === 'true';
+    
+    // Check authentication
+    if (!isAuthenticated) {
+        showAlert('Please log in to access training modules', 'warning');
+        setTimeout(() => {
+            window.location.href = '/login';
+        }, 2000);
+        return;
+    }
+    
+    // Initialize UI elements
+    setupModeButtons();
+    setupKeyboardShortcuts();
+    setupResponsiveHandlers();
+    
+    console.log(`Roleplay template initialized for roleplay ${roleplayId}`);
+}
+
+function setupModeButtons() {
+    const modeButtons = document.querySelectorAll('.mode-btn');
+    const startButton = document.getElementById('start-training-btn');
+    const modeInfo = document.getElementById('mode-info');
+    const modeDetails = document.getElementById('mode-details');
+    
+    let selectedMode = null;
+    
+    modeButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const mode = this.dataset.mode;
+            
+            // Update selected mode
+            selectedMode = mode;
+            
+            // Update button states
+            modeButtons.forEach(btn => {
+                btn.classList.remove('btn-primary', 'btn-warning', 'btn-danger');
+                btn.classList.add('btn-outline-primary', 'btn-outline-warning', 'btn-outline-danger');
+            });
+            
+            // Highlight selected button
+            this.classList.remove('btn-outline-' + getButtonColor(mode));
+            this.classList.add('btn-' + getButtonColor(mode));
+            
+            // Update start button
+            startButton.disabled = false;
+            startButton.innerHTML = `<i class="fas fa-rocket me-2"></i>Start ${capitalizeFirst(mode)} Mode`;
+            
+            // Show mode information
+            modeDetails.innerHTML = getModeDescription(mode);
+            modeInfo.style.display = 'block';
+        });
+    });
+    
+    // Start button handler
+    startButton.addEventListener('click', function() {
+        if (selectedMode && typeof roleplayManager !== 'undefined') {
+            roleplayManager.selectedMode = selectedMode;
+            roleplayManager.startRoleplay();
+        }
+    });
+}
+
+function getButtonColor(mode) {
+    const colors = {
+        'practice': 'primary',
+        'marathon': 'warning', 
+        'legend': 'danger'
+    };
+    return colors[mode] || 'primary';
+}
+
+function getModeDescription(mode) {
+    const descriptions = {
+        'practice': `
+            <strong>Practice Mode:</strong> Perfect for learning and skill building.
+            <ul class="mb-0 mt-2">
+                <li>Single roleplay call with AI prospect</li>
+                <li>Detailed coaching feedback after each call</li>
+                <li>No pressure - focus on improvement</li>
+                <li>Immediate feedback on all aspects</li>
+            </ul>
+        `,
+        'marathon': `
+            <strong>Marathon Mode:</strong> Test your consistency across multiple calls.
+            <ul class="mb-0 mt-2">
+                <li>10 consecutive calls with different objections</li>
+                <li>Need 6 successful calls to pass and unlock next module</li>
+                <li>Builds endurance and confidence</li>
+                <li>Earn Legend Mode attempt upon passing</li>
+            </ul>
+        `,
+        'legend': `
+            <strong>Legend Mode:</strong> The ultimate challenge for sales professionals.
+            <ul class="mb-0 mt-2">
+                <li>6 consecutive calls - must succeed on ALL</li>
+                <li>One failure ends the attempt (sudden death)</li>
+                <li>Only available after passing Marathon Mode</li>
+                <li>Bragging rights for the best of the best!</li>
+            </ul>
+        `
+    };
+    return descriptions[mode] || '';
+}
+
+function setupKeyboardShortcuts() {
+    document.addEventListener('keydown', function(e) {
+        // Escape key to end training
+        if (e.key === 'Escape' && document.getElementById('active-training-section').style.display !== 'none') {
+            if (confirm('Are you sure you want to end the training session?')) {
+                if (typeof roleplayManager !== 'undefined') {
+                    roleplayManager.endRoleplay();
+                }
+            }
+        }
+        
+        // F1 for help
+        if (e.key === 'F1') {
+            e.preventDefault();
+            showHelpModal();
+        }
+    });
+}
+
+function setupResponsiveHandlers() {
+    // Handle window resize
+    window.addEventListener('resize', function() {
+        adjustLayoutForScreen();
+    });
+    
+    // Initial adjustment
+    adjustLayoutForScreen();
+}
+
+function adjustLayoutForScreen() {
+    const isMobile = window.innerWidth < 768;
+    const conversationContainer = document.querySelector('.conversation-container');
+    
+    if (conversationContainer) {
+        if (isMobile) {
+            conversationContainer.style.maxHeight = '250px';
+        } else {
+            conversationContainer.style.maxHeight = '500px';
+        }
+    }
+}
+
+function clearConversation() {
+    const conversationLog = document.getElementById('conversation-log');
+    if (conversationLog) {
+        conversationLog.innerHTML = `
+            <div class="text-center text-muted p-4">
+                <i class="fas fa-phone-alt fa-2x mb-2 opacity-50"></i>
+                <div>Conversation cleared</div>
+            </div>
+        `;
+    }
+}
+
+function showAlert(message, type = 'info', duration = 5000) {
+    const alertContainer = document.getElementById('alert-container');
+    const alertId = 'alert-' + Date.now();
+    
+    const alertHTML = `
+        <div id="${alertId}" class="alert alert-${type} alert-dismissible alert-banner" role="alert">
+            <i class="fas fa-${getAlertIcon(type)} me-2"></i>
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    
+    alertContainer.insertAdjacentHTML('beforeend', alertHTML);
+    
+    // Auto-dismiss after duration
+    if (duration > 0) {
+        setTimeout(() => {
+            const alert = document.getElementById(alertId);
+            if (alert) {
+                alert.remove();
+            }
+        }, duration);
+    }
+}
+
+function getAlertIcon(type) {
+    const icons = {
+        'success': 'check-circle',
+        'warning': 'exclamation-triangle',
+        'danger': 'times-circle',
+        'info': 'info-circle'
+    };
+    return icons[type] || 'info-circle';
+}
+
+function showHelpModal() {
+    const helpContent = `
+        <div class="modal fade" id="helpModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Training Help & Tips</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <h6>Getting Started:</h6>
+                        <ul>
+                            <li>Choose a training mode that matches your skill level</li>
+                            <li>Allow microphone access when prompted</li>
+                            <li>Speak clearly and naturally</li>
+                            <li>Wait for AI responses before continuing</li>
+                        </ul>
+                        
+                        <h6>Keyboard Shortcuts:</h6>
+                        <ul>
+                            <li><kbd>Ctrl + Space</kbd> - Toggle microphone</li>
+                            <li><kbd>Escape</kbd> - End training session</li>
+                            <li><kbd>F1</kbd> - Show this help</li>
+                        </ul>
+                        
+                        <h6>Troubleshooting:</h6>
+                        <ul>
+                            <li>If voice recognition isn't working, check microphone permissions</li>
+                            <li>If AI doesn't respond, check your internet connection</li>
+                            <li>For best results, use Chrome, Edge, or Safari browsers</li>
+                        </ul>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Got it!</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', helpContent);
+    const modal = new bootstrap.Modal(document.getElementById('helpModal'));
+    modal.show();
+    
+    // Clean up modal after hiding
+    document.getElementById('helpModal').addEventListener('hidden.bs.modal', function() {
+        this.remove();
+    });
+}
+
+function capitalizeFirst(str) {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+// Export functions for global access
+window.clearConversation = clearConversation;
+window.showAlert = showAlert;
+window.showHelpModal = showHelpModal;
+</script>
+{% endblock %}

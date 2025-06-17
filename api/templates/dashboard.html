@@ -1,0 +1,116 @@
+<!-- ===== TEMPLATES/DASHBOARD.HTML ===== -->
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Cold Calling Coach{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Welcome Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="dashboard-card">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h1 class="mb-2">Welcome back, <span id="user-first-name">Loading...</span>!</h1>
+                        <p class="lead text-muted mb-0">Ready to practice your cold calling skills?</p>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <div class="access-level-badge" id="access-level-badge">
+                            <i class="fas fa-crown me-2"></i>
+                            <span id="access-level-text">Loading...</span>
+                        </div>
+                        <button class="btn btn-outline-primary btn-sm mt-2" id="refresh-dashboard">
+                            <i class="fas fa-sync-alt me-1"></i>Refresh
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="stats-grid" id="stats-grid">
+        <!-- Stats will be loaded here -->
+        <div class="stat-card">
+            <div class="stat-icon text-primary">
+                <i class="fas fa-spinner fa-spin"></i>
+            </div>
+            <div class="stat-number text-primary">Loading...</div>
+            <div class="stat-label">Stats</div>
+        </div>
+    </div>
+
+    <!-- Usage Meter -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="usage-meter">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="mb-0">Usage This Month</h6>
+                    <span class="text-muted" id="usage-text">Loading...</span>
+                </div>
+                <div class="progress" style="height: 10px;">
+                    <div class="progress-bar" id="usage-progress" role="progressbar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Roleplay Modules -->
+    <div class="row">
+        <div class="col-12">
+            <h3 class="mb-4">Training Modules</h3>
+        </div>
+    </div>
+
+    <div class="row" id="roleplay-grid">
+        <!-- Roleplay cards will be loaded here -->
+        <div class="col-lg-6 col-xl-4 mb-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="fas fa-spinner fa-spin fa-2x mb-3 text-primary"></i>
+                    <p class="text-muted">Loading roleplay modules...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Sessions -->
+    <div class="row mt-5">
+        <div class="col-12">
+            <div class="dashboard-card">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4>Recent Sessions</h4>
+                    <a href="#" class="btn btn-outline-primary btn-sm">View All</a>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Roleplay</th>
+                                <th>Mode</th>
+                                <th>Duration</th>
+                                <th>Result</th>
+                                <th>Score</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recent-sessions">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,145 @@
+
+<!-- ===== TEMPLATES/PRICING.HTML ===== -->
+{% extends "base.html" %}
+
+{% block title %}Pricing - Cold Calling Coach{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="text-center mb-5">
+        <h1 class="display-4 fw-bold text-primary">Choose Your Plan</h1>
+        <p class="lead text-muted">Start free, upgrade when you're ready</p>
+    </div>
+    
+    <div class="row justify-content-center">
+        <!-- Free Trial -->
+        <div class="col-lg-4 mb-4">
+            <div class="pricing-card">
+                <div class="pricing-header bg-warning text-white">
+                    <h4 class="fw-bold">Free Trial</h4>
+                    <div class="price">
+                        <span class="display-4 fw-bold">$0</span>
+                        <span class="period">/7 days</span>
+                    </div>
+                </div>
+                <div class="pricing-body">
+                    <ul class="feature-list">
+                        <li><i class="fas fa-check text-success me-2"></i>3 hours of practice</li>
+                        <li><i class="fas fa-check text-success me-2"></i>Access to Module 1</li>
+                        <li><i class="fas fa-check text-success me-2"></i>Basic progress tracking</li>
+                        <li><i class="fas fa-check text-success me-2"></i>7 days access</li>
+                    </ul>
+                    <a href="{{ url_for('register_page') }}" class="btn btn-warning btn-lg w-100">
+                        Start Free Trial
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Basic Plan -->
+        <div class="col-lg-4 mb-4">
+            <div class="pricing-card">
+                <div class="pricing-header bg-success text-white">
+                    <h4 class="fw-bold">Basic Plan</h4>
+                    <div class="price">
+                        <span class="display-4 fw-bold">$29</span>
+                        <span class="period">/month</span>
+                    </div>
+                </div>
+                <div class="pricing-body">
+                    <ul class="feature-list">
+                        <li><i class="fas fa-check text-success me-2"></i>50 hours per month</li>
+                        <li><i class="fas fa-check text-success me-2"></i>All 5 modules</li>
+                        <li><i class="fas fa-check text-success me-2"></i>24-hour unlocks</li>
+                        <li><i class="fas fa-check text-success me-2"></i>Detailed analytics</li>
+                        <li><i class="fas fa-check text-success me-2"></i>Email support</li>
+                    </ul>
+                    <button class="btn btn-success btn-lg w-100" disabled>
+                        Coming Soon
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Pro Plan -->
+        <div class="col-lg-4 mb-4">
+            <div class="pricing-card featured">
+                <div class="pricing-header bg-primary text-white">
+                    <div class="badge bg-warning text-dark position-absolute top-0 start-50 translate-middle">
+                        Most Popular
+                    </div>
+                    <h4 class="fw-bold">Pro Plan</h4>
+                    <div class="price">
+                        <span class="display-4 fw-bold">$49</span>
+                        <span class="period">/month</span>
+                    </div>
+                </div>
+                <div class="pricing-body">
+                    <ul class="feature-list">
+                        <li><i class="fas fa-check text-success me-2"></i>50 hours per month</li>
+                        <li><i class="fas fa-check text-success me-2"></i>All modules unlocked</li>
+                        <li><i class="fas fa-check text-success me-2"></i>Permanent unlocks</li>
+                        <li><i class="fas fa-check text-success me-2"></i>Advanced analytics</li>
+                        <li><i class="fas fa-check text-success me-2"></i>Priority support</li>
+                        <li><i class="fas fa-check text-success me-2"></i>Custom AI behavior</li>
+                    </ul>
+                    <button class="btn btn-primary btn-lg w-100" disabled>
+                        Coming Soon
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="text-center mt-5">
+        <h3 class="fw-bold mb-3">Questions?</h3>
+        <p class="text-muted">Contact us at support@coldcallingcoach.com</p>
+    </div>
+</div>
+
+<style>
+.pricing-card {
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    overflow: hidden;
+    transition: all 0.3s ease;
+    height: 100%;
+    position: relative;
+}
+
+.pricing-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 35px rgba(0,0,0,0.15);
+}
+
+.pricing-card.featured {
+    border: 3px solid var(--bs-primary);
+}
+
+.pricing-header {
+    padding: 2rem;
+    text-align: center;
+}
+
+.price .period {
+    font-size: 1rem;
+    opacity: 0.8;
+}
+
+.pricing-body {
+    padding: 2rem;
+}
+
+.feature-list {
+    list-style: none;
+    padding: 0;
+    margin-bottom: 2rem;
+}
+
+.feature-list li {
+    padding: 0.5rem 0;
+    font-size: 0.95rem;
+}
+</style>
+{% endblock %}

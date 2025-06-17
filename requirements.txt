@@ -1,0 +1,32 @@
+# ===== REQUIREMENTS.TXT (ESSENTIAL DEPENDENCIES ONLY) =====
+
+# Core Flask framework
+Flask==2.3.3
+flask-cors==4.0.0
+
+# Database and authentication
+supabase==1.2.0
+
+# AI and voice services  
+openai==1.3.0
+elevenlabs==0.2.24
+
+# HTTP requests and email
+requests==2.31.0
+resend==0.6.0
+
+# Environment and configuration
+python-dotenv==1.0.0
+
+# Date/time handling
+python-dateutil==2.8.2
+
+# Security
+PyJWT==2.8.0
+
+# Production server (optional)
+gunicorn==21.2.0
+
+# Development tools (optional - remove in production)
+pytest==7.4.3
+pytest-flask==1.3.0
