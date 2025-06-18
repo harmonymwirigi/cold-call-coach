@@ -153,15 +153,10 @@ def create_app():
 
 # Create app instance
 app = create_app()
+# Create app instance
+app = create_app()
 
-# For debugging - list all routes (using with app.app_context() instead of deprecated decorator)
-def log_routes():
-    """Log all registered routes for debugging"""
-    logger.info("Registered routes:")
-    for rule in app.url_map.iter_rules():
-        methods = ','.join(rule.methods - {'HEAD', 'OPTIONS'})
-        logger.info(f"  {rule.endpoint}: {rule.rule} [{methods}]")
-
+# For Vercel deployment
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 3001))
     debug = os.getenv('FLASK_ENV') == 'development'
@@ -170,13 +165,12 @@ if __name__ == '__main__':
     print(f"🔧 Debug mode: {debug}")
     print(f"🌐 Visit: http://localhost:{port}")
     
-    # Log routes in debug mode
-    if debug:
-        with app.app_context():
-            log_routes()
-    
     app.run(
         host='0.0.0.0',
         port=port,
         debug=debug
     )
+
+# Export for Vercel
+def handler(event, context):
+    return app(event, context)
