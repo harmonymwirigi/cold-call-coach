@@ -20,8 +20,6 @@ class RoleplayEngine:
         # Session state tracking
         self.active_sessions = {}
         
-        logger.info(f"RoleplayEngine initialized - OpenAI available: {self.openai_service.is_available()}")
-        
     def create_session(self, user_id: str, roleplay_id: int, mode: str, user_context: Dict) -> Dict[str, Any]:
         """Create a new roleplay session"""
         try:
