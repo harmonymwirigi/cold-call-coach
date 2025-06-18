@@ -6,13 +6,13 @@
       "use": "@vercel/python"
     },
     {
-      "src": "static/**",
+      "src": "api/static/**",
       "use": "@vercel/static"
     }
   ],
   "routes": [
     {
-      "src": "/static/(.*)",
+      "src": "api/static/(.*)",
       "dest": "/static/$1"
     },
     {
