@@ -203,10 +203,25 @@ class RoleplayEngine:
             
             # Determine response category based on stage
             if current_stage in ['phone_pickup', 'opener_evaluation']:
-                if len([m for m in session['conversation_history'] if m.get('role') == 'user']) == 1:
+                user_messages_count = len([m for m in session['conversation_history'] if m.get('role') == 'user'])
+                
+                if user_messages_count == 1:
                     # First user message - evaluate opener quality
                     opener_quality = self._evaluate_opener_simple(user_input)
-                    if opener_quality < 3:
+                    logger.info(f"Opener quality score: {opener_quality}/8 for input: '{user_input}'")
+                    
+                    # FIXED: More realistic hang-up logic
+                    if opener_quality <= 1:
+                        # Only hang up for really terrible openers (empty, rude, etc.)
+                        hang_up_chance = 0.8  # 80% chance
+                    elif opener_quality == 2:
+                        # Simple greetings get objections, not hang-ups
+                        hang_up_chance = 0.1  # 10% chance (rare)
+                    else:
+                        hang_up_chance = 0.0  # No hang-up for decent openers
+                    
+                    # Random hang-up decision
+                    if random.random() < hang_up_chance:
                         responses = ["Not interested.", "I'm hanging up.", "Don't call here again."]
                         return {
                             'success': True,
@@ -214,8 +229,30 @@ class RoleplayEngine:
                             'evaluation': {'should_hang_up': True, 'quality_score': opener_quality}
                         }
                     else:
-                        responses = EARLY_OBJECTIONS[:5]
+                        # Give an appropriate objection based on opener quality
+                        if opener_quality <= 2:
+                            # Simple greeting gets basic objection
+                            responses = [
+                                "Who is this?", 
+                                "What's this about?", 
+                                "I don't know you.",
+                                "What company are you with?",
+                                "How did you get this number?"
+                            ]
+                        elif opener_quality <= 4:
+                            # Decent opener gets standard objections
+                            responses = EARLY_OBJECTIONS[:8]  # Use first 8 objections
+                        else:
+                            # Good opener gets engagement
+                            responses = [
+                                "I'm listening.", 
+                                "Go ahead, what is it?", 
+                                "You have my attention.",
+                                "What can I do for you?",
+                                "I've got a few minutes."
+                            ]
                 else:
+                    # Not first message, standard phone pickup responses
                     responses = ["Hello?", "Who is this?", "What's this about?"]
                     
             elif current_stage == 'early_objection':
@@ -268,24 +305,43 @@ class RoleplayEngine:
             }
     
     def _evaluate_opener_simple(self, user_input: str) -> int:
-        """Simple opener evaluation without OpenAI"""
-        score = 1
+        """Simple opener evaluation without OpenAI - More generous scoring"""
+        score = 2  # Start with base score of 2 (instead of 1)
         user_input_lower = user_input.lower()
         
-        # Basic criteria
-        if any(greeting in user_input_lower for greeting in ['hi', 'hello', 'good morning', 'good afternoon']):
+        # Basic greeting criteria
+        if any(greeting in user_input_lower for greeting in ['hi', 'hello', 'good morning', 'good afternoon', 'hey']):
             score += 1
         
-        if any(empathy in user_input_lower for empathy in ['know this is', "don't know me", 'out of the blue']):
+        # Professional greeting
+        if any(formal in user_input_lower for formal in ['good morning', 'good afternoon', 'good evening']):
+            score += 1  # Bonus for formal greetings
+        
+        # Empathy/acknowledgment phrases
+        if any(empathy in user_input_lower for empathy in ['know this is', "don't know me", 'out of the blue', 'interrupting', 'unexpected']):
             score += 2
         
+        # Permission seeking (questions)
         if user_input.strip().endswith('?'):
             score += 1
         
-        if len(user_input.split()) > 5:  # Not too short
+        # Name introduction
+        if any(intro in user_input_lower for intro in ['my name is', "i'm ", 'this is ', 'calling from']):
+            score += 1
+        
+        # Company/reason mention
+        if any(business in user_input_lower for business in ['company', 'calling about', 'regarding', 'from ']):
+            score += 1
+        
+        # Sufficient length (more than just "hello")
+        if len(user_input.split()) >= 3:  # Lowered from 5 to 3
+            score += 1
+        
+        # Bonus for polite words
+        if any(polite in user_input_lower for polite in ['please', 'thank you', 'appreciate', 'moment']):
             score += 1
             
-        return min(score, 8)
+        return min(score, 8)  # Cap at 8
     
     def _evaluate_user_input_simple(self, user_input: str, stage: str) -> Dict[str, Any]:
         """Simple evaluation logic for fallback scenarios"""
@@ -299,24 +355,48 @@ class RoleplayEngine:
         
         user_input_lower = user_input.lower()
         
-        if stage == 'opener_evaluation':
+        if stage in ['phone_pickup', 'opener_evaluation']:
             evaluation['quality_score'] = self._evaluate_opener_simple(user_input)
-            if evaluation['quality_score'] <= 2:
-                evaluation['should_hang_up'] = random.random() < 0.4  # 40% hang up chance
+            
+            # Progress to early objection stage after opener
+            if evaluation['quality_score'] >= 2:
+                evaluation['next_stage'] = 'early_objection'
+            
+            # Only hang up for really bad openers
+            if evaluation['quality_score'] <= 1:
+                evaluation['should_hang_up'] = random.random() < 0.3  # 30% chance
                 
         elif stage == 'early_objection':
             # Check for basic objection handling
-            if any(acknowledge in user_input_lower for acknowledge in ['understand', 'totally get', 'fair enough']):
-                evaluation['quality_score'] += 1
+            if any(acknowledge in user_input_lower for acknowledge in ['understand', 'totally get', 'fair enough', 'appreciate']):
+                evaluation['quality_score'] += 2
             if user_input.strip().endswith('?'):
                 evaluation['quality_score'] += 1
+            if any(empathy in user_input_lower for empathy in ['know', 'realize', 'understand']):
+                evaluation['quality_score'] += 1
+                
+            # Progress to mini pitch after handling objection
+            if evaluation['quality_score'] >= 5:
+                evaluation['next_stage'] = 'mini_pitch'
                 
         elif stage == 'mini_pitch':
             # Check for basic pitch elements
-            if any(value in user_input_lower for value in ['help', 'save', 'improve', 'solve']):
-                evaluation['quality_score'] += 1
+            if any(value in user_input_lower for value in ['help', 'save', 'improve', 'solve', 'solution']):
+                evaluation['quality_score'] += 2
             if len(user_input.split()) < 50:  # Not too long
                 evaluation['quality_score'] += 1
+            if user_input.strip().endswith('?'):  # Asking for permission/interest
+                evaluation['quality_score'] += 1
+                
+            # Progress to post-pitch objections
+            if evaluation['quality_score'] >= 6:
+                evaluation['next_stage'] = 'post_pitch_objections'
+        
+        elif stage == 'post_pitch_objections':
+            # Final objection handling
+            if any(close in user_input_lower for close in ['meeting', 'call', 'demo', 'discuss']):
+                evaluation['quality_score'] += 2
+                evaluation['next_stage'] = 'call_completed'  # Success!
         
         return evaluation
     
