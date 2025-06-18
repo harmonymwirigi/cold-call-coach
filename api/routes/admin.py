@@ -139,7 +139,3 @@ def get_admin_stats():
     except Exception as e:
         logger.error(f"Error getting admin stats: {e}")
         return jsonify({'error': 'Internal server error'}), 500
-
-
-
-
