@@ -186,8 +186,46 @@ class RoleplayEngine:
                 'session_id': session['session_id']
             }
             
-            # For now, use fallback responses until OpenAI is fully implemented
-            return self._generate_fallback_response(session, user_input)
+            # TRY OpenAI first if available
+            if self.openai_service.is_available():
+                logger.info("Using OpenAI for AI response generation")
+                
+                try:
+                    # Create event loop if needed
+                    try:
+                        loop = asyncio.get_event_loop()
+                    except RuntimeError:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                    
+                    if loop.is_running():
+                        # Use fallback if loop is running
+                        logger.warning("Event loop is running, using fallback")
+                        return self._generate_fallback_response(session, user_input)
+                    else:
+                        # Generate response using OpenAI
+                        response_data = loop.run_until_complete(
+                            self.openai_service.generate_roleplay_response(
+                                user_input,
+                                session['conversation_history'],
+                                session['user_context'],
+                                roleplay_config
+                            )
+                        )
+                        
+                        if response_data.get('success'):
+                            logger.info(f"OpenAI response generated successfully: {response_data['response'][:50]}...")
+                            return response_data
+                        else:
+                            logger.warning(f"OpenAI failed: {response_data.get('error')}, using fallback")
+                            return self._generate_fallback_response(session, user_input)
+                            
+                except Exception as openai_error:
+                    logger.error(f"OpenAI error: {openai_error}, using fallback")
+                    return self._generate_fallback_response(session, user_input)
+            else:
+                logger.info("OpenAI not available, using fallback responses")
+                return self._generate_fallback_response(session, user_input)
             
         except Exception as e:
             logger.error(f"Error in async AI response generation: {e}")

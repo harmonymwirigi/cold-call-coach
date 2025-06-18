@@ -374,6 +374,13 @@ Choose based on your industry and role.""",
     async def _call_openai_chat(self, system_prompt: str, user_message: str) -> Optional[str]:
         """Make API call to OpenAI with error handling"""
         try:
+            import openai
+            
+            # Set the API key
+            openai.api_key = self.api_key
+            
+            logger.info(f"Making OpenAI API call for message: {user_message[:50]}...")
+            
             response = openai.ChatCompletion.create(
                 model=self.model,
                 messages=[
@@ -394,17 +401,20 @@ Choose based on your industry and role.""",
             logger.info(f"OpenAI response generated: {ai_response[:100]}...")
             return ai_response
             
-        except openai.error.RateLimitError:
-            logger.warning("OpenAI rate limit exceeded, using fallback")
-            return None
-        except openai.error.AuthenticationError:
-            logger.error("OpenAI authentication failed - check API key")
-            return None
-        except openai.error.APIError as e:
-            logger.error(f"OpenAI API error: {e}")
-            return None
         except Exception as e:
-            logger.error(f"Unexpected error calling OpenAI: {e}")
+            # Import here to avoid circular imports
+            if 'openai' in str(e).lower():
+                if 'rate_limit' in str(e).lower():
+                    logger.warning("OpenAI rate limit exceeded")
+                elif 'authentication' in str(e).lower() or 'api_key' in str(e).lower():
+                    logger.error("OpenAI authentication failed - check API key")
+                elif 'insufficient_quota' in str(e).lower():
+                    logger.error("OpenAI quota exceeded - add billing to your account")
+                else:
+                    logger.error(f"OpenAI API error: {e}")
+            else:
+                logger.error(f"Unexpected error calling OpenAI: {e}")
+            
             return None
 
     def _clean_ai_response(self, response: str) -> str:

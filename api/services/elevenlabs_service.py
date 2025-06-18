@@ -21,7 +21,7 @@ class ElevenLabsService:
             logger.info("ElevenLabs service initialized successfully")
     
     def text_to_speech(self, text: str, voice_settings: Dict = None) -> BytesIO:
-        """Convert text to speech with bulletproof fallback - NEVER returns None"""
+        """Convert text to speech with real ElevenLabs API"""
         try:
             logger.info(f"TTS request for text: {text[:50]}...")
             
@@ -30,18 +30,84 @@ class ElevenLabsService:
                 return self._generate_silent_audio()
             
             if not self.is_enabled:
-                logger.info("TTS not configured - generating fallback audio")
+                logger.info("ElevenLabs not configured - generating fallback audio")
                 return self._generate_fallback_audio(text)
             
-            # For now, return a fallback until ElevenLabs is implemented
-            # In production, this would call the actual ElevenLabs API
-            logger.info("TTS using fallback implementation")
-            return self._generate_fallback_audio(text)
+            # Make actual ElevenLabs API call
+            logger.info("Making ElevenLabs API call...")
+            return self._call_elevenlabs_api(text, voice_settings)
             
         except Exception as e:
             logger.error(f"Error in text_to_speech: {e}")
-            # CRITICAL: Always return audio, never None
-            return self._generate_emergency_audio()
+            # Always return audio, never None
+            return self._generate_fallback_audio(text)
+    
+    def _call_elevenlabs_api(self, text: str, voice_settings: Dict = None) -> BytesIO:
+        """Make actual API call to ElevenLabs"""
+        try:
+            import requests
+            
+            # Default voice settings if none provided
+            if not voice_settings:
+                voice_settings = {
+                    "stability": 0.75,
+                    "similarity_boost": 0.75,
+                    "style": 0.0,
+                    "use_speaker_boost": True
+                }
+            
+            # ElevenLabs API endpoint
+            url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice_id}"
+            
+            headers = {
+                "Accept": "audio/mpeg",
+                "Content-Type": "application/json",
+                "xi-api-key": self.api_key
+            }
+            
+            data = {
+                "text": text,
+                "model_id": "eleven_monolingual_v1",
+                "voice_settings": voice_settings
+            }
+            
+            logger.info(f"Calling ElevenLabs API for voice {self.voice_id}")
+            
+            response = requests.post(url, json=data, headers=headers, timeout=30)
+            
+            if response.status_code == 200:
+                # Convert MP3 to WAV for better browser compatibility
+                audio_content = response.content
+                
+                # For now, return the MP3 content as BytesIO
+                # (Browser should handle MP3 fine)
+                audio_stream = BytesIO(audio_content)
+                
+                logger.info(f"ElevenLabs API success - audio size: {len(audio_content)} bytes")
+                return audio_stream
+                
+            else:
+                logger.error(f"ElevenLabs API error {response.status_code}: {response.text}")
+                
+                # Handle specific errors
+                if response.status_code == 401:
+                    logger.error("ElevenLabs authentication failed - check API key")
+                elif response.status_code == 422:
+                    logger.error("ElevenLabs voice not found - check voice ID")
+                elif response.status_code == 429:
+                    logger.error("ElevenLabs rate limit exceeded")
+                
+                return self._generate_fallback_audio(text)
+                
+        except requests.exceptions.Timeout:
+            logger.error("ElevenLabs API timeout")
+            return self._generate_fallback_audio(text)
+        except requests.exceptions.RequestException as e:
+            logger.error(f"ElevenLabs API request error: {e}")
+            return self._generate_fallback_audio(text)
+        except Exception as e:
+            logger.error(f"Unexpected ElevenLabs error: {e}")
+            return self._generate_fallback_audio(text)
     
     def _generate_fallback_audio(self, text: str) -> BytesIO:
         """Generate a pleasant notification sound - NEVER fails"""
