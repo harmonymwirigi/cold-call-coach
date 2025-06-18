@@ -91,98 +91,210 @@ class OpenAIService:
                 stage_info['current_stage'] = 'post_pitch_objections'
         
         return stage_info
+    
+    # ===== IMPROVED OPENAI SERVICE FOR NATURAL CONVERSATIONS =====
 
-    def _generate_natural_response_sync(self, user_input: str, conversation_history: List[Dict],
-                                       user_context: Dict, roleplay_config: Dict, stage_info: Dict) -> str:
-        """Generate natural AI response using NEW OpenAI v1.0+ API"""
-        try:
-            # Build context-aware prompt
-            system_prompt = self._build_natural_response_prompt(user_context, roleplay_config, stage_info)
-            
-            # Format conversation history
-            conversation_context = self._format_conversation_for_ai(conversation_history)
-            
-            # Create user message
-            user_message = f"""
-CONVERSATION SO FAR:
+def _generate_natural_response_sync(self, user_input: str, conversation_history: List[Dict],
+                                   user_context: Dict, roleplay_config: Dict, stage_info: Dict) -> str:
+    """Generate natural AI response using NEW OpenAI v1.0+ API - IMPROVED"""
+    try:
+        # Handle SILENCE_TIMEOUT specially
+        if user_input == '[SILENCE_TIMEOUT]':
+            return self._generate_silence_response(conversation_history, stage_info)
+        
+        # Build context-aware prompt with conversation tracking
+        system_prompt = self._build_natural_response_prompt_improved(user_context, roleplay_config, stage_info, conversation_history)
+        
+        # Format conversation history with better context
+        conversation_context = self._format_conversation_for_ai_improved(conversation_history)
+        
+        # Create user message with conversation tracking
+        user_message = f"""
+CONVERSATION CONTEXT:
 {conversation_context}
 
-LATEST USER INPUT: "{user_input}"
+CURRENT USER INPUT: "{user_input}"
 
-Respond naturally as the prospect. Keep it conversational (1-2 sentences). Stay in character.
+CONVERSATION STAGE: {stage_info['current_stage']}
+USER MESSAGE COUNT: {stage_info['turn_count']}
+
+Respond naturally as the prospect. Keep it conversational and realistic. Progress the conversation forward based on the stage.
 """
 
-            # Call OpenAI using NEW v1.0+ API
-            logger.info("Making OpenAI API call...")
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message}
-                ],
-                temperature=0.8,
-                max_tokens=150,
-                presence_penalty=0.1,
-                frequency_penalty=0.1
-            )
-            
-            ai_response = response.choices[0].message.content.strip()
-            
-            # Clean response
-            cleaned_response = self._clean_ai_response(ai_response)
-            logger.info(f"OpenAI response: {cleaned_response}")
-            
-            return cleaned_response
-            
-        except Exception as e:
-            logger.error(f"OpenAI API error: {e}")
-            return None
-
-    def _build_natural_response_prompt(self, user_context: Dict, roleplay_config: Dict, stage_info: Dict) -> str:
-        """Build system prompt for natural responses"""
-        job_title = user_context.get('prospect_job_title', 'Manager')
-        industry = user_context.get('prospect_industry', 'Technology')
-        stage = stage_info['current_stage']
+        # Call OpenAI using NEW v1.0+ API
+        logger.info("Making OpenAI API call...")
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            temperature=0.8,
+            max_tokens=150,
+            presence_penalty=0.2,  # Increased to avoid repetition
+            frequency_penalty=0.3   # Increased to avoid repetition
+        )
         
-        base_prompt = f"""You are a {job_title} at a {industry} company receiving a cold call.
+        ai_response = response.choices[0].message.content.strip()
+        
+        # Clean and validate response
+        cleaned_response = self._clean_ai_response_improved(ai_response, conversation_history)
+        logger.info(f"OpenAI response: {cleaned_response}")
+        
+        return cleaned_response
+        
+    except Exception as e:
+        logger.error(f"OpenAI API error: {e}")
+        return None
+
+def _generate_silence_response(self, conversation_history: List[Dict], stage_info: Dict) -> str:
+    """Generate appropriate response to silence"""
+    user_messages = [m for m in conversation_history if m.get('role') == 'user' and not m.get('content', '').startswith('[SILENCE_TIMEOUT]')]
+    
+    if len(user_messages) == 0:
+        return random.choice(["Hello? Anyone there?", "Did I lose you?", "Are you there?"])
+    elif len(user_messages) == 1:
+        return random.choice(["Are you still there?", "Hello?", "Did you have a question?"])
+    else:
+        return random.choice(["I'm waiting...", "Go ahead.", "Are you thinking about it?"])
+
+def _build_natural_response_prompt_improved(self, user_context: Dict, roleplay_config: Dict, stage_info: Dict, conversation_history: List[Dict]) -> str:
+    """Build improved system prompt for natural responses"""
+    job_title = user_context.get('prospect_job_title', 'Manager')
+    industry = user_context.get('prospect_industry', 'Technology')
+    stage = stage_info['current_stage']
+    turn_count = stage_info['turn_count']
+    
+    # Get conversation context
+    user_messages = [m for m in conversation_history if m.get('role') == 'user' and not m.get('content', '').startswith('[SILENCE_TIMEOUT]')]
+    ai_messages = [m for m in conversation_history if m.get('role') == 'assistant']
+    
+    base_prompt = f"""You are a {job_title} at a {industry} company receiving a cold call. You are busy and skeptical but professional.
 
 CRITICAL INSTRUCTIONS:
-- Respond naturally and realistically 
-- Keep responses short (1-2 sentences)
-- Show realistic prospect behavior - skeptical but professional
-- Stay in character as a busy business professional
+- Respond naturally and realistically as a real person would
+- Keep responses short and conversational (1-2 sentences max)
+- Show realistic prospect behavior based on conversation stage
+- NEVER repeat previous responses - always move the conversation forward
+- Stay in character as a busy professional
 - DO NOT break character or give coaching
 
-CURRENT STAGE: {stage}"""
+CURRENT SITUATION:
+- Stage: {stage}
+- This is message #{turn_count + 1} in the conversation
+- You have already responded {len(ai_messages)} times
 
-        # Add stage-specific guidance
-        if stage == 'opener_evaluation':
-            base_prompt += """
+CONVERSATION FLOW RULES:"""
 
-The caller just gave their opening. Respond based on how good it was:
-- If professional with empathy: Show mild interest but some skepticism
-- If generic or pushy: Give a standard objection  
-- If terrible: Be more resistant"""
+    # Add stage-specific guidance with better flow
+    if stage == 'phone_pickup':
+        base_prompt += """
+- You just answered the phone
+- Be brief and neutral: "Hello?" or "Yes?"
+- Don't be overly friendly - you don't know who this is"""
 
-        elif stage == 'early_objection':
-            base_prompt += """
+    elif stage == 'opener_evaluation':
+        base_prompt += """
+- The caller just gave their opening line
+- React based on how professional/empathetic they were:
+  * If good opener with empathy: Show mild interest but remain skeptical
+  * If generic/pushy: Give a standard brush-off or objection
+  * If terrible: Be more resistant or hang up
+- Common responses: "What's this about?", "I'm not interested", "Who is this?"
+- Don't just say "Hello?" again - you heard their opener"""
 
-Give a realistic early objection like:
-- "What's this about?"
-- "I'm not interested" 
-- "Now is not a good time"
-- "Who is this?"
-Choose what feels natural."""
+    elif stage == 'early_objection':
+        base_prompt += """
+- Give a realistic early objection to test their skills
+- Use objections like: "I'm not interested", "We're all set", "Send me information", "I don't have time"
+- Be skeptical but not rude
+- Don't repeat objections you've already used"""
 
-        elif stage == 'mini_pitch':
-            base_prompt += """
+    elif stage == 'objection_response':
+        base_prompt += """
+- The caller just handled your objection
+- React based on how well they did:
+  * If they acknowledged your concern and asked good questions: Show some interest
+  * If they were pushy or ignored your objection: Be more resistant
+  * If they were empathetic and professional: Give them a chance
+- Possible responses: "Go ahead", "What exactly do you do?", "I'm still not interested"
+- Progress the conversation - don't repeat previous objections"""
 
-The caller handled your objection. React realistically:
-- If they did well: Show some interest, ask a follow-up
-- If they were pushy: Give another objection
-- Stay skeptical but fair."""
+    elif stage == 'mini_pitch':
+        base_prompt += """
+- The caller is making their pitch
+- Listen and respond realistically:
+  * Ask clarifying questions if interested
+  * Give another objection if not convinced
+  * Show you're evaluating what they're saying
+- Responses like: "How does this work?", "What's the cost?", "We already have something"
+- Be a real prospect - show interest or resistance based on their pitch quality"""
 
-        return base_prompt
+    return base_prompt
+
+def _format_conversation_for_ai_improved(self, conversation_history: List[Dict]) -> str:
+    """Format conversation for AI context with better tracking"""
+    if not conversation_history:
+        return "This is the start of the call."
+    
+    # Filter out system messages and silence timeouts
+    relevant_messages = [
+        msg for msg in conversation_history 
+        if msg.get('role') in ['user', 'assistant'] and 
+           not msg.get('content', '').startswith('[SILENCE_TIMEOUT]')
+    ]
+    
+    if not relevant_messages:
+        return "This is the start of the call."
+    
+    formatted = []
+    for i, msg in enumerate(relevant_messages[-6:]):  # Last 6 relevant messages
+        role = "Caller" if msg.get('role') == 'user' else "You (Prospect)"
+        content = msg.get('content', '')
+        message_num = i + 1
+        formatted.append(f"Message {message_num} - {role}: {content}")
+    
+    return "\n".join(formatted)
+
+def _clean_ai_response_improved(self, response: str, conversation_history: List[Dict]) -> str:
+    """Clean AI response and prevent repetition"""
+    # Remove quotes and asterisks
+    response = response.replace('"', '').replace('*', '').strip()
+    
+    # Remove common AI artifacts
+    response = response.replace('Prospect:', '').replace('You:', '').strip()
+    
+    # Check for repetition against recent AI responses
+    recent_ai_responses = [
+        msg.get('content', '') for msg in conversation_history[-6:] 
+        if msg.get('role') == 'assistant'
+    ]
+    
+    # If response is too similar to recent responses, modify it
+    if any(response.lower() in prev.lower() or prev.lower() in response.lower() for prev in recent_ai_responses):
+        # Generate alternative if repetitive
+        alternatives = [
+            "Go ahead.",
+            "I'm listening.",
+            "What's this about?",
+            "You have two minutes.",
+            "Make it quick."
+        ]
+        
+        # Pick an alternative not recently used
+        for alt in alternatives:
+            if not any(alt.lower() in prev.lower() for prev in recent_ai_responses):
+                response = alt
+                break
+    
+    # Keep it short
+    if len(response) > 200:
+        sentences = response.split('. ')
+        response = sentences[0]
+        if not response.endswith('.') and not response.endswith('?') and not response.endswith('!'):
+            response += '.'
+    
+    return response
 
     def _evaluate_user_response_simple(self, user_input: str, stage_info: Dict) -> Dict:
         """Simple evaluation of user response"""

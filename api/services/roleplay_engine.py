@@ -310,46 +310,7 @@ class RoleplayEngine:
             
         return min(score, 8)
     
-    def _evaluate_user_input_simple(self, user_input: str, stage: str) -> Dict[str, Any]:
-        """Simple evaluation logic"""
-        evaluation = {
-            'quality_score': 5,
-            'should_continue': True,
-            'should_hang_up': False,
-            'next_stage': 'in_progress',
-            'pass': True
-        }
-        
-        user_input_lower = user_input.lower()
-        
-        if stage in ['phone_pickup', 'opener_evaluation']:
-            evaluation['quality_score'] = self._evaluate_opener_simple(user_input)
-            evaluation['pass'] = evaluation['quality_score'] >= 5
-            evaluation['next_stage'] = 'early_objection' if evaluation['pass'] else 'call_failed'
-            
-        elif stage == 'early_objection':
-            # Check for acknowledgment
-            if any(ack in user_input_lower for ack in ['understand', 'get that', 'fair enough', 'totally get']):
-                evaluation['quality_score'] += 1
-            
-            # Check for question
-            if user_input.strip().endswith('?'):
-                evaluation['quality_score'] += 1
-            
-            evaluation['next_stage'] = 'mini_pitch'
-            
-        elif stage in ['mini_pitch', 'pitch_evaluation']:
-            # Check for value focus
-            if any(value in user_input_lower for value in ['help', 'save', 'improve', 'solve']):
-                evaluation['quality_score'] += 1
-            
-            # Check for question
-            if user_input.strip().endswith('?'):
-                evaluation['quality_score'] += 1
-            
-            evaluation['next_stage'] = 'post_pitch_objections'
-            
-        return evaluation
+   
     
     def _handle_hang_up(self, session: Dict, reason: str) -> Dict[str, Any]:
         """Handle prospect hanging up"""
@@ -733,3 +694,230 @@ class RoleplayEngine:
             'openai_status': self.openai_service.get_status(),
             'engine_status': 'running'
         }
+    
+    # ===== FIXED ROLEPLAY RESPONSE PROCESSING =====
+
+    async def process_user_input(self, session_id: str, user_input: str) -> Dict[str, Any]:
+        """Process user input - FIXED VERSION with better conversation flow"""
+        try:
+            logger.info(f"Processing input for session {session_id}: '{user_input[:50]}...'")
+            
+            if session_id not in self.active_sessions:
+                logger.error(f"Session {session_id} not found")
+                raise ValueError("Session not found")
+            
+            session = self.active_sessions[session_id]
+            
+            if not session.get('session_active'):
+                logger.error(f"Session {session_id} is not active")
+                raise ValueError("Session is not active")
+            
+            # Handle SILENCE_TIMEOUT specifically - don't add to conversation history as user message
+            if user_input == '[SILENCE_TIMEOUT]':
+                return self._handle_silence_timeout(session)
+            
+            # Add user input to conversation (only for real user input)
+            session['conversation_history'].append({
+                'role': 'user',
+                'content': user_input,
+                'timestamp': datetime.now(timezone.utc).isoformat(),
+                'stage': session['current_stage']
+            })
+            
+            # Update conversation stage based on actual user messages
+            self._update_conversation_stage(session)
+            
+            # Generate AI response - TRY OpenAI first, then fallback
+            try:
+                logger.info("Attempting OpenAI response generation...")
+                
+                # Prepare roleplay configuration
+                roleplay_config = {
+                    'roleplay_id': session['roleplay_id'],
+                    'mode': session['mode'],
+                    'session_id': session['session_id']
+                }
+                
+                # Call OpenAI service
+                ai_response_data = await self.openai_service.generate_roleplay_response(
+                    user_input,
+                    session['conversation_history'],
+                    session['user_context'],
+                    roleplay_config
+                )
+                
+                if ai_response_data.get('success'):
+                    logger.info("OpenAI response successful")
+                    ai_response = ai_response_data['response']
+                    evaluation = ai_response_data.get('evaluation', {})
+                else:
+                    logger.warning("OpenAI response failed, using simple fallback")
+                    ai_response, evaluation = self._generate_simple_fallback(session, user_input)
+                    
+            except Exception as openai_error:
+                logger.error(f"OpenAI error: {openai_error}, using simple fallback")
+                ai_response, evaluation = self._generate_simple_fallback(session, user_input)
+            
+            # Store evaluation
+            session['evaluation_history'].append({
+                'user_input': user_input,
+                'evaluation': evaluation,
+                'stage': session['current_stage'],
+                'timestamp': datetime.now(timezone.utc).isoformat()
+            })
+            
+            # Check for hang-up conditions
+            if evaluation.get('should_hang_up') or not evaluation.get('should_continue', True):
+                return self._handle_hang_up(session, evaluation.get('hang_up_reason', 'Call ended'))
+            
+            # Add AI response to conversation
+            session['conversation_history'].append({
+                'role': 'assistant',
+                'content': ai_response,
+                'timestamp': datetime.now(timezone.utc).isoformat(),
+                'stage': session['current_stage'],
+                'evaluation_data': evaluation
+            })
+            
+            # Update session state
+            self._update_session_state(session, evaluation)
+            
+            # Update performance metrics
+            self._update_performance_metrics(session, user_input, evaluation)
+            
+            # Check if call should continue
+            call_continues = self._should_call_continue(session, evaluation)
+            
+            # Handle multi-call modes
+            if not call_continues and session['mode'] in ['marathon', 'legend']:
+                call_continues = self._handle_multi_call_progression(session, evaluation)
+            
+            logger.info(f"Response generated: '{ai_response[:50]}...' Call continues: {call_continues}")
+            
+            return {
+                'success': True,
+                'ai_response': ai_response,
+                'call_continues': call_continues,
+                'evaluation': evaluation,
+                'session_state': session['current_stage'],
+                'call_count': session.get('call_count', 0),
+                'successful_calls': session.get('successful_calls', 0)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error processing user input: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'call_continues': False
+            }
+
+    def _handle_silence_timeout(self, session: Dict) -> Dict[str, Any]:
+        """Handle silence timeout without adding to conversation history"""
+        logger.info("Handling silence timeout")
+        
+        # Get a patience/impatience response based on conversation stage
+        user_messages = [
+            m for m in session['conversation_history'] 
+            if m.get('role') == 'user' and not m.get('content', '').startswith('[SILENCE_TIMEOUT]')
+        ]
+        
+        if len(user_messages) == 0:
+            ai_response = random.choice(["Hello? Are you there?", "Did I lose you?", "Anyone there?"])
+        elif len(user_messages) == 1:
+            ai_response = random.choice(["Are you still there?", "Hello?", "Did you have a question?"])
+        else:
+            ai_response = random.choice(["I'm waiting...", "Go ahead.", "I don't have all day.", "Are you thinking about it?"])
+        
+        # Add AI response to conversation history (but not the SILENCE_TIMEOUT)
+        session['conversation_history'].append({
+            'role': 'assistant',
+            'content': ai_response,
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'stage': session['current_stage'],
+            'silence_response': True
+        })
+        
+        return {
+            'success': True,
+            'ai_response': ai_response,
+            'call_continues': True,
+            'evaluation': {'quality_score': 3, 'should_continue': True},
+            'session_state': session['current_stage']
+        }
+
+    def _update_conversation_stage(self, session: Dict) -> None:
+        """Update conversation stage based on actual conversation progress"""
+        # Count real user messages (not SILENCE_TIMEOUT)
+        user_messages = [
+            m for m in session['conversation_history'] 
+            if m.get('role') == 'user' and not m.get('content', '').startswith('[SILENCE_TIMEOUT]')
+        ]
+        
+        roleplay_id = session['roleplay_id']
+        user_count = len(user_messages)
+        
+        if roleplay_id == 1:  # Opener + Early Objections
+            if user_count <= 1:
+                session['current_stage'] = 'opener_evaluation'
+            elif user_count == 2:
+                session['current_stage'] = 'early_objection'
+            elif user_count == 3:
+                session['current_stage'] = 'objection_response'
+            else:
+                session['current_stage'] = 'mini_pitch'
+        
+        logger.info(f"Updated stage to {session['current_stage']} based on {user_count} user messages")
+
+    def _evaluate_user_input_simple(self, user_input: str, stage: str) -> Dict[str, Any]:
+        """Simple evaluation logic - IMPROVED"""
+        evaluation = {
+            'quality_score': 5,
+            'should_continue': True,
+            'should_hang_up': False,
+            'next_stage': 'in_progress',
+            'pass': True
+        }
+        
+        user_input_lower = user_input.lower()
+        
+        if stage in ['phone_pickup', 'opener_evaluation']:
+            evaluation['quality_score'] = self._evaluate_opener_simple(user_input)
+            evaluation['pass'] = evaluation['quality_score'] >= 4  # Lowered threshold
+            
+            # Don't end call too easily
+            if evaluation['quality_score'] <= 2 and random.random() < 0.15:  # Reduced hang-up chance
+                evaluation['should_hang_up'] = True
+                evaluation['should_continue'] = False
+                evaluation['hang_up_reason'] = 'Poor opener'
+            
+        elif stage == 'early_objection':
+            # Check for acknowledgment and empathy
+            if any(ack in user_input_lower for ack in ['understand', 'get that', 'fair enough', 'totally get', 'appreciate']):
+                evaluation['quality_score'] += 2
+            
+            # Check for question or engagement
+            if user_input.strip().endswith('?') or any(q in user_input_lower for q in ['can i', 'would you', 'could i']):
+                evaluation['quality_score'] += 1
+            
+            # Check for pushing too hard
+            if any(push in user_input_lower for push in ['you should', 'you need', 'you have to']):
+                evaluation['quality_score'] -= 1
+                
+        elif stage in ['objection_response', 'mini_pitch']:
+            # Check for value focus
+            if any(value in user_input_lower for value in ['help', 'save', 'improve', 'solve', 'benefit']):
+                evaluation['quality_score'] += 1
+            
+            # Check for question
+            if user_input.strip().endswith('?'):
+                evaluation['quality_score'] += 1
+            
+            # Check for being too salesy
+            if any(sales in user_input_lower for sales in ['amazing', 'incredible', 'guarantee']):
+                evaluation['quality_score'] -= 1
+        
+        # Ensure score stays in reasonable range
+        evaluation['quality_score'] = max(1, min(8, evaluation['quality_score']))
+        
+        return evaluation
