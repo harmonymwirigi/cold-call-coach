@@ -347,7 +347,7 @@ The SDR just gave their opening line. Evaluate it based on these criteria:
 - Always be realistic - even good openers get objections
 
 **Sample hang-up responses**: "Not interested.", "Please don't call here again.", "I'm hanging up now."
-**Sample objection responses**: "What's this about?", "I'm not interested", "Now is not a good time", "Who is this?"""",
+**Sample objection responses**: "What's this about?", "I'm not interested", "Now is not a good time", "Who is this?""",
 
             "early_objection": """**OBJECTION STAGE**
 You gave an objection. Now evaluate how they handle it:
