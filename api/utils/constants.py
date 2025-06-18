@@ -1,4 +1,4 @@
-# ===== API/UTILS/CONSTANTS.PY =====
+# ===== UPDATED API/UTILS/CONSTANTS.PY (Add these to your existing file) =====
 
 # Job titles (alphabetically sorted)
 JOB_TITLES = [
@@ -201,6 +201,222 @@ WARMUP_QUESTIONS = [
     "We don't have time to learn a new system"
 ]
 
+# ===== NEW: ROLEPLAY 1 DETAILED RUBRICS =====
+
+# Roleplay 1 specific rubrics - matches your specification exactly
+ROLEPLAY_1_RUBRICS = {
+    "opener": {
+        "name": "Opener Evaluation",
+        "pass_requirement": 3,  # Need 3 out of 4 criteria
+        "total_criteria": 4,
+        "criteria": {
+            "clear_opener": {
+                "name": "Clear cold call opener",
+                "description": "Pattern interrupt, permission-based, or value-first approach",
+                "keywords": ["calling about", "calling from", "reason", "help with", "quick question", "wondered if"],
+                "negative_keywords": ["hi", "hello", "good morning", "how are you"]  # Just greeting alone
+            },
+            "casual_tone": {
+                "name": "Casual, confident tone",
+                "description": "Uses contractions and short phrases", 
+                "contractions": ["i'm", "don't", "can't", "won't", "we're", "you're", "it's", "that's"],
+                "formal_words": ["i am", "do not", "cannot", "will not", "we are", "you are"]  # Negative indicators
+            },
+            "shows_empathy": {
+                "name": "Demonstrates empathy", 
+                "description": "Acknowledges interruption, unfamiliarity, or randomness",
+                "empathy_phrases": [
+                    "i know this is out of the blue",
+                    "you don't know me", 
+                    "this is a cold call",
+                    "feel free to hang up",
+                    "caught you off guard",
+                    "i know this is unexpected",
+                    "sorry to bother you",
+                    "i know you're busy",
+                    "interrupting your day",
+                    "know i'm calling out of nowhere"
+                ]
+            },
+            "ends_with_question": {
+                "name": "Ends with soft question",
+                "description": "Soft invite or permission-seeking question",
+                "question_patterns": [
+                    "can i tell you why i'm calling",
+                    "would you be open to",
+                    "does that make sense",
+                    "fair enough",
+                    "sound reasonable",
+                    "quick question",
+                    "minute to chat",
+                    "okay if i"
+                ]
+            }
+        },
+        "auto_fail_conditions": [
+            "robotic or overly formal",
+            "pushy or too long", 
+            "no empathy demonstrated",
+            "no question or invite"
+        ]
+    },
+    
+    "objection_handling": {
+        "name": "Objection Handling",
+        "pass_requirement": 3,  # Need 3 out of 4 criteria
+        "total_criteria": 4,
+        "criteria": {
+            "acknowledges_calmly": {
+                "name": "Acknowledges calmly",
+                "description": "Calm acknowledgment without defensiveness",
+                "acknowledge_phrases": [
+                    "fair enough", "totally get that", "i understand", "i hear you", 
+                    "makes sense", "no problem", "i get it", "completely understand",
+                    "appreciate that", "respect that", "of course"
+                ]
+            },
+            "no_arguing": {
+                "name": "Doesn't argue or pitch",
+                "description": "Avoids defensive responses or immediate pitching",
+                "negative_phrases": [
+                    "but you", "actually", "well you should", "you're wrong", 
+                    "let me tell you", "our solution", "we can help you",
+                    "you need this", "everyone says that"
+                ]
+            },
+            "reframes_buys_time": {
+                "name": "Reframes or buys time in 1 sentence", 
+                "description": "Brief reframe without long explanation",
+                "reframe_phrases": [
+                    "the reason i'm calling", "here's why", "that's exactly why",
+                    "let me explain quickly", "one quick thing", "30 seconds",
+                    "real quick", "briefly"
+                ]
+            },
+            "forward_question": {
+                "name": "Ends with forward-moving question",
+                "description": "Question that moves conversation forward",
+                "question_indicators": ["?", "can i", "would you", "could i", "is it worth", "make sense"]
+            }
+        },
+        "auto_fail_conditions": [
+            "gets defensive or pushy",
+            "ignores the objection",
+            "pitches immediately", 
+            "no forward-moving question"
+        ]
+    },
+    
+    "mini_pitch": {
+        "name": "Mini Pitch",
+        "pass_requirement": 3,  # Need 3 out of 4 criteria  
+        "total_criteria": 4,
+        "criteria": {
+            "short_concise": {
+                "name": "Short (1-2 sentences)",
+                "description": "Concise delivery under 30 words",
+                "max_words": 30,
+                "max_sentences": 2
+            },
+            "outcome_focused": {
+                "name": "Focuses on problem solved or outcome",
+                "description": "Benefits and outcomes, not features",
+                "outcome_words": [
+                    "save", "increase", "reduce", "improve", "help", "solve", "fix",
+                    "eliminate", "boost", "grow", "achieve", "get", "avoid"
+                ],
+                "feature_words": [
+                    "platform", "software", "tool", "system", "technology", "solution",
+                    "features", "capabilities", "functions"
+                ]
+            },
+            "simple_language": {
+                "name": "Simple English, no jargon",
+                "description": "Clear, accessible language",
+                "jargon_words": [
+                    "leverage", "synergies", "paradigm", "scalable", "robust", 
+                    "enterprise-grade", "cutting-edge", "revolutionary", "disruptive",
+                    "best-in-class", "world-class", "next-generation"
+                ]
+            },
+            "natural_delivery": {
+                "name": "Sounds natural, not robotic",
+                "description": "Conversational tone with contractions",
+                "natural_indicators": ["we help", "i work with", "basically", "simply put"],
+                "robotic_indicators": ["our solution provides", "we offer", "our platform enables"]
+            }
+        },
+        "auto_fail_conditions": [
+            "too long or detailed",
+            "focuses on features instead of outcomes",
+            "uses jargon or buzzwords",
+            "sounds scripted or robotic"
+        ]
+    },
+    
+    "soft_discovery": {
+        "name": "Soft Discovery",
+        "pass_requirement": 2,  # Need 2 out of 3 criteria
+        "total_criteria": 3,
+        "criteria": {
+            "tied_question": {
+                "name": "Short question tied to the pitch",
+                "description": "Question connects to what was just pitched",
+                "connection_words": ["how are you", "what's your", "how do you", "where are you"]
+            },
+            "open_curious": {
+                "name": "Open/curious question",
+                "description": "Open-ended, not leading",
+                "open_patterns": ["how", "what", "where", "when", "why", "tell me about"],
+                "closed_patterns": ["do you", "are you", "is it", "can you"]  # Leading questions
+            },
+            "soft_tone": {
+                "name": "Soft and non-pushy tone", 
+                "description": "Gentle, curious approach",
+                "soft_indicators": ["curious", "wondering", "just wondering", "mind if i ask"],
+                "pushy_indicators": ["you need to", "you should", "everyone", "all companies"]
+            }
+        },
+        "auto_fail_conditions": [
+            "no question asked",
+            "too broad or generic question",
+            "sounds scripted or pushy"
+        ]
+    }
+}
+
+# Hang-up probability matrix for Roleplay 1
+ROLEPLAY_1_HANGUP_RULES = {
+    "opener_stage": {
+        "score_0_1": 0.8,   # 80% chance if terrible opener (0-1 criteria)
+        "score_2": 0.3,     # 30% chance if poor opener (2 criteria) 
+        "score_3_4": 0.1    # 10% chance if good opener (3-4 criteria)
+    },
+    "random_opener": 0.25,  # 25% baseline random hang-up chance
+    "objection_stage": 0.05,  # 5% chance during objection handling
+    "pitch_stage": 0.02       # 2% chance during pitch
+}
+
+# Silence handling for Roleplay 1 - matches your 10s/15s specification
+ROLEPLAY_1_SILENCE_RULES = {
+    "impatience_trigger_seconds": 10,
+    "hangup_trigger_seconds": 15,
+    "impatience_phrases": [
+        "Hello? Are you still with me?",
+        "Can you hear me?", 
+        "Just checking you're there…",
+        "Still on the line?",
+        "I don't have much time for this.",
+        "Sounds like you are gone.",
+        "Are you an idiot.",
+        "What is going on.",
+        "Are you okay to continue?",
+        "I am afraid I have to go"
+    ]
+}
+
+# ===== EXISTING CONSTANTS (Updated) =====
+
 # Roleplay configuration
 ROLEPLAY_CONFIG = {
     1: {
@@ -212,7 +428,10 @@ ROLEPLAY_CONFIG = {
         "marathon_threshold": 6,  # Need 6/10 to pass
         "legend_threshold": 6,  # Need 6/6 to pass
         "includes_hang_ups": True,
-        "hang_up_chance": 0.25  # 25% chance of hang up after poor opener
+        "hang_up_chance": "dynamic",  # Now uses dynamic calculation based on rubrics
+        "uses_detailed_rubrics": True,  # New flag
+        "silence_rules": "ROLEPLAY_1_SILENCE_RULES",  # Reference to silence rules
+        "evaluation_system": "rubric_based"  # New evaluation type
     },
     2: {
         "name": "Pitch + Objections + Close", 
