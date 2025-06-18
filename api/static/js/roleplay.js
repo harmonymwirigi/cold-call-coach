@@ -1,4 +1,4 @@
-// ===== FIXED STATIC/JS/ROLEPLAY.JS =====
+// ===== FIXED STATIC/JS/ROLEPLAY.JS (AUTO-PLAY AI FIRST) =====
 class RoleplayManager {
     constructor() {
         this.currentSession = null;
@@ -6,6 +6,9 @@ class RoleplayManager {
         this.isActive = false;
         this.conversationHistory = [];
         this.selectedMode = null;
+        this.isProcessing = false;
+        this.lastRequestTime = 0;
+        this.aiIsSpeaking = false; // Track AI speaking state
         
         this.init();
     }
@@ -20,30 +23,46 @@ class RoleplayManager {
     }
 
     setupEventListeners() {
-        // Start roleplay button
+        // Start roleplay button (prevent double-clicks)
         const startButton = document.getElementById('start-training-btn');
         if (startButton) {
-            startButton.addEventListener('click', () => {
-                this.startRoleplay();
+            startButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (!this.isProcessing) {
+                    this.startRoleplay();
+                }
             });
         }
 
         // End roleplay button
         const endButton = document.getElementById('end-training-btn');
         if (endButton) {
-            endButton.addEventListener('click', () => {
-                this.endRoleplay();
+            endButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (!this.isProcessing) {
+                    this.endRoleplay();
+                }
             });
         }
 
-        // Mode selection
+        // Mode selection (prevent rapid clicks)
         const modeButtons = document.querySelectorAll('.mode-btn');
         modeButtons.forEach(btn => {
             btn.addEventListener('click', (e) => {
-                const mode = e.currentTarget.dataset.mode; // Use currentTarget instead of target
+                e.preventDefault();
+                const mode = e.currentTarget.dataset.mode;
                 this.selectMode(mode);
             });
         });
+
+        // Abort session
+        const abortButton = document.getElementById('abort-training-btn');
+        if (abortButton) {
+            abortButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.abortSession();
+            });
+        }
     }
 
     loadRoleplayData() {
@@ -98,13 +117,21 @@ class RoleplayManager {
         const industryElement = document.getElementById('prospect-industry');
 
         if (avatarElement && roleplayData.industry) {
-            avatarElement.src = `/static/images/prospect-avatars/${roleplayData.industry.toLowerCase()}.jpg`;
+            const industryImages = {
+                'technology': 'tech-cto.jpg',
+                'finance': 'finance-vp.jpg', 
+                'healthcare': 'healthcare-director.jpg',
+                'manufacturing': 'manufacturing-manager.jpg',
+                'education': 'education-principal.jpg'
+            };
+            
+            const imageFile = industryImages[roleplayData.industry.toLowerCase()] || 'tech-cto.jpg';
+            avatarElement.src = `/static/images/prospect-avatars/${imageFile}`;
             avatarElement.alt = `${roleplayData.job_title} prospect`;
             
-            // Add error handler for missing images
             avatarElement.onerror = function() {
-                this.src = '/static/images/prospect-avatars/default.jpg';
-                this.onerror = null; // Prevent infinite loop
+                this.src = 'https://via.placeholder.com/100x100/6c757d/ffffff?text=👤';
+                this.onerror = null;
             };
         }
 
@@ -136,17 +163,20 @@ class RoleplayManager {
     }
 
     selectMode(mode) {
-        if (!mode) return;
+        if (!mode || this.isProcessing) return;
         
         // Update mode selection UI
         const modeButtons = document.querySelectorAll('.mode-btn');
         modeButtons.forEach(btn => {
-            btn.classList.remove('active');
+            btn.classList.remove('active', 'btn-primary', 'btn-warning', 'btn-danger');
+            btn.classList.add('btn-outline-primary', 'btn-outline-warning', 'btn-outline-danger');
         });
         
         const selectedButton = document.querySelector(`[data-mode="${mode}"]`);
         if (selectedButton) {
-            selectedButton.classList.add('active');
+            selectedButton.classList.remove('btn-outline-primary', 'btn-outline-warning', 'btn-outline-danger');
+            const colorClass = this.getButtonColor(mode);
+            selectedButton.classList.add(`btn-${colorClass}`);
         }
         
         // Store selected mode
@@ -156,17 +186,48 @@ class RoleplayManager {
         const startButton = document.getElementById('start-training-btn');
         if (startButton) {
             startButton.disabled = false;
-            startButton.textContent = `Start ${mode.charAt(0).toUpperCase() + mode.slice(1)} Mode`;
+            startButton.innerHTML = `<i class="fas fa-rocket me-2"></i>Start ${this.capitalizeFirst(mode)} Mode`;
         }
     }
 
+    getButtonColor(mode) {
+        const colors = {
+            'practice': 'primary',
+            'marathon': 'warning', 
+            'legend': 'danger'
+        };
+        return colors[mode] || 'primary';
+    }
+
     async startRoleplay() {
+        if (this.isProcessing) {
+            console.log('Already processing, ignoring duplicate request');
+            return;
+        }
+
         const roleplayId = this.getRoleplayId();
         const mode = this.selectedMode || 'practice';
 
         if (!roleplayId) {
             this.showMessage('Invalid roleplay configuration', 'error');
             return;
+        }
+
+        // Prevent duplicate requests
+        const now = Date.now();
+        if (now - this.lastRequestTime < 2000) {
+            console.log('Request too soon, ignoring');
+            return;
+        }
+
+        this.isProcessing = true;
+        this.lastRequestTime = now;
+        
+        // Update button state immediately
+        const startButton = document.getElementById('start-training-btn');
+        if (startButton) {
+            startButton.disabled = true;
+            startButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Starting...';
         }
 
         try {
@@ -186,12 +247,19 @@ class RoleplayManager {
                 // Update UI for active roleplay
                 this.updateActiveRoleplayUI();
                 
-                // Play initial AI response
+                // Show natural flow message
+                this.updateTranscript('📞 Phone is ringing... The prospect is answering...');
+                this.updateAIStatus('answering');
+                
+                // Auto-play initial AI response (prospect answers phone)
                 if (data.initial_response) {
-                    await this.playAIResponse(data.initial_response);
+                    await this.playAIResponseAndWaitForUser(data.initial_response);
+                } else {
+                    // If no initial response, prompt user to make opening
+                    this.promptUserToSpeak('The prospect answered. Make your opening!');
                 }
                 
-                this.showMessage('Roleplay started! Speak when ready.', 'success');
+                this.showMessage('📞 Call connected! Listen to the prospect, then respond.', 'success');
             } else {
                 const errorData = await response.json();
                 this.showMessage(errorData.error || 'Failed to start roleplay', 'error');
@@ -199,6 +267,13 @@ class RoleplayManager {
         } catch (error) {
             console.error('Error starting roleplay:', error);
             this.showMessage('Network error. Please try again.', 'error');
+        } finally {
+            this.isProcessing = false;
+            // Reset button if not started successfully
+            if (!this.isActive && startButton) {
+                startButton.disabled = false;
+                startButton.innerHTML = `<i class="fas fa-rocket me-2"></i>Start ${this.capitalizeFirst(mode)} Mode`;
+            }
         }
     }
 
@@ -210,10 +285,12 @@ class RoleplayManager {
         if (modeSection) modeSection.style.display = 'none';
         if (activeSection) activeSection.style.display = 'block';
         
-        // Enable voice controls
+        // Keep microphone DISABLED until AI finishes speaking
         const micButton = document.getElementById('mic-button');
         if (micButton) {
-            micButton.disabled = false;
+            micButton.disabled = true;
+            micButton.innerHTML = '<i class="fas fa-clock"></i>'; // Wait icon
+            micButton.title = 'Wait for the prospect to finish speaking...';
         }
         
         // Clear conversation log
@@ -221,9 +298,125 @@ class RoleplayManager {
         this.updateConversationLog();
     }
 
+    async playAIResponseAndWaitForUser(text) {
+        try {
+            // Show that AI is speaking
+            this.updateAIStatus('speaking');
+            this.updateTranscript(`🎯 Prospect: "${text}"`);
+            this.addMessageToLog('ai', text);
+            this.aiIsSpeaking = true;
+
+            // Try to play audio
+            const response = await this.apiCall('/api/roleplay/tts', {
+                method: 'POST',
+                body: JSON.stringify({ text: text })
+            });
+
+            if (response.ok) {
+                const audioBlob = await response.blob();
+                
+                // Play audio if available
+                if (audioBlob.size > 100) {
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    const audio = new Audio(audioUrl);
+                    
+                    // Wait for audio to finish playing
+                    await new Promise((resolve, reject) => {
+                        audio.onended = () => {
+                            URL.revokeObjectURL(audioUrl);
+                            resolve();
+                        };
+                        
+                        audio.onerror = () => {
+                            console.log('Audio playback failed, continuing silently');
+                            URL.revokeObjectURL(audioUrl);
+                            resolve(); // Don't reject, just continue
+                        };
+                        
+                        audio.play().catch(() => {
+                            console.log('Audio play failed, continuing silently');
+                            resolve(); // Don't reject, just continue
+                        });
+                    });
+                } else {
+                    // No audio, simulate speaking time
+                    await this.simulateSpeakingTime(text);
+                }
+            } else {
+                console.log('TTS request failed, simulating speaking time');
+                await this.simulateSpeakingTime(text);
+            }
+
+            // AI finished speaking - now prompt user
+            this.aiIsSpeaking = false;
+            this.promptUserToSpeak('Your turn! Click the microphone to respond...');
+            
+        } catch (error) {
+            console.error('Error playing AI response:', error);
+            this.aiIsSpeaking = false;
+            await this.simulateSpeakingTime(text);
+            this.promptUserToSpeak('Your turn! Click the microphone to respond...');
+        }
+    }
+
+    async simulateSpeakingTime(text) {
+        // Simulate realistic speaking time based on text length
+        const wordsPerMinute = 150;
+        const words = text.split(' ').length;
+        const speakingTimeMs = (words / wordsPerMinute) * 60 * 1000;
+        const minTime = 1000; // Minimum 1 second
+        const maxTime = 5000; // Maximum 5 seconds
+        
+        const delay = Math.max(minTime, Math.min(maxTime, speakingTimeMs));
+        
+        return new Promise(resolve => setTimeout(resolve, delay));
+    }
+
+    promptUserToSpeak(message) {
+        // Update UI to show it's user's turn
+        this.updateAIStatus('listening');
+        this.updateTranscript(message);
+        
+        // Enable microphone
+        const micButton = document.getElementById('mic-button');
+        if (micButton) {
+            micButton.disabled = false;
+            micButton.innerHTML = '<i class="fas fa-microphone"></i>';
+            micButton.title = 'Click to speak (Ctrl+Space)';
+            
+            // Add visual pulse to draw attention
+            micButton.classList.add('pulse-animation');
+            setTimeout(() => {
+                micButton.classList.remove('pulse-animation');
+            }, 3000);
+        }
+        
+        // Auto-start voice recognition if available
+        if (this.voiceHandler && !this.voiceHandler.isListening) {
+            setTimeout(() => {
+                this.voiceHandler.startListening();
+            }, 500); // Small delay to let user see the prompt
+        }
+    }
+
     async processUserInput(transcript) {
-        if (!this.isActive || !this.currentSession) {
+        if (!this.isActive || !this.currentSession || this.isProcessing || this.aiIsSpeaking) {
             return;
+        }
+
+        this.isProcessing = true;
+
+        // Stop voice recognition while processing
+        if (this.voiceHandler) {
+            this.voiceHandler.stopListening();
+        }
+
+        // Update UI
+        this.updateTranscript('Processing your response...');
+        const micButton = document.getElementById('mic-button');
+        if (micButton) {
+            micButton.disabled = true;
+            micButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         }
 
         // Add user message to conversation
@@ -240,60 +433,26 @@ class RoleplayManager {
             if (response.ok) {
                 const data = await response.json();
                 
-                // Add AI response to conversation
-                this.addMessageToLog('ai', data.ai_response);
-                
-                // Play AI response
-                await this.playAIResponse(data.ai_response);
-                
                 // Check if call should end
                 if (!data.call_continues) {
                     await this.endRoleplay(data.success);
+                    return;
                 }
+                
+                // Play AI response and wait for user
+                await this.playAIResponseAndWaitForUser(data.ai_response);
+                
             } else {
                 const errorData = await response.json();
                 this.showMessage(errorData.error || 'Failed to process input', 'error');
+                this.promptUserToSpeak('Sorry, please try again...');
             }
         } catch (error) {
             console.error('Error processing user input:', error);
             this.showMessage('Network error during roleplay', 'error');
-        }
-    }
-
-    async playAIResponse(text) {
-        try {
-            // Show that AI is speaking
-            this.updateAIStatus('speaking');
-            
-            const response = await this.apiCall('/api/roleplay/tts', {
-                method: 'POST',
-                body: JSON.stringify({ text: text })
-            });
-
-            if (response.ok) {
-                const audioBlob = await response.blob();
-                const audioUrl = URL.createObjectURL(audioBlob);
-                const audio = new Audio(audioUrl);
-                
-                audio.onended = () => {
-                    this.updateAIStatus('listening');
-                    URL.revokeObjectURL(audioUrl);
-                };
-                
-                audio.onerror = () => {
-                    console.error('Audio playback error');
-                    this.updateAIStatus('listening');
-                    URL.revokeObjectURL(audioUrl);
-                };
-                
-                await audio.play();
-            } else {
-                console.error('TTS failed');
-                this.updateAIStatus('listening');
-            }
-        } catch (error) {
-            console.error('Error playing AI response:', error);
-            this.updateAIStatus('listening');
+            this.promptUserToSpeak('Network error, please try again...');
+        } finally {
+            this.isProcessing = false;
         }
     }
 
@@ -315,18 +474,18 @@ class RoleplayManager {
             logElement.innerHTML = `
                 <div class="text-center text-muted p-4">
                     <i class="fas fa-phone-alt fa-2x mb-2 opacity-50"></i>
-                    <div>Start the roleplay to begin conversation</div>
+                    <div>Call will begin shortly...</div>
                 </div>
             `;
             return;
         }
 
         logElement.innerHTML = this.conversationHistory.map(entry => `
-            <div class="message ${entry.sender}" style="margin-bottom: 1rem; padding: 0.5rem;">
-                <div class="message-content" style="font-weight: ${entry.sender === 'ai' ? 'bold' : 'normal'}">
-                    <strong>${entry.sender === 'ai' ? 'AI:' : 'You:'}</strong> ${entry.message}
+            <div class="message ${entry.sender}" style="margin-bottom: 1rem; padding: 0.75rem; border-radius: 10px; background: ${entry.sender === 'ai' ? '#f8f9fa' : '#e3f2fd'};">
+                <div class="message-content">
+                    <strong>${entry.sender === 'ai' ? '📞 Prospect:' : '🎤 You:'}</strong> ${entry.message}
                 </div>
-                <div class="message-time" style="font-size: 0.8rem; color: #666;">
+                <div class="message-time" style="font-size: 0.8rem; color: #666; margin-top: 0.25rem;">
                     ${entry.timestamp.toLocaleTimeString()}
                 </div>
             </div>
@@ -339,15 +498,31 @@ class RoleplayManager {
     updateAIStatus(status) {
         const statusElement = document.getElementById('ai-status');
         if (statusElement) {
-            statusElement.textContent = status === 'speaking' ? 'AI is speaking...' : 'AI is listening...';
+            const statusMessages = {
+                'answering': '📞 Answering phone...',
+                'speaking': '🗣️ Prospect is speaking...',
+                'listening': '👂 Prospect is listening...',
+                'thinking': '🤔 Thinking...'
+            };
+            
+            statusElement.textContent = statusMessages[status] || 'AI is ready';
             statusElement.className = `ai-status ${status}`;
         }
     }
 
-    async endRoleplay(success = false) {
-        if (!this.isActive) return;
+    updateTranscript(text) {
+        const transcriptElement = document.getElementById('live-transcript');
+        if (transcriptElement) {
+            transcriptElement.textContent = text;
+        }
+    }
 
+    async endRoleplay(success = false) {
+        if (!this.isActive || this.isProcessing) return;
+
+        this.isProcessing = true;
         this.isActive = false;
+        this.aiIsSpeaking = false;
         
         // Stop voice handler
         if (this.voiceHandler) {
@@ -363,13 +538,39 @@ class RoleplayManager {
             if (response.ok) {
                 const data = await response.json();
                 this.showCoachingFeedback(data.coaching);
+                this.showMessage('Session completed successfully!', 'success');
             }
         } catch (error) {
             console.error('Error ending roleplay:', error);
+            this.showMessage('Error ending session', 'error');
+        } finally {
+            this.isProcessing = false;
         }
 
         // Update UI
         this.updateEndedRoleplayUI();
+    }
+
+    async abortSession() {
+        if (!this.isActive) return;
+
+        try {
+            await this.apiCall('/api/roleplay/session/abort', {
+                method: 'POST'
+            });
+            
+            this.isActive = false;
+            this.aiIsSpeaking = false;
+            
+            if (this.voiceHandler) {
+                this.voiceHandler.stopListening();
+            }
+            
+            this.updateEndedRoleplayUI();
+            this.showMessage('Session aborted', 'info');
+        } catch (error) {
+            console.error('Error aborting session:', error);
+        }
     }
 
     updateEndedRoleplayUI() {
@@ -383,18 +584,23 @@ class RoleplayManager {
         const micButton = document.getElementById('mic-button');
         if (micButton) {
             micButton.disabled = true;
+            micButton.classList.remove('pulse-animation');
         }
         
-        // Reset mode selection
+        // Reset state
         this.selectedMode = null;
+        this.isProcessing = false;
+        this.aiIsSpeaking = false;
+        
         document.querySelectorAll('.mode-btn').forEach(btn => {
-            btn.classList.remove('active');
+            btn.classList.remove('active', 'btn-primary', 'btn-warning', 'btn-danger');
+            btn.classList.add('btn-outline-primary', 'btn-outline-warning', 'btn-outline-danger');
         });
         
         const startButton = document.getElementById('start-training-btn');
         if (startButton) {
             startButton.disabled = true;
-            startButton.textContent = 'Select a mode to start training';
+            startButton.innerHTML = 'Select a mode to start training';
         }
     }
 
@@ -406,60 +612,84 @@ class RoleplayManager {
         if (!content) return;
 
         content.innerHTML = `
-            <h4>Coaching Feedback</h4>
-            <div class="coaching-categories">
-                ${coaching.coaching && coaching.coaching.sales ? `<div class="feedback-category sales mb-3">
-                    <h6><i class="fas fa-chart-line"></i> Sales</h6>
-                    <p>${coaching.coaching.sales}</p>
-                </div>` : ''}
-                
-                ${coaching.coaching && coaching.coaching.grammar ? `<div class="feedback-category grammar mb-3">
-                    <h6><i class="fas fa-spell-check"></i> Grammar</h6>
-                    <p>${coaching.coaching.grammar}</p>
-                </div>` : ''}
-                
-                ${coaching.coaching && coaching.coaching.vocabulary ? `<div class="feedback-category vocabulary mb-3">
-                    <h6><i class="fas fa-book"></i> Vocabulary</h6>
-                    <p>${coaching.coaching.vocabulary}</p>
-                </div>` : ''}
-                
-                ${coaching.coaching && coaching.coaching.pronunciation ? `<div class="feedback-category pronunciation mb-3">
-                    <h6><i class="fas fa-volume-up"></i> Pronunciation</h6>
-                    <p>${coaching.coaching.pronunciation}</p>
-                </div>` : ''}
-                
-                ${coaching.coaching && coaching.coaching.rapport ? `<div class="feedback-category rapport mb-3">
-                    <h6><i class="fas fa-handshake"></i> Rapport</h6>
-                    <p>${coaching.coaching.rapport}</p>
-                </div>` : ''}
+            <div class="coaching-summary mb-4">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h4><i class="fas fa-medal me-2"></i>Session Complete!</h4>
+                        <p class="mb-0">Here's your personalized coaching feedback:</p>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <div class="score-display">
+                            <span class="score-number h1 text-primary">${coaching.overall_score || 0}</span>
+                            <div class="score-label">Overall Score</div>
+                        </div>
+                    </div>
+                </div>
             </div>
             
-            <div class="coaching-summary">
-                <div class="score-display text-center mb-3">
-                    <span class="score-number h2">${coaching.overall_score || 0}/100</span>
-                    <div class="score-label">Overall Score</div>
-                </div>
+            <div class="coaching-categories">
+                ${coaching.coaching && coaching.coaching.sales_coaching ? `
+                <div class="feedback-category sales mb-3 p-3 border-start border-primary border-4">
+                    <h6><i class="fas fa-chart-line text-primary me-2"></i>Sales Performance</h6>
+                    <p class="mb-0">${coaching.coaching.sales_coaching}</p>
+                </div>` : ''}
                 
-                <div class="next-steps">
-                    <h6>Next Steps:</h6>
-                    <p>${coaching.next_steps || 'Keep practicing to improve your skills!'}</p>
-                </div>
+                ${coaching.coaching && coaching.coaching.grammar_coaching ? `
+                <div class="feedback-category grammar mb-3 p-3 border-start border-success border-4">
+                    <h6><i class="fas fa-spell-check text-success me-2"></i>Grammar & Structure</h6>
+                    <p class="mb-0">${coaching.coaching.grammar_coaching}</p>
+                </div>` : ''}
+                
+                ${coaching.coaching && coaching.coaching.vocabulary_coaching ? `
+                <div class="feedback-category vocabulary mb-3 p-3 border-start border-info border-4">
+                    <h6><i class="fas fa-book text-info me-2"></i>Vocabulary</h6>
+                    <p class="mb-0">${coaching.coaching.vocabulary_coaching}</p>
+                </div>` : ''}
+                
+                ${coaching.coaching && coaching.coaching.pronunciation_coaching ? `
+                <div class="feedback-category pronunciation mb-3 p-3 border-start border-warning border-4">
+                    <h6><i class="fas fa-volume-up text-warning me-2"></i>Pronunciation</h6>
+                    <p class="mb-0">${coaching.coaching.pronunciation_coaching}</p>
+                </div>` : ''}
+                
+                ${coaching.coaching && coaching.coaching.rapport_assertiveness ? `
+                <div class="feedback-category rapport mb-3 p-3 border-start border-danger border-4">
+                    <h6><i class="fas fa-handshake text-danger me-2"></i>Rapport & Confidence</h6>
+                    <p class="mb-0">${coaching.coaching.rapport_assertiveness}</p>
+                </div>` : ''}
             </div>
         `;
         
         feedbackSection.style.display = 'block';
+        feedbackSection.scrollIntoView({ behavior: 'smooth' });
     }
 
     showMessage(message, type = 'info') {
         // Use global showAlert if available, otherwise fallback to console
         if (typeof showAlert === 'function') {
             showAlert(message, type);
-        } else if (window.coldCallingApp && typeof window.coldCallingApp.showMessage === 'function') {
-            window.coldCallingApp.showMessage(message, type);
         } else {
             console.log(`${type.toUpperCase()}: ${message}`);
-            alert(message); // Fallback to alert
+            this.createToast(message, type);
         }
+    }
+
+    createToast(message, type) {
+        const toast = document.createElement('div');
+        toast.className = `alert alert-${type === 'error' ? 'danger' : type} position-fixed`;
+        toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; max-width: 400px;';
+        toast.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
+        `;
+        
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.remove();
+            }
+        }, 5000);
     }
 
     async apiCall(endpoint, options = {}) {
@@ -473,12 +703,15 @@ class RoleplayManager {
         const response = await fetch(endpoint, { ...defaultOptions, ...options });
         
         if (response.status === 401) {
-            // Redirect to login if unauthorized
             window.location.href = '/login';
             throw new Error('Authentication required');
         }
 
         return response;
+    }
+
+    capitalizeFirst(str) {
+        return str.charAt(0).toUpperCase() + str.slice(1);
     }
 
     destroy() {
@@ -488,6 +721,8 @@ class RoleplayManager {
         
         this.isActive = false;
         this.currentSession = null;
+        this.isProcessing = false;
+        this.aiIsSpeaking = false;
     }
 }
 
@@ -497,3 +732,33 @@ document.addEventListener('DOMContentLoaded', () => {
         window.roleplayManager = new RoleplayManager();
     }
 });
+
+// Add CSS for pulse animation
+const style = document.createElement('style');
+style.textContent = `
+    .pulse-animation {
+        animation: pulse 1.5s infinite !important;
+    }
+    
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+    }
+    
+    .ai-status.speaking {
+        color: #dc3545 !important;
+        font-weight: bold;
+    }
+    
+    .ai-status.listening {
+        color: #28a745 !important;
+        font-weight: bold;
+    }
+    
+    .ai-status.answering {
+        color: #ffc107 !important;
+        font-weight: bold;
+    }
+`;
+document.head.appendChild(style);

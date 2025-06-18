@@ -1,10 +1,11 @@
-<!-- ===== TEMPLATES/ROLEPLAY.HTML (COMPLETE) ===== -->
+<!-- ===== UPDATED TEMPLATES/ROLEPLAY.HTML (WITH FIXES) ===== -->
 {% extends "base.html" %}
 
 {% block title %}{{ roleplay_config.name if roleplay_config else 'Roleplay Training' }} - Cold Calling Coach{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/roleplay.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/voice.css') }}">
 <style>
 /* Additional roleplay-specific styles */
 .roleplay-container {
@@ -235,7 +236,7 @@
         <div class="roleplay-header">
             <div class="row align-items-center">
                 <div class="col-auto">
-                    <a href="/dashboard class="back-button">
+                    <a href="/dashboard" class="back-button">
                         <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
                     </a>
                 </div>
@@ -263,7 +264,7 @@
                 <!-- Prospect Information Card -->
                 <div class="prospect-card">
                     <div class="prospect-header">
-                        <img src="/static/images/prospect-avatars/default.jpg" 
+                        <img src="https://via.placeholder.com/100x100/6c757d/ffffff?text=👤" 
                              alt="Prospect" 
                              class="prospect-avatar" 
                              id="prospect-avatar">
@@ -399,6 +400,9 @@
                             <button id="end-training-btn" class="btn btn-outline-danger">
                                 <i class="fas fa-stop me-2"></i>End Training
                             </button>
+                            <button id="abort-training-btn" class="btn btn-outline-secondary">
+                                <i class="fas fa-times me-2"></i>Abort
+                            </button>
                         </div>
 
                         <!-- Quick Tips -->
@@ -406,6 +410,19 @@
                             <small class="text-muted">
                                 <strong>Tips:</strong> Speak clearly, wait for AI responses, be natural and confident
                             </small>
+                        </div>
+
+                        <!-- Keyboard Shortcuts -->
+                        <div class="keyboard-shortcuts mt-3">
+                            <h6>Keyboard Shortcuts:</h6>
+                            <div class="shortcut">
+                                <span>Toggle microphone</span>
+                                <kbd>Ctrl + Space</kbd>
+                            </div>
+                            <div class="shortcut">
+                                <span>End training</span>
+                                <kbd>Escape</kbd>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -429,7 +446,7 @@
                             <button id="change-mode-btn" class="btn btn-outline-secondary">
                                 <i class="fas fa-cog me-2"></i>Change Mode
                             </button>
-                            <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-outline-primary">
+                            <a href="/dashboard" class="btn btn-outline-primary">
                                 <i class="fas fa-home me-2"></i>Dashboard
                             </a>
                         </div>
@@ -703,6 +720,7 @@ function showHelpModal() {
                             <li>If voice recognition isn't working, check microphone permissions</li>
                             <li>If AI doesn't respond, check your internet connection</li>
                             <li>For best results, use Chrome, Edge, or Safari browsers</li>
+                            <li>TTS (AI voice) may not be available in all browsers</li>
                         </ul>
                     </div>
                     <div class="modal-footer">
