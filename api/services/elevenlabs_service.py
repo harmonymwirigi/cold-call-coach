@@ -1,4 +1,4 @@
-# ===== FIXED API/SERVICES/ELEVENLABS_SERVICE.PY =====
+# ===== COMPLETE FIXED API/SERVICES/ELEVENLABS_SERVICE.PY =====
 import os
 import logging
 from typing import Dict, Any, Optional
@@ -21,9 +21,13 @@ class ElevenLabsService:
             logger.info("ElevenLabs service initialized successfully")
     
     def text_to_speech(self, text: str, voice_settings: Dict = None) -> BytesIO:
-        """Convert text to speech with proper fallback handling - ALWAYS returns audio"""
+        """Convert text to speech with bulletproof fallback - NEVER returns None"""
         try:
             logger.info(f"TTS request for text: {text[:50]}...")
+            
+            if not text or not text.strip():
+                logger.info("Empty text provided - generating silent audio")
+                return self._generate_silent_audio()
             
             if not self.is_enabled:
                 logger.info("TTS not configured - generating fallback audio")
@@ -36,17 +40,17 @@ class ElevenLabsService:
             
         except Exception as e:
             logger.error(f"Error in text_to_speech: {e}")
-            # Always return audio, never None
-            return self._generate_fallback_audio(text)
+            # CRITICAL: Always return audio, never None
+            return self._generate_emergency_audio()
     
     def _generate_fallback_audio(self, text: str) -> BytesIO:
-        """Generate a realistic beep sound as fallback - NEVER fails"""
+        """Generate a pleasant notification sound - NEVER fails"""
         try:
-            # Generate a pleasant notification sound
+            # Generate a pleasant two-tone notification sound
             sample_rate = 44100
-            duration = 0.3  # 0.3 seconds
+            duration = min(0.5, max(0.2, len(text) * 0.01))  # Duration based on text length
             
-            # Create a pleasant two-tone notification sound
+            # Create a pleasant notification sound
             frequencies = [800, 1000]  # Two frequencies for a nicer sound
             
             # Calculate number of samples
@@ -66,14 +70,18 @@ class ElevenLabsService:
                 
                 # Convert to 16-bit signed integer
                 sample_int = int(sample * 32767)
+                sample_int = max(-32767, min(32767, sample_int))  # Clamp values
                 samples.append(struct.pack('<h', sample_int))
             
             # Create WAV file
             wav_data = BytesIO()
             
             # WAV header (44 bytes)
+            data_size = len(samples) * 2
+            file_size = 36 + data_size
+            
             wav_data.write(b'RIFF')
-            wav_data.write(struct.pack('<I', 36 + len(samples) * 2))  # File size
+            wav_data.write(struct.pack('<I', file_size))  # File size
             wav_data.write(b'WAVE')
             wav_data.write(b'fmt ')
             wav_data.write(struct.pack('<I', 16))  # PCM format chunk size
@@ -84,23 +92,23 @@ class ElevenLabsService:
             wav_data.write(struct.pack('<H', 2))   # Block align
             wav_data.write(struct.pack('<H', 16))  # Bits per sample
             wav_data.write(b'data')
-            wav_data.write(struct.pack('<I', len(samples) * 2))  # Data size
+            wav_data.write(struct.pack('<I', data_size))  # Data size
             
             # Write audio data
             for sample in samples:
                 wav_data.write(sample)
             
             wav_data.seek(0)
-            logger.info(f"Generated fallback audio for text: {text[:20]}...")
+            logger.info(f"Generated fallback audio for text: {text[:20]}... (duration: {duration}s)")
             return wav_data
             
         except Exception as e:
             logger.error(f"Error generating fallback audio: {e}")
-            # Last resort: return minimal silent audio
-            return self._generate_silent_audio()
+            # Last resort
+            return self._generate_emergency_audio()
     
     def _generate_silent_audio(self) -> BytesIO:
-        """Generate minimal silent WAV file - absolute fallback"""
+        """Generate minimal silent WAV file"""
         try:
             # Create minimal WAV file with 0.1 seconds of silence
             sample_rate = 44100
@@ -110,8 +118,11 @@ class ElevenLabsService:
             wav_data = BytesIO()
             
             # Minimal WAV header
+            data_size = num_samples * 2
+            file_size = 36 + data_size
+            
             wav_data.write(b'RIFF')
-            wav_data.write(struct.pack('<I', 36 + num_samples * 2))
+            wav_data.write(struct.pack('<I', file_size))
             wav_data.write(b'WAVE')
             wav_data.write(b'fmt ')
             wav_data.write(struct.pack('<I', 16))
@@ -122,19 +133,53 @@ class ElevenLabsService:
             wav_data.write(struct.pack('<H', 2))
             wav_data.write(struct.pack('<H', 16))
             wav_data.write(b'data')
-            wav_data.write(struct.pack('<I', num_samples * 2))
+            wav_data.write(struct.pack('<I', data_size))
             
             # Write silent samples
             for _ in range(num_samples):
                 wav_data.write(struct.pack('<h', 0))
             
             wav_data.seek(0)
-            logger.info("Generated silent audio fallback")
+            logger.info("Generated silent audio")
             return wav_data
             
         except Exception as e:
             logger.error(f"Error generating silent audio: {e}")
-            # Ultimate fallback: empty BytesIO
+            return self._generate_emergency_audio()
+    
+    def _generate_emergency_audio(self) -> BytesIO:
+        """Generate absolute minimal audio file as emergency fallback"""
+        try:
+            # Create the most basic valid WAV file possible
+            wav_data = BytesIO()
+            
+            # Minimal valid WAV with 1 sample
+            header = (
+                b'RIFF'
+                b'\x2a\x00\x00\x00'  # File size (42 bytes)
+                b'WAVE'
+                b'fmt '
+                b'\x10\x00\x00\x00'  # Format chunk size (16)
+                b'\x01\x00'          # PCM format
+                b'\x01\x00'          # Mono
+                b'\x44\xac\x00\x00'  # Sample rate (44100)
+                b'\x88\x58\x01\x00'  # Byte rate
+                b'\x02\x00'          # Block align
+                b'\x10\x00'          # Bits per sample
+                b'data'
+                b'\x02\x00\x00\x00'  # Data size (2 bytes)
+                b'\x00\x00'          # One silent sample
+            )
+            
+            wav_data.write(header)
+            wav_data.seek(0)
+            
+            logger.warning("Used emergency audio fallback")
+            return wav_data
+            
+        except Exception as e:
+            logger.critical(f"Emergency audio generation failed: {e}")
+            # Absolute last resort - empty BytesIO
             return BytesIO()
     
     def get_voice_settings_for_prospect(self, prospect_info: Dict[str, Any]) -> Dict[str, Any]:

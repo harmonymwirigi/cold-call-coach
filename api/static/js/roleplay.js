@@ -1,4 +1,4 @@
-// ===== FIXED STATIC/JS/ROLEPLAY.JS (AUTO-PLAY AI FIRST) =====
+// ===== COMPLETE FIXED STATIC/JS/ROLEPLAY.JS =====
 class RoleplayManager {
     constructor() {
         this.currentSession = null;
@@ -8,18 +8,26 @@ class RoleplayManager {
         this.selectedMode = null;
         this.isProcessing = false;
         this.lastRequestTime = 0;
-        this.aiIsSpeaking = false; // Track AI speaking state
+        this.aiIsSpeaking = false;
         
         this.init();
     }
 
     init() {
+        console.log('Initializing RoleplayManager...');
+        
         // Initialize voice handler only if VoiceHandler is available
         if (typeof VoiceHandler !== 'undefined') {
             this.voiceHandler = new VoiceHandler(this);
+            console.log('Voice handler initialized');
+        } else {
+            console.warn('VoiceHandler not available');
         }
+        
         this.setupEventListeners();
         this.loadRoleplayData();
+        
+        console.log('RoleplayManager initialized successfully');
     }
 
     setupEventListeners() {
@@ -29,6 +37,7 @@ class RoleplayManager {
             startButton.addEventListener('click', (e) => {
                 e.preventDefault();
                 if (!this.isProcessing) {
+                    console.log('Start button clicked');
                     this.startRoleplay();
                 }
             });
@@ -40,6 +49,7 @@ class RoleplayManager {
             endButton.addEventListener('click', (e) => {
                 e.preventDefault();
                 if (!this.isProcessing) {
+                    console.log('End button clicked');
                     this.endRoleplay();
                 }
             });
@@ -51,6 +61,7 @@ class RoleplayManager {
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
                 const mode = e.currentTarget.dataset.mode;
+                console.log('Mode selected:', mode);
                 this.selectMode(mode);
             });
         });
@@ -60,31 +71,33 @@ class RoleplayManager {
         if (abortButton) {
             abortButton.addEventListener('click', (e) => {
                 e.preventDefault();
+                console.log('Abort button clicked');
                 this.abortSession();
             });
         }
     }
 
     loadRoleplayData() {
-        // Get roleplay ID from URL or page data
         const roleplayId = this.getRoleplayId();
+        console.log('Loading roleplay data for ID:', roleplayId);
         if (roleplayId) {
             this.loadRoleplayInfo(roleplayId);
         }
     }
 
     getRoleplayId() {
-        // Extract from URL path
         const pathMatch = window.location.pathname.match(/\/roleplay\/(\d+)/);
         return pathMatch ? parseInt(pathMatch[1]) : null;
     }
 
     async loadRoleplayInfo(roleplayId) {
         try {
+            console.log('Fetching roleplay info for ID:', roleplayId);
             const response = await this.apiCall(`/api/roleplay/info/${roleplayId}`);
             
             if (response.ok) {
                 const data = await response.json();
+                console.log('Roleplay info loaded:', data);
                 this.updateRoleplayUI(data);
             } else {
                 console.error('Failed to load roleplay info');
@@ -165,6 +178,8 @@ class RoleplayManager {
     selectMode(mode) {
         if (!mode || this.isProcessing) return;
         
+        console.log('Selecting mode:', mode);
+        
         // Update mode selection UI
         const modeButtons = document.querySelectorAll('.mode-btn');
         modeButtons.forEach(btn => {
@@ -208,6 +223,8 @@ class RoleplayManager {
         const roleplayId = this.getRoleplayId();
         const mode = this.selectedMode || 'practice';
 
+        console.log('Starting roleplay:', { roleplayId, mode });
+
         if (!roleplayId) {
             this.showMessage('Invalid roleplay configuration', 'error');
             return;
@@ -231,6 +248,7 @@ class RoleplayManager {
         }
 
         try {
+            console.log('Making API call to start roleplay...');
             const response = await this.apiCall('/api/roleplay/start', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -241,6 +259,8 @@ class RoleplayManager {
 
             if (response.ok) {
                 const data = await response.json();
+                console.log('Roleplay started successfully:', data);
+                
                 this.currentSession = data;
                 this.isActive = true;
                 
@@ -253,15 +273,17 @@ class RoleplayManager {
                 
                 // Auto-play initial AI response (prospect answers phone)
                 if (data.initial_response) {
+                    console.log('Playing initial AI response:', data.initial_response);
                     await this.playAIResponseAndWaitForUser(data.initial_response);
                 } else {
-                    // If no initial response, prompt user to make opening
+                    console.log('No initial response, prompting user');
                     this.promptUserToSpeak('The prospect answered. Make your opening!');
                 }
                 
                 this.showMessage('📞 Call connected! Listen to the prospect, then respond.', 'success');
             } else {
                 const errorData = await response.json();
+                console.error('Failed to start roleplay:', errorData);
                 this.showMessage(errorData.error || 'Failed to start roleplay', 'error');
             }
         } catch (error) {
@@ -278,6 +300,8 @@ class RoleplayManager {
     }
 
     updateActiveRoleplayUI() {
+        console.log('Updating UI for active roleplay');
+        
         // Hide start controls, show active controls
         const modeSection = document.getElementById('mode-selection-section');
         const activeSection = document.getElementById('active-training-section');
@@ -289,7 +313,7 @@ class RoleplayManager {
         const micButton = document.getElementById('mic-button');
         if (micButton) {
             micButton.disabled = true;
-            micButton.innerHTML = '<i class="fas fa-clock"></i>'; // Wait icon
+            micButton.innerHTML = '<i class="fas fa-clock"></i>';
             micButton.title = 'Wait for the prospect to finish speaking...';
         }
         
@@ -300,6 +324,8 @@ class RoleplayManager {
 
     async playAIResponseAndWaitForUser(text) {
         try {
+            console.log('Playing AI response:', text);
+            
             // Show that AI is speaking
             this.updateAIStatus('speaking');
             this.updateTranscript(`🎯 Prospect: "${text}"`);
@@ -307,48 +333,58 @@ class RoleplayManager {
             this.aiIsSpeaking = true;
 
             // Try to play audio
-            const response = await this.apiCall('/api/roleplay/tts', {
-                method: 'POST',
-                body: JSON.stringify({ text: text })
-            });
+            try {
+                console.log('Requesting TTS for:', text.substring(0, 50));
+                const response = await this.apiCall('/api/roleplay/tts', {
+                    method: 'POST',
+                    body: JSON.stringify({ text: text })
+                });
 
-            if (response.ok) {
-                const audioBlob = await response.blob();
-                
-                // Play audio if available
-                if (audioBlob.size > 100) {
-                    const audioUrl = URL.createObjectURL(audioBlob);
-                    const audio = new Audio(audioUrl);
+                if (response.ok) {
+                    console.log('TTS request successful');
+                    const audioBlob = await response.blob();
                     
-                    // Wait for audio to finish playing
-                    await new Promise((resolve, reject) => {
-                        audio.onended = () => {
-                            URL.revokeObjectURL(audioUrl);
-                            resolve();
-                        };
+                    // Play audio if available
+                    if (audioBlob.size > 100) {
+                        console.log('Playing audio blob, size:', audioBlob.size);
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        const audio = new Audio(audioUrl);
                         
-                        audio.onerror = () => {
-                            console.log('Audio playback failed, continuing silently');
-                            URL.revokeObjectURL(audioUrl);
-                            resolve(); // Don't reject, just continue
-                        };
-                        
-                        audio.play().catch(() => {
-                            console.log('Audio play failed, continuing silently');
-                            resolve(); // Don't reject, just continue
+                        // Wait for audio to finish playing
+                        await new Promise((resolve) => {
+                            audio.onended = () => {
+                                console.log('Audio playback finished');
+                                URL.revokeObjectURL(audioUrl);
+                                resolve();
+                            };
+                            
+                            audio.onerror = () => {
+                                console.log('Audio playback failed, continuing silently');
+                                URL.revokeObjectURL(audioUrl);
+                                resolve();
+                            };
+                            
+                            audio.play().catch((playError) => {
+                                console.log('Audio play failed:', playError);
+                                resolve();
+                            });
                         });
-                    });
+                    } else {
+                        console.log('Audio blob too small, simulating speaking time');
+                        await this.simulateSpeakingTime(text);
+                    }
                 } else {
-                    // No audio, simulate speaking time
+                    console.log('TTS request failed, simulating speaking time');
                     await this.simulateSpeakingTime(text);
                 }
-            } else {
-                console.log('TTS request failed, simulating speaking time');
+            } catch (ttsError) {
+                console.log('TTS error:', ttsError);
                 await this.simulateSpeakingTime(text);
             }
 
             // AI finished speaking - now prompt user
             this.aiIsSpeaking = false;
+            console.log('AI finished speaking, prompting user to respond');
             this.promptUserToSpeak('Your turn! Click the microphone to respond...');
             
         } catch (error) {
@@ -369,10 +405,13 @@ class RoleplayManager {
         
         const delay = Math.max(minTime, Math.min(maxTime, speakingTimeMs));
         
+        console.log(`Simulating speaking time: ${delay}ms for ${words} words`);
         return new Promise(resolve => setTimeout(resolve, delay));
     }
 
     promptUserToSpeak(message) {
+        console.log('Prompting user to speak:', message);
+        
         // Update UI to show it's user's turn
         this.updateAIStatus('listening');
         this.updateTranscript(message);
@@ -387,22 +426,28 @@ class RoleplayManager {
             // Add visual pulse to draw attention
             micButton.classList.add('pulse-animation');
             setTimeout(() => {
-                micButton.classList.remove('pulse-animation');
+                if (micButton.classList) {
+                    micButton.classList.remove('pulse-animation');
+                }
             }, 3000);
         }
         
         // Auto-start voice recognition if available
         if (this.voiceHandler && !this.voiceHandler.isListening) {
+            console.log('Auto-starting voice recognition...');
             setTimeout(() => {
                 this.voiceHandler.startListening();
-            }, 500); // Small delay to let user see the prompt
+            }, 500);
         }
     }
 
     async processUserInput(transcript) {
         if (!this.isActive || !this.currentSession || this.isProcessing || this.aiIsSpeaking) {
+            console.log('Cannot process user input - invalid state');
             return;
         }
+
+        console.log('Processing user input:', transcript);
 
         this.isProcessing = true;
 
@@ -423,6 +468,7 @@ class RoleplayManager {
         this.addMessageToLog('user', transcript);
 
         try {
+            console.log('Sending user input to API...');
             const response = await this.apiCall('/api/roleplay/respond', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -432,9 +478,11 @@ class RoleplayManager {
 
             if (response.ok) {
                 const data = await response.json();
+                console.log('AI response received:', data);
                 
                 // Check if call should end
                 if (!data.call_continues) {
+                    console.log('Call should end');
                     await this.endRoleplay(data.success);
                     return;
                 }
@@ -444,6 +492,7 @@ class RoleplayManager {
                 
             } else {
                 const errorData = await response.json();
+                console.error('API error:', errorData);
                 this.showMessage(errorData.error || 'Failed to process input', 'error');
                 this.promptUserToSpeak('Sorry, please try again...');
             }
@@ -457,6 +506,8 @@ class RoleplayManager {
     }
 
     addMessageToLog(sender, message) {
+        console.log('Adding message to log:', { sender, message: message.substring(0, 50) });
+        
         this.conversationHistory.push({
             sender: sender,
             message: message,
@@ -520,6 +571,8 @@ class RoleplayManager {
     async endRoleplay(success = false) {
         if (!this.isActive || this.isProcessing) return;
 
+        console.log('Ending roleplay, success:', success);
+
         this.isProcessing = true;
         this.isActive = false;
         this.aiIsSpeaking = false;
@@ -537,6 +590,7 @@ class RoleplayManager {
 
             if (response.ok) {
                 const data = await response.json();
+                console.log('Roleplay ended successfully:', data);
                 this.showCoachingFeedback(data.coaching);
                 this.showMessage('Session completed successfully!', 'success');
             }
@@ -553,6 +607,8 @@ class RoleplayManager {
 
     async abortSession() {
         if (!this.isActive) return;
+
+        console.log('Aborting session');
 
         try {
             await this.apiCall('/api/roleplay/session/abort', {
@@ -574,6 +630,8 @@ class RoleplayManager {
     }
 
     updateEndedRoleplayUI() {
+        console.log('Updating UI for ended roleplay');
+        
         const modeSection = document.getElementById('mode-selection-section');
         const activeSection = document.getElementById('active-training-section');
         
@@ -584,7 +642,9 @@ class RoleplayManager {
         const micButton = document.getElementById('mic-button');
         if (micButton) {
             micButton.disabled = true;
-            micButton.classList.remove('pulse-animation');
+            if (micButton.classList) {
+                micButton.classList.remove('pulse-animation');
+            }
         }
         
         // Reset state
@@ -610,6 +670,8 @@ class RoleplayManager {
 
         const content = document.getElementById('coaching-content');
         if (!content) return;
+
+        console.log('Showing coaching feedback:', coaching);
 
         content.innerHTML = `
             <div class="coaching-summary mb-4">
@@ -665,11 +727,12 @@ class RoleplayManager {
     }
 
     showMessage(message, type = 'info') {
-        // Use global showAlert if available, otherwise fallback to console
+        console.log('Showing message:', { message, type });
+        
+        // Use global showAlert if available, otherwise create toast
         if (typeof showAlert === 'function') {
             showAlert(message, type);
         } else {
-            console.log(`${type.toUpperCase()}: ${message}`);
             this.createToast(message, type);
         }
     }
@@ -700,9 +763,12 @@ class RoleplayManager {
             }
         };
 
+        console.log('Making API call to:', endpoint, options.method || 'GET');
+
         const response = await fetch(endpoint, { ...defaultOptions, ...options });
         
         if (response.status === 401) {
+            console.error('Authentication required, redirecting to login');
             window.location.href = '/login';
             throw new Error('Authentication required');
         }
@@ -715,6 +781,8 @@ class RoleplayManager {
     }
 
     destroy() {
+        console.log('Destroying RoleplayManager');
+        
         if (this.voiceHandler) {
             this.voiceHandler.destroy();
         }
@@ -729,11 +797,12 @@ class RoleplayManager {
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     if (window.location.pathname.includes('/roleplay/')) {
+        console.log('Initializing roleplay on page load');
         window.roleplayManager = new RoleplayManager();
     }
 });
 
-// Add CSS for pulse animation
+// Add CSS for animations
 const style = document.createElement('style');
 style.textContent = `
     .pulse-animation {

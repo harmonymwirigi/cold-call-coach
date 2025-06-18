@@ -1,4 +1,4 @@
-// ===== STATIC/JS/VOICE-HANDLER.JS (COMPLETE IMPLEMENTATION) =====
+// ===== COMPLETE FIXED STATIC/JS/VOICE-HANDLER.JS =====
 
 class VoiceHandler {
     constructor(roleplayManager) {
@@ -23,6 +23,8 @@ class VoiceHandler {
         this.finalTranscript = '';
         this.silenceTimer = null;
         this.silenceThreshold = 3000; // 3 seconds of silence
+        this.shouldRestart = false;
+        this.wasPausedBySystem = false;
         
         this.init();
     }
@@ -54,6 +56,7 @@ class VoiceHandler {
         if (SpeechRecognition) {
             this.isSupported = true;
             this.SpeechRecognition = SpeechRecognition;
+            console.log('Web Speech API supported');
         } else {
             this.isSupported = false;
             console.error('Web Speech API not supported in this browser');
@@ -99,45 +102,57 @@ class VoiceHandler {
         // Microphone button click
         if (this.micButton) {
             this.micButton.addEventListener('click', () => {
+                console.log('Microphone button clicked');
                 this.toggleListening();
             });
         }
         
         // Keyboard shortcuts
-        document.addEventListener('keydown', (e) => {
+        this.handleKeydown = (e) => {
             // Ctrl + Space to toggle microphone
             if (e.ctrlKey && e.code === 'Space') {
                 e.preventDefault();
+                console.log('Ctrl+Space pressed');
                 this.toggleListening();
             }
             
             // Escape to stop listening
             if (e.code === 'Escape' && this.isListening) {
+                console.log('Escape pressed - stopping listening');
                 this.stopListening();
             }
-        });
+        };
+        
+        document.addEventListener('keydown', this.handleKeydown);
         
         // Handle page visibility changes
-        document.addEventListener('visibilitychange', () => {
+        this.handleVisibilityChange = () => {
             if (document.hidden && this.isListening) {
-                // Pause recognition when page is hidden
+                console.log('Page hidden - pausing recognition');
                 this.pauseListening();
             } else if (!document.hidden && this.recognition) {
-                // Resume if needed
+                console.log('Page visible - resuming recognition');
                 this.resumeListening();
             }
-        });
+        };
+        
+        document.addEventListener('visibilitychange', this.handleVisibilityChange);
         
         // Handle window focus/blur
-        window.addEventListener('blur', () => {
+        this.handleWindowBlur = () => {
             if (this.isListening) {
+                console.log('Window blurred - pausing recognition');
                 this.pauseListening();
             }
-        });
+        };
         
-        window.addEventListener('focus', () => {
+        this.handleWindowFocus = () => {
+            console.log('Window focused - resuming recognition');
             this.resumeListening();
-        });
+        };
+        
+        window.addEventListener('blur', this.handleWindowBlur);
+        window.addEventListener('focus', this.handleWindowFocus);
     }
 
     initializeSpeechRecognition() {
@@ -155,7 +170,7 @@ class VoiceHandler {
             // Set up event handlers
             this.setupRecognitionEventHandlers();
             
-            console.log('Speech recognition initialized');
+            console.log('Speech recognition initialized with settings:', this.settings);
         } catch (error) {
             console.error('Failed to initialize speech recognition:', error);
             this.showVoiceError('Failed to initialize voice recognition. Please check your microphone permissions.');
@@ -183,6 +198,7 @@ class VoiceHandler {
             
             // Auto-restart if still supposed to be listening (for continuous mode)
             if (this.shouldRestart && this.isSupported) {
+                console.log('Auto-restarting recognition...');
                 setTimeout(() => {
                     this.startListening();
                 }, 100);
@@ -239,8 +255,10 @@ class VoiceHandler {
             
             if (result.isFinal) {
                 finalTranscript += transcript + ' ';
+                console.log('Final transcript received:', transcript);
             } else {
                 interimTranscript += transcript;
+                console.log('Interim transcript:', transcript);
             }
         }
         
@@ -286,6 +304,7 @@ class VoiceHandler {
                 // Retry after a delay
                 setTimeout(() => {
                     if (this.shouldRestart) {
+                        console.log('Retrying after network error...');
                         this.startListening();
                     }
                 }, 2000);
@@ -298,6 +317,7 @@ class VoiceHandler {
     }
 
     handlePermissionDenied() {
+        console.error('Microphone permission denied');
         this.stopListening();
         this.shouldRestart = false;
         
@@ -332,10 +352,14 @@ class VoiceHandler {
     }
 
     processFinalTranscript(transcript) {
+        console.log('Processing final transcript:', transcript);
+        
         // Send to roleplay manager if available and active
         if (this.roleplayManager && this.roleplayManager.isActive) {
             console.log('Sending transcript to roleplay manager:', transcript);
             this.roleplayManager.processUserInput(transcript);
+        } else {
+            console.log('Roleplay manager not active, ignoring transcript');
         }
         
         // Clear the current transcript after processing
@@ -372,6 +396,8 @@ class VoiceHandler {
     }
 
     handleSilenceTimeout() {
+        console.log('Handling silence timeout');
+        
         // Show a prompt to encourage speaking
         this.updateTranscript('Still listening... Please continue speaking or press the microphone to stop.');
         
@@ -380,7 +406,7 @@ class VoiceHandler {
             // Simulate AI impatience after long silence
             setTimeout(() => {
                 if (this.isListening && this.currentTranscript.trim() === '') {
-                    // Trigger AI impatience response
+                    console.log('Triggering AI impatience response');
                     this.roleplayManager.processUserInput('[SILENCE_TIMEOUT]');
                 }
             }, 2000);
@@ -389,6 +415,8 @@ class VoiceHandler {
 
     // Main control methods
     async toggleListening() {
+        console.log('Toggling listening, current state:', this.isListening);
+        
         if (this.isListening) {
             this.stopListening();
         } else {
@@ -397,9 +425,14 @@ class VoiceHandler {
     }
 
     async startListening() {
-        if (!this.isSupported || this.isListening) return;
+        if (!this.isSupported || this.isListening) {
+            console.log('Cannot start listening - not supported or already listening');
+            return;
+        }
         
         try {
+            console.log('Starting voice recognition...');
+            
             // Request microphone permission if needed
             await this.requestMicrophonePermission();
             
@@ -410,7 +443,6 @@ class VoiceHandler {
             // Start recognition
             this.recognition.start();
             
-            console.log('Starting voice recognition...');
         } catch (error) {
             console.error('Failed to start voice recognition:', error);
             this.showVoiceError('Failed to start voice recognition. Please check your microphone.');
@@ -418,8 +450,12 @@ class VoiceHandler {
     }
 
     stopListening() {
-        if (!this.isListening) return;
+        if (!this.isListening) {
+            console.log('Not listening, nothing to stop');
+            return;
+        }
         
+        console.log('Stopping voice recognition...');
         this.shouldRestart = false;
         
         if (this.recognition) {
@@ -428,12 +464,11 @@ class VoiceHandler {
         
         this.stopSilenceDetection();
         this.updateTranscript('Voice recognition stopped.');
-        
-        console.log('Voice recognition stopped');
     }
 
     pauseListening() {
         if (this.isListening) {
+            console.log('Pausing voice recognition...');
             this.wasPausedBySystem = true;
             this.stopListening();
         }
@@ -441,6 +476,7 @@ class VoiceHandler {
 
     resumeListening() {
         if (this.wasPausedBySystem && this.shouldRestart) {
+            console.log('Resuming voice recognition...');
             this.wasPausedBySystem = false;
             this.startListening();
         }
@@ -448,12 +484,15 @@ class VoiceHandler {
 
     async requestMicrophonePermission() {
         try {
+            console.log('Requesting microphone permission...');
+            
             // Use getUserMedia to request permission
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             
             // Immediately stop the stream since we just needed permission
             stream.getTracks().forEach(track => track.stop());
             
+            console.log('Microphone permission granted');
             return true;
         } catch (error) {
             console.error('Microphone permission denied:', error);
@@ -485,6 +524,8 @@ class VoiceHandler {
     }
 
     showVoiceError(message) {
+        console.error('Voice error:', message);
+        
         if (this.errorElement) {
             const errorText = this.errorElement.querySelector('#voice-error-text');
             if (errorText) {
@@ -548,10 +589,18 @@ class VoiceHandler {
         this.stopSilenceDetection();
         
         // Remove event listeners
-        document.removeEventListener('keydown', this.handleKeydown);
-        document.removeEventListener('visibilitychange', this.handleVisibilityChange);
-        window.removeEventListener('blur', this.handleWindowBlur);
-        window.removeEventListener('focus', this.handleWindowFocus);
+        if (this.handleKeydown) {
+            document.removeEventListener('keydown', this.handleKeydown);
+        }
+        if (this.handleVisibilityChange) {
+            document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+        }
+        if (this.handleWindowBlur) {
+            window.removeEventListener('blur', this.handleWindowBlur);
+        }
+        if (this.handleWindowFocus) {
+            window.removeEventListener('focus', this.handleWindowFocus);
+        }
         
         console.log('Voice Handler destroyed');
     }

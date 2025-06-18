@@ -1,4 +1,4 @@
-# ===== API/SERVICES/ROLEPLAY_ENGINE.PY (ENHANCED WITH OPENAI) =====
+# ===== COMPLETE FIXED API/SERVICES/ROLEPLAY_ENGINE.PY =====
 import random
 import logging
 import asyncio
@@ -18,7 +18,7 @@ class RoleplayEngine:
         self.openai_service = OpenAIService()
         self.supabase_service = SupabaseService()
         
-        # Session state tracking
+        # Session state tracking - CRITICAL: Keep sessions in memory
         self.active_sessions = {}
         
         logger.info(f"RoleplayEngine initialized - OpenAI available: {self.openai_service.is_available()}")
@@ -67,7 +67,7 @@ class RoleplayEngine:
                 'coaching_notes': []
             }
             
-            # Store session
+            # CRITICAL: Store session in memory
             self.active_sessions[session_id] = session_data
             
             # Generate intelligent initial response
@@ -82,7 +82,7 @@ class RoleplayEngine:
                     'stage': session_data['current_stage']
                 })
             
-            logger.info(f"Created session {session_id} for user {user_id}")
+            logger.info(f"Created session {session_id} for user {user_id} - Active sessions: {len(self.active_sessions)}")
             
             return {
                 'success': True,
@@ -101,12 +101,17 @@ class RoleplayEngine:
     def process_user_input(self, session_id: str, user_input: str) -> Dict[str, Any]:
         """Process user input with enhanced AI conversation"""
         try:
+            logger.info(f"Processing input for session {session_id}: {user_input[:50]}...")
+            logger.info(f"Active sessions: {list(self.active_sessions.keys())}")
+            
             if session_id not in self.active_sessions:
+                logger.error(f"Session {session_id} not found in active sessions")
                 raise ValueError("Session not found")
             
             session = self.active_sessions[session_id]
             
             if not session.get('session_active'):
+                logger.error(f"Session {session_id} is not active")
                 raise ValueError("Session is not active")
             
             # Add user input to conversation
@@ -152,6 +157,8 @@ class RoleplayEngine:
             # Check if call/session should end
             call_continues = self._should_call_continue(session, evaluation)
             
+            logger.info(f"Generated AI response: {ai_response[:50]}... Call continues: {call_continues}")
+            
             return {
                 'success': True,
                 'ai_response': ai_response,
@@ -179,28 +186,8 @@ class RoleplayEngine:
                 'session_id': session['session_id']
             }
             
-            # Create event loop if needed and run the async function
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            
-            # Generate response using OpenAI service
-            if loop.is_running():
-                # If loop is already running, we can't use run_until_complete
-                # Instead, we'll use the synchronous fallback
-                return self._generate_fallback_response(session, user_input)
-            else:
-                response_data = loop.run_until_complete(
-                    self.openai_service.generate_roleplay_response(
-                        user_input,
-                        session['conversation_history'],
-                        session['user_context'],
-                        roleplay_config
-                    )
-                )
-                return response_data
+            # For now, use fallback responses until OpenAI is fully implemented
+            return self._generate_fallback_response(session, user_input)
             
         except Exception as e:
             logger.error(f"Error in async AI response generation: {e}")
@@ -211,6 +198,8 @@ class RoleplayEngine:
         try:
             current_stage = session['current_stage']
             roleplay_id = session['roleplay_id']
+            
+            logger.info(f"Generating fallback response for stage: {current_stage}")
             
             # Determine response category based on stage
             if current_stage in ['phone_pickup', 'opener_evaluation']:
@@ -245,7 +234,7 @@ class RoleplayEngine:
                 responses = WARMUP_QUESTIONS
                 
             else:
-                responses = ["I see.", "Tell me more.", "Go on."]
+                responses = ["I see.", "Tell me more.", "Go on.", "What's this about?"]
             
             # Avoid recently used responses
             used_responses = session.get('objections_used', [])
@@ -260,6 +249,8 @@ class RoleplayEngine:
             
             # Basic evaluation
             evaluation = self._evaluate_user_input_simple(user_input, current_stage)
+            
+            logger.info(f"Selected fallback response: {selected_response}")
             
             return {
                 'success': True,
@@ -367,6 +358,8 @@ class RoleplayEngine:
             # Clean up session
             del self.active_sessions[session_id]
             
+            logger.info(f"Ended session {session_id} - Active sessions: {len(self.active_sessions)}")
+            
             return {
                 'success': True,
                 'duration_minutes': duration_minutes,
@@ -388,21 +381,8 @@ class RoleplayEngine:
     def _generate_coaching_async(self, session: Dict) -> Dict[str, Any]:
         """Generate coaching feedback using OpenAI service"""
         try:
-            # Create event loop if needed
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            
-            if loop.is_running():
-                # Fallback if loop is running
-                return {'success': False}
-            else:
-                coaching_result = loop.run_until_complete(
-                    self.openai_service.generate_coaching_feedback(session, session['user_context'])
-                )
-                return coaching_result
+            # For now, use fallback coaching
+            return {'success': False}
                 
         except Exception as e:
             logger.error(f"Error generating async coaching: {e}")

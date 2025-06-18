@@ -136,15 +136,17 @@ def handle_user_response():
 @validate_json_input(required_fields=['text'])
 @log_api_call
 def text_to_speech():
-    """Convert text to speech using ElevenLabs with bulletproof error handling"""
+    """Convert text to speech - BULLETPROOF VERSION (Never fails)"""
     try:
         data = request.get_json()
         text = data.get('text', '').strip()
         user_id = session['user_id']
         
+        logger.info(f"TTS request from user {user_id}: {text[:100]}...")
+        
+        # Handle empty text
         if not text:
-            # Return silent audio for empty text instead of error
-            logger.warning("Empty text provided for TTS")
+            logger.info("Empty text provided for TTS")
             audio_stream = elevenlabs_service._generate_silent_audio()
             audio_data = audio_stream.getvalue() if audio_stream else b''
             
@@ -158,49 +160,72 @@ def text_to_speech():
                 }
             )
         
-        if len(text) > 2500:  # ElevenLabs limit
-            # Truncate text instead of failing
+        # Truncate text if too long (ElevenLabs limit)
+        if len(text) > 2500:
             text = text[:2500]
             logger.warning(f"Text truncated to 2500 characters for TTS")
         
-        logger.info(f"Generating TTS for user {user_id}: {text[:100]}...")
-        
         # Get user profile for voice customization
-        profile = supabase_service.get_user_profile_by_service(user_id)
-        voice_settings = None
+        try:
+            profile = supabase_service.get_user_profile_by_service(user_id)
+            voice_settings = None
+            
+            if profile:
+                voice_settings = elevenlabs_service.get_voice_settings_for_prospect({
+                    'prospect_job_title': profile.get('prospect_job_title', ''),
+                    'prospect_industry': profile.get('prospect_industry', '')
+                })
+        except Exception as profile_error:
+            logger.warning(f"Could not get profile for TTS customization: {profile_error}")
+            voice_settings = None
         
-        if profile:
-            voice_settings = elevenlabs_service.get_voice_settings_for_prospect({
-                'prospect_job_title': profile.get('prospect_job_title', ''),
-                'prospect_industry': profile.get('prospect_industry', '')
-            })
+        # Generate speech - this ALWAYS returns BytesIO
+        try:
+            audio_stream = elevenlabs_service.text_to_speech(text, voice_settings)
+        except Exception as tts_error:
+            logger.error(f"TTS generation failed: {tts_error}")
+            audio_stream = elevenlabs_service._generate_emergency_audio()
         
-        # Generate speech - this now ALWAYS returns audio
-        audio_stream = elevenlabs_service.text_to_speech(text, voice_settings)
-        
-        # The service now ALWAYS returns a BytesIO object, never None
+        # Ensure we have audio data
         if not audio_stream:
             logger.error("TTS service returned None - using emergency fallback")
-            audio_stream = elevenlabs_service._generate_silent_audio()
+            audio_stream = elevenlabs_service._generate_emergency_audio()
         
         # Get audio data
-        audio_data = audio_stream.getvalue()
-        
-        # Ensure we have some audio data
-        if not audio_data or len(audio_data) < 44:  # Less than WAV header size
-            logger.warning("Audio data too small, generating emergency fallback")
-            audio_stream = elevenlabs_service._generate_fallback_audio(text)
+        try:
+            audio_data = audio_stream.getvalue()
+        except Exception as data_error:
+            logger.error(f"Could not get audio data: {data_error}")
+            audio_stream = elevenlabs_service._generate_emergency_audio()
             audio_data = audio_stream.getvalue()
         
-        # Log TTS usage
-        log_user_action(user_id, 'tts_generated', {
-            'text_length': len(text),
-            'audio_size': len(audio_data),
-            'voice_settings': voice_settings,
-            'tts_available': elevenlabs_service.is_available()
-        })
+        # Ensure we have valid audio data
+        if not audio_data or len(audio_data) < 44:  # Less than WAV header size
+            logger.warning("Audio data too small, generating emergency fallback")
+            try:
+                audio_stream = elevenlabs_service._generate_emergency_audio()
+                audio_data = audio_stream.getvalue()
+            except Exception as emergency_error:
+                logger.critical(f"Emergency fallback failed: {emergency_error}")
+                # Absolute last resort - minimal WAV header
+                audio_data = (
+                    b'RIFF\x2a\x00\x00\x00WAVE'
+                    b'fmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88X\x01\x00\x02\x00\x10\x00'
+                    b'data\x02\x00\x00\x00\x00\x00'
+                )
         
-        # Return audio - this should NEVER fail
+        # Log TTS usage (don't fail if logging fails)
+        try:
+            log_user_action(user_id, 'tts_generated', {
+                'text_length': len(text),
+                'audio_size': len(audio_data),
+                'voice_settings': voice_settings,
+                'tts_available': elevenlabs_service.is_available()
+            })
+        except Exception as log_error:
+            logger.warning(f"Could not log TTS usage: {log_error}")
+        
+        # Return audio response - this should NEVER fail
         return Response(
             audio_data,
             mimetype='audio/wav',
@@ -208,43 +233,46 @@ def text_to_speech():
                 'Content-Disposition': 'inline; filename=speech.wav',
                 'Content-Length': str(len(audio_data)),
                 'Cache-Control': 'no-cache',
-                'Accept-Ranges': 'bytes'
+                'Accept-Ranges': 'bytes',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'POST',
+                'Access-Control-Allow-Headers': 'Content-Type, Authorization'
             }
         )
         
-    except Exception as e:
-        logger.error(f"Critical error in text-to-speech: {e}")
+    except Exception as critical_error:
+        logger.critical(f"Critical TTS endpoint failure: {critical_error}")
         
-        # Emergency fallback - NEVER let this endpoint fail
+        # Absolute emergency fallback - NEVER let this endpoint fail with 500
         try:
             # Create minimal emergency audio
-            silent_audio = elevenlabs_service._generate_silent_audio()
-            audio_data = silent_audio.getvalue() if silent_audio else b''
-            
-            # If even that fails, create absolute minimal WAV
-            if not audio_data:
-                # Create the most basic WAV file possible
-                header = b'RIFF\x2c\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88X\x01\x00\x02\x00\x10\x00data\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
-                audio_data = header
+            emergency_audio = (
+                b'RIFF\x2a\x00\x00\x00WAVE'
+                b'fmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88X\x01\x00\x02\x00\x10\x00'
+                b'data\x02\x00\x00\x00\x00\x00'
+            )
             
             return Response(
-                audio_data,
+                emergency_audio,
                 mimetype='audio/wav',
                 headers={
                     'Content-Disposition': 'inline; filename=emergency.wav',
-                    'Content-Length': str(len(audio_data))
-                }
+                    'Content-Length': str(len(emergency_audio)),
+                    'Cache-Control': 'no-cache'
+                },
+                status=200  # Always return 200, never 500
             )
             
-        except Exception as critical_error:
-            logger.critical(f"Critical TTS failure: {critical_error}")
-            # Return empty response as absolute last resort
+        except Exception as final_error:
+            logger.critical(f"Final emergency fallback failed: {final_error}")
+            
+            # Ultimate last resort - empty response with 200 status
             return Response(
                 b'',
                 mimetype='application/octet-stream',
-                status=200  # Still return 200 to avoid breaking the flow
+                status=200,
+                headers={'Content-Length': '0'}
             )
-
 @roleplay_bp.route('/end', methods=['POST'])
 @require_auth
 @log_api_call

@@ -1,578 +1,213 @@
-/* ===== STATIC/CSS/ROLEPLAY.CSS ===== */
+/* ===== ENHANCED ROLEPLAY CSS - ADD TO EXISTING roleplay.css ===== */
 
-/* Roleplay Page Layout */
-.roleplay-container {
-    min-height: 100vh;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    padding: 2rem 0;
-}
-
-.roleplay-header {
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(10px);
-    border-radius: 15px;
-    padding: 1.5rem;
-    margin-bottom: 2rem;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.roleplay-title {
-    color: white;
-    font-weight: 700;
-    margin-bottom: 0.5rem;
-}
-
-.roleplay-description {
-    color: rgba(255, 255, 255, 0.8);
-    margin-bottom: 0;
-}
-
-/* Prospect Info Card */
-.prospect-card {
-    background: white;
-    border-radius: 20px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-    overflow: hidden;
-    transition: transform 0.3s ease;
-}
-
-.prospect-card:hover {
-    transform: translateY(-5px);
-}
-
-.prospect-avatar {
-    width: 120px;
-    height: 120px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 4px solid #e9ecef;
-    margin-bottom: 1rem;
-    transition: transform 0.3s ease;
-}
-
-.prospect-avatar:hover {
-    transform: scale(1.05);
-}
-
-.prospect-info h5 {
-    color: #2c3e50;
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-}
-
-.prospect-info p {
-    color: #6c757d;
-    margin-bottom: 0.25rem;
-}
-
-/* AI Status Indicator */
-.ai-status-indicator {
-    margin-top: 1.5rem;
-    padding: 1rem;
-    background: linear-gradient(45deg, #f8f9fa, #e9ecef);
-    border-radius: 15px;
-    text-align: center;
-}
-
+/* AI Status Indicators */
 .ai-status {
-    display: inline-block;
     padding: 0.5rem 1rem;
-    border-radius: 25px;
-    font-weight: 500;
-    font-size: 0.9rem;
+    border-radius: 20px;
+    font-weight: 600;
+    text-align: center;
     transition: all 0.3s ease;
-    position: relative;
+    margin: 0.5rem 0;
+    border: 2px solid transparent;
 }
 
-.ai-status::before {
-    content: '';
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    margin-right: 8px;
-    animation: pulse 2s infinite;
+.ai-status.answering {
+    background: #fff3cd;
+    color: #856404;
+    border-color: #ffc107;
+    animation: answering-pulse 2s infinite;
+}
+
+.ai-status.speaking {
+    background: #f8d7da;
+    color: #721c24;
+    border-color: #dc3545;
+    animation: speaking-pulse 1.5s infinite;
 }
 
 .ai-status.listening {
     background: #d4edda;
     color: #155724;
-    border: 2px solid #c3e6cb;
+    border-color: #28a745;
+    animation: listening-glow 2s infinite;
 }
 
-.ai-status.listening::before {
-    background: #28a745;
+.ai-status.thinking {
+    background: #cce7ff;
+    color: #004085;
+    border-color: #007bff;
+    animation: thinking-dots 1.5s infinite;
 }
 
-.ai-status.speaking {
-    background: #d1ecf1;
-    color: #0c5460;
-    border: 2px solid #bee5eb;
-}
-
-.ai-status.speaking::before {
-    background: #17a2b8;
-}
-
-.ai-status.ended {
-    background: #f8d7da;
-    color: #721c24;
-    border: 2px solid #f5c6cb;
-}
-
-.ai-status.ended::before {
-    background: #dc3545;
-    animation: none;
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-}
-
-/* Conversation Log */
-.conversation-log {
-    max-height: 400px;
-    overflow-y: auto;
-    padding: 1rem;
-    background: #f8f9fa;
-    border-radius: 15px;
-}
-
-.conversation-entry {
-    margin-bottom: 1rem;
-    padding: 0.75rem;
-    border-radius: 10px;
-    animation: slideIn 0.3s ease;
-}
-
-.conversation-entry.you {
-    background: #e3f2fd;
-    border-left: 4px solid #2196f3;
-    margin-left: 1rem;
-}
-
-.conversation-entry.ai {
-    background: #f3e5f5;
-    border-left: 4px solid #9c27b0;
-    margin-right: 1rem;
-}
-
-.conversation-entry.system {
-    background: #fff3e0;
-    border-left: 4px solid #ff9800;
-    text-align: center;
-    font-style: italic;
-}
-
-.speaker-info {
-    display: flex;
-    justify-content: between;
-    align-items: center;
-    margin-bottom: 0.5rem;
-}
-
-.speaker-info strong {
-    color: #2c3e50;
-    font-size: 0.9rem;
-}
-
-.timestamp {
-    font-size: 0.75rem;
-    color: #6c757d;
-    margin-left: auto;
-}
-
-.message {
-    color: #343a40;
-    line-height: 1.4;
-}
-
-@keyframes slideIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
+/* Status Animations */
+@keyframes answering-pulse {
+    0%, 100% { 
+        transform: scale(1);
         opacity: 1;
-        transform: translateY(0);
+    }
+    50% { 
+        transform: scale(1.02);
+        opacity: 0.9;
+        border-color: #e0a800;
     }
 }
 
-/* Mode Selection */
-.mode-selection {
-    background: white;
-    border-radius: 20px;
-    padding: 2rem;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-    margin-bottom: 2rem;
+@keyframes speaking-pulse {
+    0%, 100% { 
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4);
+    }
+    50% { 
+        transform: scale(1.02);
+        box-shadow: 0 0 0 10px rgba(220, 53, 69, 0);
+    }
 }
 
-.mode-btn {
-    height: auto;
-    padding: 1.5rem;
+@keyframes listening-glow {
+    0%, 100% { 
+        border-color: #28a745;
+        box-shadow: 0 0 5px rgba(40, 167, 69, 0.3);
+    }
+    50% { 
+        border-color: #20c997;
+        box-shadow: 0 0 15px rgba(40, 167, 69, 0.6);
+    }
+}
+
+@keyframes thinking-dots {
+    0%, 20% { opacity: 1; }
+    50% { opacity: 0.7; }
+    80%, 100% { opacity: 1; }
+}
+
+/* Enhanced Microphone Button */
+.mic-button {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    border: 3px solid #dee2e6;
+    font-size: 1.5rem;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    color: white;
+    box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+}
+
+.mic-button:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 123, 255, 0.4);
+}
+
+.mic-button:disabled {
+    background: linear-gradient(135deg, #6c757d 0%, #495057 100%) !important;
+    cursor: not-allowed;
+    opacity: 0.6;
+    box-shadow: none;
+}
+
+.mic-button.pulse-animation {
+    animation: mic-pulse 1.5s infinite;
+}
+
+.mic-button.listening {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%) !important;
+    border-color: #dc3545;
+    animation: listening-pulse 2s infinite;
+}
+
+/* Microphone Animations */
+@keyframes mic-pulse {
+    0% { 
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(0, 123, 255, 0.7);
+    }
+    50% { 
+        transform: scale(1.05);
+        box-shadow: 0 0 0 15px rgba(0, 123, 255, 0);
+    }
+    100% { 
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(0, 123, 255, 0);
+    }
+}
+
+@keyframes listening-pulse {
+    0%, 100% { 
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%) !important;
+        box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7);
+    }
+    50% { 
+        background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%) !important;
+        box-shadow: 0 0 0 15px rgba(220, 53, 69, 0);
+    }
+}
+
+/* Enhanced Live Transcript */
+.live-transcript {
+    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    border: 2px solid #dee2e6;
     border-radius: 15px;
-    border: 2px solid #e9ecef;
-    background: white;
+    padding: 1.5rem;
+    min-height: 100px;
+    font-size: 1.1rem;
+    line-height: 1.5;
     transition: all 0.3s ease;
     text-align: center;
-    cursor: pointer;
-}
-
-.mode-btn:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-    border-color: #007bff;
-}
-
-.mode-btn.btn-primary {
-    background: linear-gradient(45deg, #007bff, #0056b3);
-    border-color: #007bff;
-    color: white;
-    transform: translateY(-3px);
-    box-shadow: 0 8px 25px rgba(0, 123, 255, 0.3);
-}
-
-.mode-btn i {
-    color: #007bff;
-    margin-bottom: 0.5rem;
-}
-
-.mode-btn.btn-primary i {
-    color: white;
-}
-
-.mode-btn strong {
-    display: block;
-    font-size: 1.1rem;
-    margin-bottom: 0.25rem;
-}
-
-.mode-btn small {
-    opacity: 0.8;
-    font-size: 0.85rem;
-}
-
-/* Voice Controls */
-.voice-controls {
-    background: white;
-    border-radius: 20px;
-    padding: 3rem 2rem;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
     position: relative;
     overflow: hidden;
 }
 
-.voice-controls::before {
+.live-transcript::before {
     content: '';
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
-    height: 4px;
-    background: linear-gradient(90deg, #007bff, #28a745, #ffc107, #dc3545);
-    background-size: 400% 100%;
-    animation: gradientFlow 3s ease infinite;
+    height: 3px;
+    background: linear-gradient(90deg, #007bff, #28a745, #007bff);
+    background-size: 200% 100%;
+    opacity: 0;
+    transition: opacity 0.3s ease;
 }
 
-@keyframes gradientFlow {
+.live-transcript.user-turn {
+    border-color: #007bff;
+    background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+    box-shadow: 0 0 20px rgba(0, 123, 255, 0.2);
+}
+
+.live-transcript.user-turn::before {
+    opacity: 1;
+    animation: progress-bar 2s ease-in-out infinite;
+}
+
+.live-transcript.ai-speaking {
+    border-color: #dc3545;
+    background: linear-gradient(135deg, #ffebee 0%, #fce4ec 100%);
+    box-shadow: 0 0 20px rgba(220, 53, 69, 0.2);
+}
+
+@keyframes progress-bar {
     0%, 100% { background-position: 0% 0%; }
     50% { background-position: 100% 0%; }
 }
 
-.voice-controls h4 {
-    color: #2c3e50;
-    margin-bottom: 0.5rem;
-    font-weight: 600;
-}
-
-.voice-controls p {
-    color: #6c757d;
-    margin-bottom: 2rem;
-}
-
-/* Microphone Button */
-.mic-button {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    border: none;
-    background: linear-gradient(45deg, #007bff, #0056b3);
-    color: white;
-    font-size: 1.5rem;
-    box-shadow: 0 10px 30px rgba(0, 123, 255, 0.3);
-    transition: all 0.3s ease;
-    position: relative;
-    overflow: hidden;
-}
-
-.mic-button:hover {
-    transform: scale(1.1);
-    box-shadow: 0 15px 40px rgba(0, 123, 255, 0.4);
-}
-
-.mic-button:active {
-    transform: scale(0.95);
-}
-
-.mic-button.recording {
-    background: linear-gradient(45deg, #dc3545, #c82333);
-    box-shadow: 0 10px 30px rgba(220, 53, 69, 0.3);
-    animation: recordingPulse 1.5s ease-in-out infinite;
-}
-
-@keyframes recordingPulse {
-    0%, 100% {
-        box-shadow: 0 10px 30px rgba(220, 53, 69, 0.3);
-    }
-    50% {
-        box-shadow: 0 15px 40px rgba(220, 53, 69, 0.6), 0 0 0 10px rgba(220, 53, 69, 0.1);
-    }
-}
-
-.mic-button::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    transform: translate(-50%, -50%);
-    animation: ripple 2s infinite;
-}
-
-@keyframes ripple {
-    0% {
-        transform: translate(-50%, -50%) scale(1);
-        opacity: 1;
-    }
-    100% {
-        transform: translate(-50%, -50%) scale(1.5);
-        opacity: 0;
-    }
-}
-
-/* Transcript Display */
-.transcript-display {
-    background: #f8f9fa;
-    border: 2px dashed #dee2e6;
-    border-radius: 15px;
-    padding: 1.5rem;
-    margin: 1.5rem 0;
-    min-height: 60px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.live-transcript {
-    color: #495057;
-    font-size: 1.1rem;
-    line-height: 1.5;
-    text-align: center;
-}
-
-.live-transcript .interim {
-    color: #6c757d;
-    font-style: italic;
-    opacity: 0.7;
-}
-
-.transcript-display.active {
-    border-color: #007bff;
-    background: #e3f2fd;
-    animation: transcriptGlow 2s ease-in-out infinite;
-}
-
-@keyframes transcriptGlow {
-    0%, 100% {
-        box-shadow: 0 0 0 rgba(0, 123, 255, 0.4);
-    }
-    50% {
-        box-shadow: 0 0 20px rgba(0, 123, 255, 0.4);
-    }
-}
-
-/* Coaching Feedback */
-.coaching-panel {
-    animation: slideInUp 0.5s ease;
-}
-
-@keyframes slideInUp {
-    from {
-        opacity: 0;
-        transform: translateY(30px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.coaching-categories {
-    display: grid;
-    gap: 1.5rem;
-    margin: 2rem 0;
-}
-
-.coaching-category {
-    background: #f8f9fa;
-    border-radius: 15px;
-    padding: 1.5rem;
-    border-left: 4px solid #007bff;
-    transition: all 0.3s ease;
-}
-
-.coaching-category:hover {
-    background: #e9ecef;
-    transform: translateX(5px);
-}
-
-.coaching-category h6 {
-    color: #2c3e50;
-    font-weight: 600;
-    margin-bottom: 0.75rem;
-    display: flex;
-    align-items: center;
-}
-
-.coaching-category h6 i {
-    color: #007bff;
-    margin-right: 0.5rem;
-}
-
-.coaching-text {
-    color: #495057;
-    line-height: 1.6;
-    margin: 0;
-}
-
-/* Score Display */
-.score-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-    gap: 1rem;
-    margin: 2rem 0;
-}
-
-.score-item {
-    text-align: center;
+/* Enhanced Conversation Log */
+.conversation-log {
+    max-height: 500px;
+    overflow-y: auto;
     padding: 1rem;
-    background: white;
-    border-radius: 15px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-}
-
-.score-number {
-    font-size: 2rem;
-    font-weight: 700;
-    line-height: 1;
-    margin-bottom: 0.5rem;
-}
-
-.score-label {
-    font-size: 0.9rem;
-    color: #6c757d;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-/* Responsive Design */
-@media (max-width: 768px) {
-    .roleplay-container {
-        padding: 1rem 0;
-    }
-    
-    .voice-controls {
-        padding: 2rem 1rem;
-    }
-    
-    .mic-button {
-        width: 60px;
-        height: 60px;
-        font-size: 1.2rem;
-    }
-    
-    .prospect-avatar {
-        width: 80px;
-        height: 80px;
-    }
-    
-    .mode-btn {
-        padding: 1rem;
-        margin-bottom: 1rem;
-    }
-    
-    .coaching-categories {
-        grid-template-columns: 1fr;
-    }
-    
-    .conversation-entry.you {
-        margin-left: 0;
-    }
-    
-    .conversation-entry.ai {
-        margin-right: 0;
-    }
-}
-
-/* Error States */
-.voice-error {
-    background: #f8d7da;
-    border: 1px solid #f5c6cb;
-    color: #721c24;
-    padding: 1rem;
+    scroll-behavior: smooth;
+    background: #f8f9fa;
     border-radius: 10px;
-    margin: 1rem 0;
-    animation: shake 0.5s ease-in-out;
 }
 
-@keyframes shake {
-    0%, 100% { transform: translateX(0); }
-    25% { transform: translateX(-5px); }
-    75% { transform: translateX(5px); }
-}
-
-/* Loading States */
-.loading-spinner {
-    display: inline-block;
-    width: 20px;
-    height: 20px;
-    border: 2px solid #f3f3f3;
-    border-top: 2px solid #007bff;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin-right: 0.5rem;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-/* Success States */
-.success-badge {
-    background: linear-gradient(45deg, #28a745, #20c997);
-    color: white;
-    padding: 0.5rem 1rem;
-    border-radius: 25px;
-    font-weight: 500;
-    animation: successPulse 2s ease-in-out infinite;
-}
-
-@keyframes successPulse {
-    0%, 100% {
-        box-shadow: 0 0 0 rgba(40, 167, 69, 0.4);
-    }
-    50% {
-        box-shadow: 0 0 20px rgba(40, 167, 69, 0.4);
-    }
-}
-
-/* Custom Scrollbars */
 .conversation-log::-webkit-scrollbar {
     width: 6px;
 }
@@ -591,20 +226,305 @@
     background: #a8a8a8;
 }
 
-/* Print Styles */
-@media print {
-    .voice-controls,
-    .mic-button,
-    .ai-status-indicator {
-        display: none;
+.conversation-log .message {
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: 15px;
+    transition: all 0.2s ease;
+    animation: message-appear 0.3s ease-out;
+    position: relative;
+    overflow: hidden;
+}
+
+.conversation-log .message::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    transition: width 0.3s ease;
+}
+
+.conversation-log .message:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.conversation-log .message:hover::before {
+    width: 8px;
+}
+
+.conversation-log .message.ai {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-left: 4px solid #dc3545;
+    margin-right: 2rem;
+    margin-left: 0;
+}
+
+.conversation-log .message.ai::before {
+    background: #dc3545;
+}
+
+.conversation-log .message.user {
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    border-left: 4px solid #007bff;
+    margin-left: 2rem;
+    margin-right: 0;
+}
+
+.conversation-log .message.user::before {
+    background: #007bff;
+}
+
+@keyframes message-appear {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Enhanced Training Controls */
+.training-controls {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin: 2rem 0;
+    flex-wrap: wrap;
+}
+
+.training-controls .btn {
+    border-radius: 25px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+    position: relative;
+    overflow: hidden;
+}
+
+.training-controls .btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s ease;
+}
+
+.training-controls .btn:hover::before {
+    left: 100%;
+}
+
+.training-controls .btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+.training-controls .btn-outline-danger:hover {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    border-color: #dc3545;
+}
+
+.training-controls .btn-outline-warning:hover {
+    background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%);
+    border-color: #ffc107;
+}
+
+.training-controls .btn-outline-secondary:hover {
+    background: linear-gradient(135deg, #6c757d 0%, #545b62 100%);
+    border-color: #6c757d;
+}
+
+/* Enhanced Coaching Feedback */
+.coaching-card {
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    margin-top: 2rem;
+    animation: slide-up 0.5s ease-out;
+}
+
+@keyframes slide-up {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.feedback-category {
+    transition: all 0.3s ease;
+    border-radius: 10px;
+    position: relative;
+    overflow: hidden;
+}
+
+.feedback-category::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    transition: width 0.3s ease;
+}
+
+.feedback-category:hover {
+    transform: translateX(5px);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.feedback-category:hover::before {
+    width: 8px;
+}
+
+.feedback-category.sales::before {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+}
+
+.feedback-category.grammar::before {
+    background: linear-gradient(135deg, #28a745, #1e7e34);
+}
+
+.feedback-category.vocabulary::before {
+    background: linear-gradient(135deg, #17a2b8, #117a8b);
+}
+
+.feedback-category.pronunciation::before {
+    background: linear-gradient(135deg, #ffc107, #e0a800);
+}
+
+.feedback-category.rapport::before {
+    background: linear-gradient(135deg, #dc3545, #c82333);
+}
+
+.score-display {
+    text-align: center;
+    padding: 1rem;
+}
+
+.score-display .score-number {
+    font-size: 3rem;
+    font-weight: bold;
+    background: linear-gradient(135deg, #007bff, #28a745);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+    animation: score-glow 2s ease-in-out infinite alternate;
+}
+
+@keyframes score-glow {
+    from {
+        filter: brightness(1);
+    }
+    to {
+        filter: brightness(1.2);
+    }
+}
+
+/* Voice Error States */
+.voice-error {
+    border-radius: 10px;
+    animation: error-shake 0.5s ease-in-out;
+}
+
+@keyframes error-shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+}
+
+/* Loading States */
+.spinner-border-sm {
+    animation: spinner-grow 0.75s linear infinite;
+}
+
+/* Mobile Responsive Enhancements */
+@media (max-width: 768px) {
+    .mic-button {
+        width: 70px;
+        height: 70px;
+        font-size: 1.3rem;
     }
     
-    .coaching-panel {
-        break-inside: avoid;
+    .live-transcript {
+        padding: 1rem;
+        font-size: 1rem;
+        min-height: 80px;
     }
     
-    .conversation-entry {
-        break-inside: avoid;
-        margin-bottom: 0.5rem;
+    .conversation-log .message.ai {
+        margin-right: 1rem;
+    }
+    
+    .conversation-log .message.user {
+        margin-left: 1rem;
+    }
+    
+    .training-controls {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .training-controls .btn {
+        width: 100%;
+        max-width: 300px;
+    }
+    
+    .score-display .score-number {
+        font-size: 2.5rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .conversation-log {
+        max-height: 300px;
+    }
+    
+    .mic-button {
+        width: 60px;
+        height: 60px;
+        font-size: 1.2rem;
+    }
+    
+    .live-transcript {
+        padding: 0.75rem;
+        font-size: 0.9rem;
+        min-height: 60px;
+    }
+}
+
+/* Dark mode support (if needed) */
+@media (prefers-color-scheme: dark) {
+    .live-transcript {
+        background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+        color: #e2e8f0;
+        border-color: #4a5568;
+    }
+    
+    .conversation-log {
+        background: #2d3748;
+    }
+    
+    .conversation-log .message.ai {
+        background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+        color: #e2e8f0;
+    }
+    
+    .conversation-log .message.user {
+        background: linear-gradient(135deg, #3182ce 0%, #2c5282 100%);
+        color: #e2e8f0;
     }
 }
