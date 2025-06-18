@@ -462,3 +462,67 @@ def cleanup_sessions():
     except Exception as e:
         logger.error(f"Error in cleanup: {e}")
         return jsonify({'error': 'Internal server error'}), 500
+    
+
+@roleplay_bp.route('/info/<int:roleplay_id>', methods=['GET'])
+@require_auth
+def get_roleplay_info(roleplay_id):
+    """Get roleplay information"""
+    try:
+        # Define roleplay configurations
+        roleplay_configs = {
+            1: {
+                'id': 1,
+                'name': 'Opener + Early Objections',
+                'description': 'Master call openings and handle early objections with confidence',
+                'difficulty': 'Beginner',
+                'industry': 'Technology',
+                'job_title': 'CTO',
+                'estimated_duration': '5-10 minutes'
+            },
+            2: {
+                'id': 2,
+                'name': 'Pitch + Objections + Close',
+                'description': 'Perfect your pitch and close more meetings',
+                'difficulty': 'Intermediate',
+                'industry': 'Finance',
+                'job_title': 'VP of Sales',
+                'estimated_duration': '10-15 minutes'
+            },
+            3: {
+                'id': 3,
+                'name': 'Warm-up Challenge',
+                'description': '25 rapid-fire questions to sharpen your skills',
+                'difficulty': 'Quick',
+                'industry': 'Healthcare',
+                'job_title': 'Director',
+                'estimated_duration': '3-5 minutes'
+            },
+            4: {
+                'id': 4,
+                'name': 'Full Cold Call Simulation',
+                'description': 'Complete end-to-end cold call practice',
+                'difficulty': 'Advanced',
+                'industry': 'Manufacturing',
+                'job_title': 'Operations Manager',
+                'estimated_duration': '15-20 minutes'
+            },
+            5: {
+                'id': 5,
+                'name': 'Power Hour Challenge',
+                'description': '10 consecutive calls to test your endurance',
+                'difficulty': 'Expert',
+                'industry': 'Education',
+                'job_title': 'Principal',
+                'estimated_duration': '45-60 minutes'
+            }
+        }
+        
+        if roleplay_id not in roleplay_configs:
+            return jsonify({'error': 'Invalid roleplay ID'}), 404
+        
+        return jsonify(roleplay_configs[roleplay_id])
+        
+    except Exception as e:
+        logger.error(f"Error getting roleplay info: {e}")
+        return jsonify({'error': 'Internal server error'}), 500

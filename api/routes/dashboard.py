@@ -1,4 +1,4 @@
-# ===== API/ROUTES/DASHBOARD.PY =====
+# ===== FIXED API/ROUTES/DASHBOARD.PY =====
 from flask import Blueprint, render_template, session, redirect, url_for, request
 from utils.decorators import require_auth
 import logging
@@ -25,10 +25,10 @@ def roleplay(roleplay_id):
         # Validate roleplay ID
         if roleplay_id not in [1, 2, 3, 4, 5]:
             logger.warning(f"Invalid roleplay ID {roleplay_id} requested")
-            return redirect(url_for('dashboard_bp.dashboard'))
+            return redirect(url_for('dashboard.dashboard'))  # Fixed: use dashboard.dashboard instead of dashboard_bp.dashboard
         
         logger.info(f"Roleplay {roleplay_id} accessed by user {session.get('user_id')}")
         return render_template('roleplay.html', roleplay_id=roleplay_id)
     except Exception as e:
         logger.error(f"Error rendering roleplay {roleplay_id}: {e}")
-        return redirect(url_for('dashboard_bp.dashboard'))
+        return redirect(url_for('dashboard.dashboard'))  # Fixed: use dashboard.dashboard

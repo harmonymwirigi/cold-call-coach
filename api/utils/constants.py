@@ -426,3 +426,27 @@ VOICE_PRESETS = {
         "description": "Cautious, questioning voice"
     }
 }
+
+# Voice settings for different prospect types
+VOICE_SETTINGS = {
+    'CEO': {
+        'tone': 'authoritative',
+        'pace': 'measured',
+        'style': 'professional'
+    },
+    'CTO': {
+        'tone': 'analytical',
+        'pace': 'moderate',
+        'style': 'technical'
+    },
+    'VP of Sales': {
+        'tone': 'direct',
+        'pace': 'fast',
+        'style': 'results-oriented'
+    },
+    'Director': {
+        'tone': 'friendly',
+        'pace': 'moderate',
+        'style': 'collaborative'
+    }
+}

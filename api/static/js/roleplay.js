@@ -1,25 +1,27 @@
-
-
-// ===== STATIC/JS/ROLEPLAY.JS =====
+// ===== FIXED STATIC/JS/ROLEPLAY.JS =====
 class RoleplayManager {
     constructor() {
         this.currentSession = null;
         this.voiceHandler = null;
         this.isActive = false;
         this.conversationHistory = [];
+        this.selectedMode = null;
         
         this.init();
     }
 
     init() {
-        this.voiceHandler = new VoiceHandler(this);
+        // Initialize voice handler only if VoiceHandler is available
+        if (typeof VoiceHandler !== 'undefined') {
+            this.voiceHandler = new VoiceHandler(this);
+        }
         this.setupEventListeners();
         this.loadRoleplayData();
     }
 
     setupEventListeners() {
         // Start roleplay button
-        const startButton = document.getElementById('start-roleplay-btn');
+        const startButton = document.getElementById('start-training-btn');
         if (startButton) {
             startButton.addEventListener('click', () => {
                 this.startRoleplay();
@@ -27,7 +29,7 @@ class RoleplayManager {
         }
 
         // End roleplay button
-        const endButton = document.getElementById('end-roleplay-btn');
+        const endButton = document.getElementById('end-training-btn');
         if (endButton) {
             endButton.addEventListener('click', () => {
                 this.endRoleplay();
@@ -38,7 +40,8 @@ class RoleplayManager {
         const modeButtons = document.querySelectorAll('.mode-btn');
         modeButtons.forEach(btn => {
             btn.addEventListener('click', (e) => {
-                this.selectMode(e.target.dataset.mode);
+                const mode = e.currentTarget.dataset.mode; // Use currentTarget instead of target
+                this.selectMode(mode);
             });
         });
     }
@@ -59,11 +62,13 @@ class RoleplayManager {
 
     async loadRoleplayInfo(roleplayId) {
         try {
-            const response = await window.coldCallingApp.apiCall(`/api/roleplay/info/${roleplayId}`);
+            const response = await this.apiCall(`/api/roleplay/info/${roleplayId}`);
             
             if (response.ok) {
                 const data = await response.json();
                 this.updateRoleplayUI(data);
+            } else {
+                console.error('Failed to load roleplay info');
             }
         } catch (error) {
             console.error('Error loading roleplay info:', error);
@@ -92,9 +97,15 @@ class RoleplayManager {
         const titleElement = document.getElementById('prospect-title');
         const industryElement = document.getElementById('prospect-industry');
 
-        if (avatarElement) {
+        if (avatarElement && roleplayData.industry) {
             avatarElement.src = `/static/images/prospect-avatars/${roleplayData.industry.toLowerCase()}.jpg`;
             avatarElement.alt = `${roleplayData.job_title} prospect`;
+            
+            // Add error handler for missing images
+            avatarElement.onerror = function() {
+                this.src = '/static/images/prospect-avatars/default.jpg';
+                this.onerror = null; // Prevent infinite loop
+            };
         }
 
         if (nameElement) {
@@ -115,7 +126,9 @@ class RoleplayManager {
             'CEO': ['Alex Morgan', 'Sarah Chen', 'Michael Rodriguez'],
             'CTO': ['David Kim', 'Jennifer Walsh', 'Robert Singh'],
             'VP of Sales': ['Lisa Thompson', 'Mark Johnson', 'Amanda Garcia'],
-            'Marketing Manager': ['Emily Davis', 'Chris Wilson', 'Maria Lopez']
+            'Marketing Manager': ['Emily Davis', 'Chris Wilson', 'Maria Lopez'],
+            'Director': ['Patricia Williams', 'James Davis', 'Linda Miller'],
+            'Operations Manager': ['Robert Taylor', 'Mary Anderson', 'John Wilson']
         };
 
         const nameList = names[jobTitle] || ['Jordan Smith', 'Taylor Brown', 'Casey Jones'];
@@ -123,18 +136,24 @@ class RoleplayManager {
     }
 
     selectMode(mode) {
+        if (!mode) return;
+        
         // Update mode selection UI
-        document.querySelectorAll('.mode-btn').forEach(btn => {
+        const modeButtons = document.querySelectorAll('.mode-btn');
+        modeButtons.forEach(btn => {
             btn.classList.remove('active');
         });
         
-        document.querySelector(`[data-mode="${mode}"]`).classList.add('active');
+        const selectedButton = document.querySelector(`[data-mode="${mode}"]`);
+        if (selectedButton) {
+            selectedButton.classList.add('active');
+        }
         
         // Store selected mode
         this.selectedMode = mode;
         
         // Update start button
-        const startButton = document.getElementById('start-roleplay-btn');
+        const startButton = document.getElementById('start-training-btn');
         if (startButton) {
             startButton.disabled = false;
             startButton.textContent = `Start ${mode.charAt(0).toUpperCase() + mode.slice(1)} Mode`;
@@ -146,12 +165,12 @@ class RoleplayManager {
         const mode = this.selectedMode || 'practice';
 
         if (!roleplayId) {
-            window.coldCallingApp.showMessage('Invalid roleplay configuration', 'error');
+            this.showMessage('Invalid roleplay configuration', 'error');
             return;
         }
 
         try {
-            const response = await window.coldCallingApp.apiCall('/api/roleplay/start', {
+            const response = await this.apiCall('/api/roleplay/start', {
                 method: 'POST',
                 body: JSON.stringify({
                     roleplay_id: roleplayId,
@@ -172,23 +191,23 @@ class RoleplayManager {
                     await this.playAIResponse(data.initial_response);
                 }
                 
-                window.coldCallingApp.showMessage('Roleplay started! Speak when ready.', 'success');
+                this.showMessage('Roleplay started! Speak when ready.', 'success');
             } else {
                 const errorData = await response.json();
-                window.coldCallingApp.showMessage(errorData.error || 'Failed to start roleplay', 'error');
+                this.showMessage(errorData.error || 'Failed to start roleplay', 'error');
             }
         } catch (error) {
             console.error('Error starting roleplay:', error);
-            window.coldCallingApp.showMessage('Network error. Please try again.', 'error');
+            this.showMessage('Network error. Please try again.', 'error');
         }
     }
 
     updateActiveRoleplayUI() {
         // Hide start controls, show active controls
-        const startSection = document.getElementById('start-section');
-        const activeSection = document.getElementById('active-section');
+        const modeSection = document.getElementById('mode-selection-section');
+        const activeSection = document.getElementById('active-training-section');
         
-        if (startSection) startSection.style.display = 'none';
+        if (modeSection) modeSection.style.display = 'none';
         if (activeSection) activeSection.style.display = 'block';
         
         // Enable voice controls
@@ -211,7 +230,7 @@ class RoleplayManager {
         this.addMessageToLog('user', transcript);
 
         try {
-            const response = await window.coldCallingApp.apiCall('/api/roleplay/respond', {
+            const response = await this.apiCall('/api/roleplay/respond', {
                 method: 'POST',
                 body: JSON.stringify({
                     user_input: transcript
@@ -233,11 +252,11 @@ class RoleplayManager {
                 }
             } else {
                 const errorData = await response.json();
-                window.coldCallingApp.showMessage(errorData.error || 'Failed to process input', 'error');
+                this.showMessage(errorData.error || 'Failed to process input', 'error');
             }
         } catch (error) {
             console.error('Error processing user input:', error);
-            window.coldCallingApp.showMessage('Network error during roleplay', 'error');
+            this.showMessage('Network error during roleplay', 'error');
         }
     }
 
@@ -246,7 +265,7 @@ class RoleplayManager {
             // Show that AI is speaking
             this.updateAIStatus('speaking');
             
-            const response = await window.coldCallingApp.apiCall('/api/roleplay/tts', {
+            const response = await this.apiCall('/api/roleplay/tts', {
                 method: 'POST',
                 body: JSON.stringify({ text: text })
             });
@@ -278,23 +297,6 @@ class RoleplayManager {
         }
     }
 
-    playImpatientPrompt() {
-        const prompts = [
-            "Hello? Are you still with me?",
-            "Can you hear me?",
-            "Just checking you're there…",
-            "Still on the line?"
-        ];
-        
-        const randomPrompt = prompts[Math.floor(Math.random() * prompts.length)];
-        this.playAIResponse(randomPrompt);
-    }
-
-    handleSilenceTimeout() {
-        window.coldCallingApp.showMessage('Call ended due to silence', 'warning');
-        this.endRoleplay(false);
-    }
-
     addMessageToLog(sender, message) {
         this.conversationHistory.push({
             sender: sender,
@@ -309,10 +311,24 @@ class RoleplayManager {
         const logElement = document.getElementById('conversation-log');
         if (!logElement) return;
 
+        if (this.conversationHistory.length === 0) {
+            logElement.innerHTML = `
+                <div class="text-center text-muted p-4">
+                    <i class="fas fa-phone-alt fa-2x mb-2 opacity-50"></i>
+                    <div>Start the roleplay to begin conversation</div>
+                </div>
+            `;
+            return;
+        }
+
         logElement.innerHTML = this.conversationHistory.map(entry => `
-            <div class="message ${entry.sender}">
-                <div class="message-content">${entry.message}</div>
-                <div class="message-time">${entry.timestamp.toLocaleTimeString()}</div>
+            <div class="message ${entry.sender}" style="margin-bottom: 1rem; padding: 0.5rem;">
+                <div class="message-content" style="font-weight: ${entry.sender === 'ai' ? 'bold' : 'normal'}">
+                    <strong>${entry.sender === 'ai' ? 'AI:' : 'You:'}</strong> ${entry.message}
+                </div>
+                <div class="message-time" style="font-size: 0.8rem; color: #666;">
+                    ${entry.timestamp.toLocaleTimeString()}
+                </div>
             </div>
         `).join('');
 
@@ -339,7 +355,7 @@ class RoleplayManager {
         }
 
         try {
-            const response = await window.coldCallingApp.apiCall('/api/roleplay/end', {
+            const response = await this.apiCall('/api/roleplay/end', {
                 method: 'POST',
                 body: JSON.stringify({ success: success })
             });
@@ -357,10 +373,10 @@ class RoleplayManager {
     }
 
     updateEndedRoleplayUI() {
-        const startSection = document.getElementById('start-section');
-        const activeSection = document.getElementById('active-section');
+        const modeSection = document.getElementById('mode-selection-section');
+        const activeSection = document.getElementById('active-training-section');
         
-        if (startSection) startSection.style.display = 'block';
+        if (modeSection) modeSection.style.display = 'block';
         if (activeSection) activeSection.style.display = 'none';
         
         // Disable voice controls
@@ -374,55 +390,95 @@ class RoleplayManager {
         document.querySelectorAll('.mode-btn').forEach(btn => {
             btn.classList.remove('active');
         });
+        
+        const startButton = document.getElementById('start-training-btn');
+        if (startButton) {
+            startButton.disabled = true;
+            startButton.textContent = 'Select a mode to start training';
+        }
     }
 
     showCoachingFeedback(coaching) {
-        const feedbackSection = document.getElementById('coaching-feedback');
+        const feedbackSection = document.getElementById('coaching-feedback-section');
         if (!feedbackSection || !coaching) return;
 
-        feedbackSection.innerHTML = `
+        const content = document.getElementById('coaching-content');
+        if (!content) return;
+
+        content.innerHTML = `
             <h4>Coaching Feedback</h4>
             <div class="coaching-categories">
-                ${coaching.coaching.sales ? `<div class="feedback-category sales">
+                ${coaching.coaching && coaching.coaching.sales ? `<div class="feedback-category sales mb-3">
                     <h6><i class="fas fa-chart-line"></i> Sales</h6>
                     <p>${coaching.coaching.sales}</p>
                 </div>` : ''}
                 
-                ${coaching.coaching.grammar ? `<div class="feedback-category grammar">
+                ${coaching.coaching && coaching.coaching.grammar ? `<div class="feedback-category grammar mb-3">
                     <h6><i class="fas fa-spell-check"></i> Grammar</h6>
                     <p>${coaching.coaching.grammar}</p>
                 </div>` : ''}
                 
-                ${coaching.coaching.vocabulary ? `<div class="feedback-category vocabulary">
+                ${coaching.coaching && coaching.coaching.vocabulary ? `<div class="feedback-category vocabulary mb-3">
                     <h6><i class="fas fa-book"></i> Vocabulary</h6>
                     <p>${coaching.coaching.vocabulary}</p>
                 </div>` : ''}
                 
-                ${coaching.coaching.pronunciation ? `<div class="feedback-category pronunciation">
+                ${coaching.coaching && coaching.coaching.pronunciation ? `<div class="feedback-category pronunciation mb-3">
                     <h6><i class="fas fa-volume-up"></i> Pronunciation</h6>
                     <p>${coaching.coaching.pronunciation}</p>
                 </div>` : ''}
                 
-                ${coaching.coaching.rapport ? `<div class="feedback-category rapport">
+                ${coaching.coaching && coaching.coaching.rapport ? `<div class="feedback-category rapport mb-3">
                     <h6><i class="fas fa-handshake"></i> Rapport</h6>
                     <p>${coaching.coaching.rapport}</p>
                 </div>` : ''}
             </div>
             
             <div class="coaching-summary">
-                <div class="score-display">
-                    <span class="score-number">${coaching.overall_score}/100</span>
-                    <span class="score-label">Overall Score</span>
+                <div class="score-display text-center mb-3">
+                    <span class="score-number h2">${coaching.overall_score || 0}/100</span>
+                    <div class="score-label">Overall Score</div>
                 </div>
                 
                 <div class="next-steps">
                     <h6>Next Steps:</h6>
-                    <p>${coaching.next_steps}</p>
+                    <p>${coaching.next_steps || 'Keep practicing to improve your skills!'}</p>
                 </div>
             </div>
         `;
         
         feedbackSection.style.display = 'block';
+    }
+
+    showMessage(message, type = 'info') {
+        // Use global showAlert if available, otherwise fallback to console
+        if (typeof showAlert === 'function') {
+            showAlert(message, type);
+        } else if (window.coldCallingApp && typeof window.coldCallingApp.showMessage === 'function') {
+            window.coldCallingApp.showMessage(message, type);
+        } else {
+            console.log(`${type.toUpperCase()}: ${message}`);
+            alert(message); // Fallback to alert
+        }
+    }
+
+    async apiCall(endpoint, options = {}) {
+        const defaultOptions = {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`
+            }
+        };
+
+        const response = await fetch(endpoint, { ...defaultOptions, ...options });
+        
+        if (response.status === 401) {
+            // Redirect to login if unauthorized
+            window.location.href = '/login';
+            throw new Error('Authentication required');
+        }
+
+        return response;
     }
 
     destroy() {

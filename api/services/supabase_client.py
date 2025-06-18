@@ -1,7 +1,7 @@
 # ===== UPDATED API/SERVICES/SUPABASE_CLIENT.PY (FIXED) =====
 from supabase import create_client, Client
 import os
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import logging
 import json
 
@@ -247,3 +247,41 @@ class SupabaseService:
         except Exception as e:
             logger.error(f"Error verifying code: {e}")
             return None
+    def get_user_sessions(self, user_id: str, limit: int = 20, offset: int = 0) -> List[Dict[str, Any]]:
+        """Get user's voice sessions"""
+        try:
+            response = self.service_client.table('voice_sessions')\
+                .select('*')\
+                .eq('user_id', user_id)\
+                .order('created_at', desc=True)\
+                .range(offset, offset + limit - 1)\
+                .execute()
+            return response.data or []
+        except Exception as e:
+            logger.error(f"Error getting user sessions: {e}")
+            return []
+
+    def get_session_count(self, user_id: str) -> int:
+        """Get total session count for user"""
+        try:
+            response = self.service_client.table('voice_sessions')\
+                .select('id', count='exact')\
+                .eq('user_id', user_id)\
+                .execute()
+            return response.count or 0
+        except Exception as e:
+            logger.error(f"Error getting session count: {e}")
+            return 0
+
+    def update_user_profile_by_service(self, user_id: str, updates: Dict[str, Any]) -> bool:
+        """Update user profile using service client (bypasses RLS)"""
+        try:
+            from datetime import datetime, timezone
+            # Add updated timestamp
+            updates['updated_at'] = datetime.now(timezone.utc).isoformat()
+            
+            response = self.service_client.table('user_profiles').update(updates).eq('id', user_id).execute()
+            return len(response.data) > 0
+        except Exception as e:
+            logger.error(f"Error updating user profile by service: {e}")
+            return False
