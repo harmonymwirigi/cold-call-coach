@@ -1,6 +1,7 @@
-# ===== SIMPLIFIED WORKING API/SERVICES/ROLEPLAY_ENGINE.PY =====
+# ===== COMPLETE FIXED API/SERVICES/ROLEPLAY_ENGINE.PY =====
 import random
 import logging
+import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any, Optional, Tuple
 from services.openai_service import OpenAIService
@@ -17,25 +18,27 @@ class RoleplayEngine:
         self.openai_service = OpenAIService()
         self.supabase_service = SupabaseService()
         
-        # Session state tracking
+        # Session state tracking - CRITICAL: Keep sessions in memory
         self.active_sessions = {}
         
+        logger.info(f"RoleplayEngine initialized - OpenAI available: {self.openai_service.is_available()}")
+        
     def create_session(self, user_id: str, roleplay_id: int, mode: str, user_context: Dict) -> Dict[str, Any]:
-        """Create a new roleplay session"""
+        """Create a new roleplay session with enhanced context"""
         try:
             # Validate inputs
             if roleplay_id not in ROLEPLAY_CONFIG:
                 raise ValueError(f"Invalid roleplay ID: {roleplay_id}")
             
             config = ROLEPLAY_CONFIG[roleplay_id]
-            if mode not in config.get('modes', ['practice']):
+            if mode not in config.get('modes', ['practice']):  # Default to practice if modes not defined
                 logger.warning(f"Mode '{mode}' not in config for roleplay {roleplay_id}, using practice mode")
                 mode = 'practice'
             
             # Create unique session ID
             session_id = f"{user_id}_{roleplay_id}_{mode}_{datetime.now().timestamp()}"
             
-            # Session data structure
+            # Enhanced session data structure
             session_data = {
                 'session_id': session_id,
                 'user_id': user_id,
@@ -46,26 +49,31 @@ class RoleplayEngine:
                 'conversation_history': [],
                 'current_stage': self._get_initial_stage(roleplay_id),
                 'objections_used': [],
+                'questions_used': [],
                 'call_count': 0,
                 'successful_calls': 0,
+                'current_call_success': False,
                 'session_active': True,
                 'hang_up_triggered': False,
+                'qualification_achieved': False,
+                'meeting_asked': False,
                 'performance_metrics': {
                     'opener_quality': 0,
                     'objection_handling': 0,
                     'pitch_effectiveness': 0,
-                    'confidence_level': 0
+                    'confidence_level': 0,
+                    'overall_impression': 0
                 },
-                'evaluation_history': []
+                'coaching_notes': []
             }
             
-            # Store session in memory
+            # CRITICAL: Store session in memory
             self.active_sessions[session_id] = session_data
             
-            # Generate initial response
+            # Generate intelligent initial response
             initial_response = self._generate_initial_response(roleplay_id, mode, user_context)
             
-            # Add to conversation history
+            # Add to conversation history if there's an initial response
             if initial_response:
                 session_data['conversation_history'].append({
                     'role': 'assistant',
@@ -74,7 +82,7 @@ class RoleplayEngine:
                     'stage': session_data['current_stage']
                 })
             
-            logger.info(f"Created session {session_id} for user {user_id}")
+            logger.info(f"Created session {session_id} for user {user_id} - Active sessions: {len(self.active_sessions)}")
             
             return {
                 'success': True,
@@ -91,12 +99,13 @@ class RoleplayEngine:
             }
     
     def process_user_input(self, session_id: str, user_input: str) -> Dict[str, Any]:
-        """Process user input - SIMPLIFIED VERSION"""
+        """Process user input with enhanced AI conversation"""
         try:
-            logger.info(f"Processing input for session {session_id}: '{user_input[:50]}...'")
+            logger.info(f"Processing input for session {session_id}: {user_input[:50]}...")
+            logger.info(f"Active sessions: {list(self.active_sessions.keys())}")
             
             if session_id not in self.active_sessions:
-                logger.error(f"Session {session_id} not found")
+                logger.error(f"Session {session_id} not found in active sessions")
                 raise ValueError("Session not found")
             
             session = self.active_sessions[session_id]
@@ -113,48 +122,22 @@ class RoleplayEngine:
                 'stage': session['current_stage']
             })
             
-            # Generate AI response - TRY OpenAI first, then fallback
-            try:
-                logger.info("Attempting OpenAI response generation...")
-                
-                # Prepare roleplay configuration
-                roleplay_config = {
-                    'roleplay_id': session['roleplay_id'],
-                    'mode': session['mode'],
-                    'session_id': session['session_id']
+            # Generate AI response using OpenAI service
+            ai_response_data = self._generate_ai_response_async(session, user_input)
+            
+            if not ai_response_data.get('success'):
+                return {
+                    'success': False,
+                    'error': ai_response_data.get('error', 'Failed to generate AI response'),
+                    'call_continues': False
                 }
-                
-                # Call OpenAI service (now synchronous)
-                ai_response_data = self.openai_service.generate_roleplay_response(
-                    user_input,
-                    session['conversation_history'],
-                    session['user_context'],
-                    roleplay_config
-                )
-                
-                if ai_response_data.get('success'):
-                    logger.info("OpenAI response successful")
-                    ai_response = ai_response_data['response']
-                    evaluation = ai_response_data.get('evaluation', {})
-                else:
-                    logger.warning("OpenAI response failed, using simple fallback")
-                    ai_response, evaluation = self._generate_simple_fallback(session, user_input)
-                    
-            except Exception as openai_error:
-                logger.error(f"OpenAI error: {openai_error}, using simple fallback")
-                ai_response, evaluation = self._generate_simple_fallback(session, user_input)
             
-            # Store evaluation
-            session['evaluation_history'].append({
-                'user_input': user_input,
-                'evaluation': evaluation,
-                'stage': session['current_stage'],
-                'timestamp': datetime.now(timezone.utc).isoformat()
-            })
+            ai_response = ai_response_data['response']
+            evaluation = ai_response_data.get('evaluation', {})
             
-            # Check for hang-up conditions
+            # Check for immediate hang-up conditions
             if evaluation.get('should_hang_up') or not evaluation.get('should_continue', True):
-                return self._handle_hang_up(session, evaluation.get('hang_up_reason', 'Call ended'))
+                return self._handle_hang_up(session, evaluation.get('hang_up_reason', 'Poor response quality'))
             
             # Add AI response to conversation
             session['conversation_history'].append({
@@ -165,20 +148,16 @@ class RoleplayEngine:
                 'evaluation_data': evaluation
             })
             
-            # Update session state
+            # Update session state based on evaluation
             self._update_session_state(session, evaluation)
             
             # Update performance metrics
             self._update_performance_metrics(session, user_input, evaluation)
             
-            # Check if call should continue
+            # Check if call/session should end
             call_continues = self._should_call_continue(session, evaluation)
             
-            # Handle multi-call modes
-            if not call_continues and session['mode'] in ['marathon', 'legend']:
-                call_continues = self._handle_multi_call_progression(session, evaluation)
-            
-            logger.info(f"Response generated: '{ai_response[:50]}...' Call continues: {call_continues}")
+            logger.info(f"Generated AI response: {ai_response[:50]}... Call continues: {call_continues}")
             
             return {
                 'success': True,
@@ -186,8 +165,7 @@ class RoleplayEngine:
                 'call_continues': call_continues,
                 'evaluation': evaluation,
                 'session_state': session['current_stage'],
-                'call_count': session.get('call_count', 0),
-                'successful_calls': session.get('successful_calls', 0)
+                'performance_hint': self._get_performance_hint(evaluation)
             }
             
         except Exception as e:
@@ -198,120 +176,545 @@ class RoleplayEngine:
                 'call_continues': False
             }
     
-    def _generate_simple_fallback(self, session: Dict, user_input: str) -> Tuple[str, Dict]:
-        """Generate simple fallback response when OpenAI fails"""
+    def _generate_ai_response_async(self, session: Dict, user_input: str) -> Dict[str, Any]:
+        """Generate AI response with async OpenAI call"""
+        try:
+            # Prepare roleplay configuration
+            roleplay_config = {
+                'roleplay_id': session['roleplay_id'],
+                'mode': session['mode'],
+                'session_id': session['session_id']
+            }
+            
+            # TRY OpenAI first if available
+            if self.openai_service.is_available():
+                logger.info("Using OpenAI for AI response generation")
+                
+                try:
+                    # Create event loop if needed
+                    try:
+                        loop = asyncio.get_event_loop()
+                    except RuntimeError:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                    
+                    if loop.is_running():
+                        # Use fallback if loop is running
+                        logger.warning("Event loop is running, using fallback")
+                        return self._generate_fallback_response(session, user_input)
+                    else:
+                        # Generate response using OpenAI
+                        response_data = loop.run_until_complete(
+                            self.openai_service.generate_roleplay_response(
+                                user_input,
+                                session['conversation_history'],
+                                session['user_context'],
+                                roleplay_config
+                            )
+                        )
+                        
+                        if response_data.get('success'):
+                            logger.info(f"OpenAI response generated successfully: {response_data['response'][:50]}...")
+                            return response_data
+                        else:
+                            logger.warning(f"OpenAI failed: {response_data.get('error')}, using fallback")
+                            return self._generate_fallback_response(session, user_input)
+                            
+                except Exception as openai_error:
+                    logger.error(f"OpenAI error: {openai_error}, using fallback")
+                    return self._generate_fallback_response(session, user_input)
+            else:
+                logger.info("OpenAI not available, using fallback responses")
+                return self._generate_fallback_response(session, user_input)
+            
+        except Exception as e:
+            logger.error(f"Error in async AI response generation: {e}")
+            return self._generate_fallback_response(session, user_input)
+    
+    def _generate_fallback_response(self, session: Dict, user_input: str) -> Dict[str, Any]:
+        """Generate fallback response when OpenAI is unavailable"""
         try:
             current_stage = session['current_stage']
             roleplay_id = session['roleplay_id']
             
-            logger.info(f"Generating simple fallback for stage: {current_stage}")
+            logger.info(f"Generating fallback response for stage: {current_stage}")
             
-            # Determine response based on stage and conversation history
-            user_messages_count = len([m for m in session['conversation_history'] if m.get('role') == 'user'])
-            
-            if current_stage == 'phone_pickup' or user_messages_count == 1:
-                responses = ["Hello?", "Yes?", "Who is this?"]
+            # Determine response category based on stage
+            if current_stage in ['phone_pickup', 'opener_evaluation']:
+                user_messages_count = len([m for m in session['conversation_history'] if m.get('role') == 'user'])
                 
-            elif current_stage == 'opener_evaluation' or user_messages_count == 2:
-                # Evaluate opener quality for better response
-                opener_quality = self._evaluate_opener_simple(user_input)
-                
-                if opener_quality >= 6:
-                    responses = ["I'm listening.", "What can I do for you?", "Go ahead."]
-                elif opener_quality >= 4:
-                    responses = ["What's this about?", "I'm listening.", "This better be good."]
+                if user_messages_count == 1:
+                    # First user message - evaluate opener quality
+                    opener_quality = self._evaluate_opener_simple(user_input)
+                    logger.info(f"Opener quality score: {opener_quality}/8 for input: '{user_input}'")
+                    
+                    # FIXED: More realistic hang-up logic
+                    if opener_quality <= 1:
+                        # Only hang up for really terrible openers (empty, rude, etc.)
+                        hang_up_chance = 0.8  # 80% chance
+                    elif opener_quality == 2:
+                        # Simple greetings get objections, not hang-ups
+                        hang_up_chance = 0.1  # 10% chance (rare)
+                    else:
+                        hang_up_chance = 0.0  # No hang-up for decent openers
+                    
+                    # Random hang-up decision
+                    if random.random() < hang_up_chance:
+                        responses = ["Not interested.", "I'm hanging up.", "Don't call here again."]
+                        return {
+                            'success': True,
+                            'response': random.choice(responses),
+                            'evaluation': {'should_hang_up': True, 'quality_score': opener_quality}
+                        }
+                    else:
+                        # Give an appropriate objection based on opener quality
+                        if opener_quality <= 2:
+                            # Simple greeting gets basic objection
+                            responses = [
+                                "Who is this?", 
+                                "What's this about?", 
+                                "I don't know you.",
+                                "What company are you with?",
+                                "How did you get this number?"
+                            ]
+                        elif opener_quality <= 4:
+                            # Decent opener gets standard objections
+                            responses = EARLY_OBJECTIONS[:8]  # Use first 8 objections
+                        else:
+                            # Good opener gets engagement
+                            responses = [
+                                "I'm listening.", 
+                                "Go ahead, what is it?", 
+                                "You have my attention.",
+                                "What can I do for you?",
+                                "I've got a few minutes."
+                            ]
                 else:
-                    responses = ["Who is this?", "I'm not interested.", "What's this about?"]
+                    # Not first message, standard phone pickup responses
+                    responses = ["Hello?", "Who is this?", "What's this about?"]
                     
-                # Small chance of hang-up for very poor openers
-                if opener_quality <= 2 and random.random() < 0.25:
-                    responses = ["Not interested.", "I'm hanging up."]
-                    evaluation = {
-                        'should_hang_up': True,
-                        'quality_score': opener_quality,
-                        'should_continue': False
-                    }
-                    return random.choice(responses), evaluation
-                    
-            elif current_stage == 'early_objection' or user_messages_count == 3:
-                # Use unused objections
-                used_objections = session.get('objections_used', [])
-                available_objections = [obj for obj in EARLY_OBJECTIONS if obj not in used_objections]
-                
-                if not available_objections:
-                    available_objections = EARLY_OBJECTIONS[:10]  # Reset with first 10
-                    session['objections_used'] = []
-                
-                selected_objection = random.choice(available_objections)
-                session['objections_used'].append(selected_objection)
-                responses = [selected_objection]
+            elif current_stage == 'early_objection':
+                responses = EARLY_OBJECTIONS
                 
             elif current_stage in ['mini_pitch', 'ai_pitch_prompt']:
                 if roleplay_id == 2:
                     responses = PITCH_PROMPTS
                 else:
-                    responses = ["Go ahead, what is it?", "I'm listening.", "You have two minutes."]
+                    responses = ["Go ahead, what is it?", "I'm listening.", "This better be good."]
                     
             elif current_stage == 'post_pitch_objections':
-                # Use post-pitch objections
-                used_objections = session.get('objections_used', [])
-                available_objections = [obj for obj in POST_PITCH_OBJECTIONS if obj not in used_objections]
+                responses = POST_PITCH_OBJECTIONS
                 
-                if not available_objections:
-                    available_objections = POST_PITCH_OBJECTIONS[:10]
-                    session['objections_used'] = []
-                
-                selected_objection = random.choice(available_objections)
-                session['objections_used'].append(selected_objection)
-                responses = [selected_objection]
+            elif current_stage == 'warmup_question':
+                responses = WARMUP_QUESTIONS
                 
             else:
-                responses = ["I see.", "Tell me more.", "Go on.", "Interesting."]
+                responses = ["I see.", "Tell me more.", "Go on.", "What's this about?"]
             
-            selected_response = random.choice(responses)
+            # Avoid recently used responses
+            used_responses = session.get('objections_used', [])
+            available_responses = [r for r in responses if r not in used_responses]
+            
+            if not available_responses:
+                available_responses = responses
+                session['objections_used'] = []  # Reset if all used
+            
+            selected_response = random.choice(available_responses)
+            session['objections_used'].append(selected_response)
             
             # Basic evaluation
             evaluation = self._evaluate_user_input_simple(user_input, current_stage)
             
             logger.info(f"Selected fallback response: {selected_response}")
             
-            return selected_response, evaluation
+            return {
+                'success': True,
+                'response': selected_response,
+                'evaluation': evaluation,
+                'fallback_used': True
+            }
             
         except Exception as e:
-            logger.error(f"Error generating simple fallback: {e}")
-            return "Can you repeat that?", {'quality_score': 5, 'should_continue': True}
+            logger.error(f"Error generating fallback response: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'response': "Can you repeat that?"
+            }
     
     def _evaluate_opener_simple(self, user_input: str) -> int:
-        """Simple opener evaluation"""
-        score = 2  # Base score
+        """Simple opener evaluation without OpenAI - More generous scoring"""
+        score = 2  # Start with base score of 2 (instead of 1)
         user_input_lower = user_input.lower()
         
-        # Check for greeting
-        if any(greeting in user_input_lower for greeting in ['hi', 'hello', 'good morning', 'good afternoon']):
+        # Basic greeting criteria
+        if any(greeting in user_input_lower for greeting in ['hi', 'hello', 'good morning', 'good afternoon', 'hey']):
             score += 1
         
-        # Check for empathy
-        if any(empathy in user_input_lower for empathy in ['know this is', "don't know me", 'out of the blue', 'interrupting']):
+        # Professional greeting
+        if any(formal in user_input_lower for formal in ['good morning', 'good afternoon', 'good evening']):
+            score += 1  # Bonus for formal greetings
+        
+        # Empathy/acknowledgment phrases
+        if any(empathy in user_input_lower for empathy in ['know this is', "don't know me", 'out of the blue', 'interrupting', 'unexpected']):
             score += 2
         
-        # Check for question
+        # Permission seeking (questions)
         if user_input.strip().endswith('?'):
             score += 1
         
-        # Check for reasonable length
-        if len(user_input.split()) >= 5:
+        # Name introduction
+        if any(intro in user_input_lower for intro in ['my name is', "i'm ", 'this is ', 'calling from']):
             score += 1
         
-        # Check for politeness
-        if any(polite in user_input_lower for polite in ['please', 'thank you', 'appreciate']):
+        # Company/reason mention
+        if any(business in user_input_lower for business in ['company', 'calling about', 'regarding', 'from ']):
+            score += 1
+        
+        # Sufficient length (more than just "hello")
+        if len(user_input.split()) >= 3:  # Lowered from 5 to 3
+            score += 1
+        
+        # Bonus for polite words
+        if any(polite in user_input_lower for polite in ['please', 'thank you', 'appreciate', 'moment']):
             score += 1
             
-        return min(score, 8)
+        return min(score, 8)  # Cap at 8
     
-   
+    def _evaluate_user_input_simple(self, user_input: str, stage: str) -> Dict[str, Any]:
+        """Simple evaluation logic for fallback scenarios"""
+        evaluation = {
+            'quality_score': 5,
+            'should_continue': True,
+            'should_hang_up': False,
+            'next_stage': 'in_progress',
+            'feedback_notes': []
+        }
+        
+        user_input_lower = user_input.lower()
+        
+        if stage in ['phone_pickup', 'opener_evaluation']:
+            evaluation['quality_score'] = self._evaluate_opener_simple(user_input)
+            
+            # Progress to early objection stage after opener
+            if evaluation['quality_score'] >= 2:
+                evaluation['next_stage'] = 'early_objection'
+            
+            # Only hang up for really bad openers
+            if evaluation['quality_score'] <= 1:
+                evaluation['should_hang_up'] = random.random() < 0.3  # 30% chance
+                
+        elif stage == 'early_objection':
+            # Check for basic objection handling
+            if any(acknowledge in user_input_lower for acknowledge in ['understand', 'totally get', 'fair enough', 'appreciate']):
+                evaluation['quality_score'] += 2
+            if user_input.strip().endswith('?'):
+                evaluation['quality_score'] += 1
+            if any(empathy in user_input_lower for empathy in ['know', 'realize', 'understand']):
+                evaluation['quality_score'] += 1
+                
+            # Progress to mini pitch after handling objection
+            if evaluation['quality_score'] >= 5:
+                evaluation['next_stage'] = 'mini_pitch'
+                
+        elif stage == 'mini_pitch':
+            # Check for basic pitch elements
+            if any(value in user_input_lower for value in ['help', 'save', 'improve', 'solve', 'solution']):
+                evaluation['quality_score'] += 2
+            if len(user_input.split()) < 50:  # Not too long
+                evaluation['quality_score'] += 1
+            if user_input.strip().endswith('?'):  # Asking for permission/interest
+                evaluation['quality_score'] += 1
+                
+            # Progress to post-pitch objections
+            if evaluation['quality_score'] >= 6:
+                evaluation['next_stage'] = 'post_pitch_objections'
+        
+        elif stage == 'post_pitch_objections':
+            # Final objection handling
+            if any(close in user_input_lower for close in ['meeting', 'call', 'demo', 'discuss']):
+                evaluation['quality_score'] += 2
+                evaluation['next_stage'] = 'call_completed'  # Success!
+        
+        return evaluation
+    
+    def end_session(self, session_id: str, forced_end: bool = False) -> Dict[str, Any]:
+        """End roleplay session and generate comprehensive coaching"""
+        try:
+            if session_id not in self.active_sessions:
+                raise ValueError("Session not found")
+            
+            session = self.active_sessions[session_id]
+            session['session_active'] = False
+            session['ended_at'] = datetime.now(timezone.utc).isoformat()
+            
+            # Calculate session metrics
+            started_at = datetime.fromisoformat(session['started_at'].replace('Z', '+00:00'))
+            ended_at = datetime.now(timezone.utc)
+            duration_minutes = max(1, int((ended_at - started_at).total_seconds() / 60))
+            
+            # Generate comprehensive coaching feedback using OpenAI
+            coaching_result = self._generate_coaching_async(session)
+            
+            coaching_feedback = coaching_result.get('coaching', {}) if coaching_result.get('success') else {}
+            overall_score = coaching_result.get('overall_score', 0) if coaching_result.get('success') else 0
+            
+            # If OpenAI coaching failed, use fallback
+            if not coaching_result.get('success'):
+                coaching_feedback, overall_score = self._generate_fallback_coaching(session)
+            
+            # Determine session success based on multiple factors
+            session_success = self._determine_session_success(session, overall_score)
+            
+            # Update user progress if applicable
+            if session_success and not forced_end:
+                self._update_user_progress(session)
+            
+            # Generate completion message
+            completion_message = self._generate_completion_message(session, session_success, overall_score)
+            
+            # Clean up session
+            del self.active_sessions[session_id]
+            
+            logger.info(f"Ended session {session_id} - Active sessions: {len(self.active_sessions)}")
+            
+            return {
+                'success': True,
+                'duration_minutes': duration_minutes,
+                'session_success': session_success,
+                'coaching': coaching_feedback,
+                'overall_score': overall_score,
+                'completion_message': completion_message,
+                'session_data': session,
+                'performance_metrics': session.get('performance_metrics', {})
+            }
+            
+        except Exception as e:
+            logger.error(f"Error ending session: {e}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+    
+    def _generate_coaching_async(self, session: Dict) -> Dict[str, Any]:
+        """Generate coaching feedback using OpenAI service"""
+        try:
+            # For now, use fallback coaching
+            return {'success': False}
+                
+        except Exception as e:
+            logger.error(f"Error generating async coaching: {e}")
+            return {'success': False, 'error': str(e)}
+    
+    def _generate_fallback_coaching(self, session: Dict) -> Tuple[Dict, int]:
+        """Generate basic coaching when OpenAI is unavailable"""
+        conversation = session.get('conversation_history', [])
+        user_messages = [msg for msg in conversation if msg.get('role') == 'user']
+        performance_metrics = session.get('performance_metrics', {})
+        
+        # Generate coaching based on conversation analysis
+        coaching = {
+            'coaching': {
+                'sales_coaching': self._analyze_sales_performance(user_messages, session),
+                'grammar_coaching': self._analyze_grammar_basics(user_messages),
+                'vocabulary_coaching': self._analyze_vocabulary_usage(user_messages),
+                'pronunciation_coaching': self._analyze_pronunciation_basics(user_messages),
+                'rapport_assertiveness': self._analyze_rapport_confidence(user_messages, session)
+            }
+        }
+        
+        # Calculate basic score
+        score = self._calculate_basic_score(session, user_messages)
+        
+        return coaching, score
+    
+    def _analyze_sales_performance(self, user_messages: List[Dict], session: Dict) -> str:
+        """Analyze sales performance from user messages"""
+        if not user_messages:
+            return "Complete more of the conversation to get sales coaching."
+        
+        if len(user_messages) == 1:
+            # Opener analysis
+            opener = user_messages[0].get('content', '')
+            if len(opener) < 20:
+                return "Your opener was very brief. Try including a greeting, reason for calling, and permission to continue."
+            elif 'hello' in opener.lower() or 'hi' in opener.lower():
+                return "Good job starting with a greeting. Work on adding empathy like 'I know this is unexpected' to build rapport."
+            else:
+                return "Consider starting with a friendly greeting and showing empathy for the interruption."
+        
+        elif len(user_messages) >= 2:
+            # Objection handling analysis
+            return "Good job continuing the conversation past the first objection. Focus on acknowledging their concerns before redirecting."
+        
+        return "Keep practicing your conversation flow and objection handling techniques."
+    
+    def _analyze_grammar_basics(self, user_messages: List[Dict]) -> str:
+        """Basic grammar analysis"""
+        if not user_messages:
+            return "Speak more to get grammar feedback."
+        
+        total_text = ' '.join([msg.get('content', '') for msg in user_messages])
+        
+        if "i'm" in total_text.lower() or "don't" in total_text.lower():
+            return "Great use of contractions! This makes your speech sound more natural and conversational."
+        else:
+            return "Try using contractions like 'I'm', 'don't', 'we're' to sound more natural in English conversation."
+    
+    def _analyze_vocabulary_usage(self, user_messages: List[Dict]) -> str:
+        """Basic vocabulary analysis"""
+        if not user_messages:
+            return "Speak more to get vocabulary feedback."
+        
+        total_text = ' '.join([msg.get('content', '') for msg in user_messages]).lower()
+        
+        business_words = ['help', 'solve', 'improve', 'solution', 'business', 'company', 'team']
+        if any(word in total_text for word in business_words):
+            return "Good use of business vocabulary. This shows professionalism and industry knowledge."
+        else:
+            return "Try incorporating more business terms like 'solution', 'improve', or 'help' to sound more professional."
+    
+    def _analyze_pronunciation_basics(self, user_messages: List[Dict]) -> str:
+        """Basic pronunciation guidance"""
+        return "Continue speaking clearly and at a steady pace. Practice key sales terms for better clarity."
+    
+    def _analyze_rapport_confidence(self, user_messages: List[Dict], session: Dict) -> str:
+        """Analyze rapport and confidence"""
+        if session.get('hang_up_triggered'):
+            return "The prospect hung up. Work on your opening approach to create better first impressions."
+        
+        if len(user_messages) >= 3:
+            return "Great job keeping the conversation going! This shows good rapport-building skills."
+        else:
+            return "Try to engage more and ask questions to build stronger rapport with prospects."
+    
+    def _calculate_basic_score(self, session: Dict, user_messages: List[Dict]) -> int:
+        """Calculate basic performance score"""
+        score = 50  # Base score
+        
+        # Participation bonus
+        if len(user_messages) >= 4:
+            score += 20
+        elif len(user_messages) >= 3:
+            score += 15
+        elif len(user_messages) >= 2:
+            score += 10
+        
+        # No hang-up bonus
+        if not session.get('hang_up_triggered'):
+            score += 15
+        
+        # Conversation quality bonus
+        total_words = sum(len(msg.get('content', '').split()) for msg in user_messages)
+        if total_words >= 50:
+            score += 10
+        
+        # Mode difficulty adjustment
+        mode = session.get('mode', 'practice')
+        if mode == 'legend':
+            score = min(score + 5, 100)
+        
+        return max(0, min(100, score))
+    
+    def _get_initial_stage(self, roleplay_id: int) -> str:
+        """Get initial conversation stage for roleplay"""
+        stage_map = {
+            1: 'phone_pickup',      # Opener + Early Objections
+            2: 'ai_pitch_prompt',   # Pitch + Objections + Close  
+            3: 'warmup_question',   # Warm-up Challenge
+            4: 'phone_pickup',      # Full Cold Call
+            5: 'phone_pickup'       # Power Hour
+        }
+        return stage_map.get(roleplay_id, 'phone_pickup')
+    
+    def _generate_initial_response(self, roleplay_id: int, mode: str, user_context: Dict) -> str:
+        """Generate context-aware initial response"""
+        if roleplay_id == 2:  # Pitch + Objections starts with AI prompt
+            return random.choice(PITCH_PROMPTS)
+        elif roleplay_id == 3:  # Warm-up Challenge starts with question
+            return random.choice(WARMUP_QUESTIONS)
+        else:  # Standard phone pickup
+            return "Hello?"
+    
+    def _update_session_state(self, session: Dict, evaluation: Dict) -> None:
+        """Update session state based on AI evaluation"""
+        if evaluation.get('stage_completed') or evaluation.get('next_stage') != 'in_progress':
+            next_stage = evaluation.get('next_stage', session['current_stage'])
+            if next_stage != 'in_progress':
+                session['current_stage'] = next_stage
+        
+        # Update call tracking for marathon/legend modes
+        if session['mode'] in ['marathon', 'legend']:
+            if evaluation.get('call_completed'):
+                session['call_count'] += 1
+                if evaluation.get('quality_score', 0) >= 6:
+                    session['successful_calls'] += 1
+                
+                # Check if should start next call
+                max_calls = 10 if session['mode'] == 'marathon' else 6
+                if session['call_count'] < max_calls:
+                    # Reset for next call
+                    session['current_stage'] = 'phone_pickup'
+                    session['objections_used'] = []
+                    session['qualification_achieved'] = False
+                    session['meeting_asked'] = False
+    
+    def _update_performance_metrics(self, session: Dict, user_input: str, evaluation: Dict) -> None:
+        """Update running performance metrics"""
+        metrics = session.get('performance_metrics', {})
+        
+        # Update based on current stage and evaluation
+        stage = session.get('current_stage', 'unknown')
+        quality_score = evaluation.get('quality_score', 5)
+        
+        if stage in ['phone_pickup', 'opener_evaluation']:
+            metrics['opener_quality'] = max(metrics.get('opener_quality', 0), quality_score)
+        elif stage == 'early_objection':
+            metrics['objection_handling'] = max(metrics.get('objection_handling', 0), quality_score)
+        elif stage in ['mini_pitch', 'pitch_evaluation']:
+            metrics['pitch_effectiveness'] = max(metrics.get('pitch_effectiveness', 0), quality_score)
+        
+        # Overall confidence based on conversation continuation
+        if not session.get('hang_up_triggered'):
+            metrics['confidence_level'] = min(metrics.get('confidence_level', 0) + 1, 10)
+        
+        session['performance_metrics'] = metrics
+    
+    def _get_performance_hint(self, evaluation: Dict) -> Optional[str]:
+        """Get real-time performance hint for user"""
+        quality_score = evaluation.get('quality_score', 5)
+        
+        if quality_score <= 3:
+            return "Try showing more empathy and building rapport before pitching."
+        elif quality_score >= 7:
+            return "Great response! Keep this energy and confidence."
+        else:
+            return None  # No hint for average performance
+    
+    def _should_call_continue(self, session: Dict, evaluation: Dict) -> bool:
+        """Determine if call should continue based on multiple factors"""
+        # Call ends if hung up
+        if session.get('hang_up_triggered'):
+            return False
+        
+        # Call ends if AI indicates it should end
+        if not evaluation.get('should_continue', True):
+            return False
+        
+        # Call ends if stage indicates completion
+        if evaluation.get('next_stage') == 'call_completed':
+            return False
+        
+        # Marathon/Legend modes continue until all calls completed
+        if session['mode'] in ['marathon', 'legend']:
+            max_calls = 10 if session['mode'] == 'marathon' else 6
+            if session['call_count'] >= max_calls:
+                return False
+        
+        return True
     
     def _handle_hang_up(self, session: Dict, reason: str) -> Dict[str, Any]:
-        """Handle prospect hanging up"""
+        """Handle prospect hanging up with enhanced feedback"""
         session['hang_up_triggered'] = True
         session['session_active'] = False
         
@@ -319,7 +722,7 @@ class RoleplayEngine:
             "Not interested. Good bye.",
             "Please don't call here again.",
             "I'm hanging up now.",
-            "*click*"
+            "This is not a good time. *click*"
         ]
         
         response = random.choice(hang_up_responses)
@@ -333,331 +736,107 @@ class RoleplayEngine:
             'hang_up_reason': reason
         })
         
-        # For multi-call modes, handle progression
-        if session['mode'] in ['marathon', 'legend']:
-            return {
-                'success': True,
-                'ai_response': response,
-                'call_continues': self._handle_multi_call_progression(session, {'pass': False}),
-                'hang_up_reason': reason
-            }
-        
         return {
             'success': True,
             'ai_response': response,
             'call_continues': False,
             'hang_up_reason': reason,
-            'coaching_note': 'The prospect hung up. Focus on improving your approach.'
+            'coaching_note': 'The prospect hung up. Focus on improving your opening approach to create better first impressions.'
         }
-    
-    def _handle_multi_call_progression(self, session: Dict, evaluation: Dict) -> bool:
-        """Handle progression in Marathon/Legend modes"""
-        try:
-            session['call_count'] += 1
-            
-            if evaluation.get('pass', False):
-                session['successful_calls'] += 1
-            
-            mode = session['mode']
-            
-            if mode == 'marathon':
-                max_calls = 10
-                if session['call_count'] >= max_calls:
-                    return False  # Marathon complete
-                else:
-                    self._start_next_call(session)
-                    return True
-                    
-            elif mode == 'legend':
-                max_calls = 6
-                if not evaluation.get('pass', False):
-                    return False  # Legend mode - any failure ends
-                elif session['call_count'] >= max_calls:
-                    return False  # Legend complete
-                else:
-                    self._start_next_call(session)
-                    return True
-            
-            return False
-            
-        except Exception as e:
-            logger.error(f"Error handling multi-call progression: {e}")
-            return False
-    
-    def _start_next_call(self, session: Dict):
-        """Start the next call in multi-call mode"""
-        # Reset call state
-        session['current_stage'] = self._get_initial_stage(session['roleplay_id'])
-        session['objections_used'] = []
-        session['hang_up_triggered'] = False
-        
-        # Add "next call" indicator
-        session['conversation_history'].append({
-            'role': 'system',
-            'content': f"--- Call {session['call_count'] + 1} ---",
-            'timestamp': datetime.now(timezone.utc).isoformat(),
-            'stage': 'call_transition'
-        })
-        
-        # Add initial response for new call
-        initial_response = self._generate_initial_response(session['roleplay_id'], session['mode'], session['user_context'])
-        if initial_response:
-            session['conversation_history'].append({
-                'role': 'assistant',
-                'content': initial_response,
-                'timestamp': datetime.now(timezone.utc).isoformat(),
-                'stage': session['current_stage']
-            })
-    
-    def _get_initial_stage(self, roleplay_id: int) -> str:
-        """Get initial conversation stage"""
-        stage_map = {
-            1: 'phone_pickup',
-            2: 'ai_pitch_prompt',  
-            3: 'warmup_question',
-            4: 'phone_pickup',
-            5: 'phone_pickup'
-        }
-        return stage_map.get(roleplay_id, 'phone_pickup')
-    
-    def _generate_initial_response(self, roleplay_id: int, mode: str, user_context: Dict) -> str:
-        """Generate initial response"""
-        if roleplay_id == 2:
-            return random.choice(PITCH_PROMPTS)
-        elif roleplay_id == 3:
-            return random.choice(WARMUP_QUESTIONS)
-        else:
-            return "Hello?"
-    
-    def _update_session_state(self, session: Dict, evaluation: Dict) -> None:
-        """Update session state"""
-        next_stage = evaluation.get('next_stage')
-        if next_stage and next_stage != 'in_progress':
-            session['current_stage'] = next_stage
-    
-    def _update_performance_metrics(self, session: Dict, user_input: str, evaluation: Dict) -> None:
-        """Update performance metrics"""
-        metrics = session.get('performance_metrics', {})
-        stage = session.get('current_stage', 'unknown')
-        quality_score = evaluation.get('quality_score', 5)
-        
-        if stage in ['phone_pickup', 'opener_evaluation']:
-            metrics['opener_quality'] = max(metrics.get('opener_quality', 0), quality_score)
-        elif stage == 'early_objection':
-            metrics['objection_handling'] = max(metrics.get('objection_handling', 0), quality_score)
-        elif stage in ['mini_pitch', 'pitch_evaluation']:
-            metrics['pitch_effectiveness'] = max(metrics.get('pitch_effectiveness', 0), quality_score)
-        
-        if not session.get('hang_up_triggered'):
-            metrics['confidence_level'] = min(metrics.get('confidence_level', 0) + 1, 10)
-        
-        session['performance_metrics'] = metrics
-    
-    def _should_call_continue(self, session: Dict, evaluation: Dict) -> bool:
-        """Determine if call should continue"""
-        if session.get('hang_up_triggered'):
-            return False
-        
-        if not evaluation.get('should_continue', True):
-            return False
-        
-        if evaluation.get('next_stage') == 'call_completed':
-            return False
-        
-        return True
-    
-    def end_session(self, session_id: str, forced_end: bool = False) -> Dict[str, Any]:
-        """End roleplay session"""
-        try:
-            if session_id not in self.active_sessions:
-                raise ValueError("Session not found")
-            
-            session = self.active_sessions[session_id]
-            session['session_active'] = False
-            session['ended_at'] = datetime.now(timezone.utc).isoformat()
-            
-            # Calculate metrics
-            started_at = datetime.fromisoformat(session['started_at'].replace('Z', '+00:00'))
-            ended_at = datetime.now(timezone.utc)
-            duration_minutes = max(1, int((ended_at - started_at).total_seconds() / 60))
-            
-            # Generate coaching
-            coaching_feedback, overall_score = self._generate_coaching_feedback(session)
-            
-            # Determine success
-            session_success = self._determine_session_success(session, overall_score)
-            
-            # Generate completion message
-            completion_message = self._generate_completion_message(session, session_success, overall_score)
-            
-            # Clean up
-            del self.active_sessions[session_id]
-            
-            logger.info(f"Ended session {session_id}")
-            
-            return {
-                'success': True,
-                'duration_minutes': duration_minutes,
-                'session_success': session_success,
-                'coaching': coaching_feedback,
-                'overall_score': overall_score,
-                'completion_message': completion_message,
-                'session_data': session,
-                'performance_metrics': session.get('performance_metrics', {}),
-                'call_count': session.get('call_count', 0),
-                'successful_calls': session.get('successful_calls', 0)
-            }
-            
-        except Exception as e:
-            logger.error(f"Error ending session: {e}")
-            return {
-                'success': False,
-                'error': str(e)
-            }
-    
-    def _generate_coaching_feedback(self, session: Dict) -> Tuple[Dict, int]:
-        """Generate basic coaching feedback"""
-        conversation = session.get('conversation_history', [])
-        user_messages = [msg for msg in conversation if msg.get('role') == 'user']
-        
-        coaching = {
-            'coaching': {
-                'sales_coaching': self._analyze_sales_performance(user_messages, session),
-                'grammar_coaching': self._analyze_grammar_performance(user_messages),
-                'vocabulary_coaching': self._analyze_vocabulary_usage(user_messages),
-                'pronunciation_coaching': "Continue speaking clearly and practice key sales terms.",
-                'rapport_assertiveness': self._analyze_rapport_confidence(user_messages, session)
-            }
-        }
-        
-        # Calculate score
-        score = self._calculate_overall_score(session)
-        
-        return coaching, score
-    
-    def _analyze_sales_performance(self, user_messages: List[Dict], session: Dict) -> str:
-        """Analyze sales performance"""
-        if not user_messages:
-            return "Complete more of the conversation to get sales coaching."
-        
-        if len(user_messages) == 1:
-            opener = user_messages[0].get('content', '')
-            if len(opener) < 20:
-                return "Your opener was very brief. Try including a greeting, reason for calling, and permission to continue."
-            elif any(word in opener.lower() for word in ['hello', 'hi']):
-                return "Good job starting with a greeting. Work on adding empathy like 'I know this is unexpected'."
-            else:
-                return "Consider starting with a friendly greeting and showing empathy for the interruption."
-        
-        if session.get('hang_up_triggered'):
-            return "The prospect hung up. Work on your opening approach to create better first impressions."
-        
-        if session.get('mode') in ['marathon', 'legend']:
-            success_rate = session.get('successful_calls', 0) / max(session.get('call_count', 1), 1)
-            if success_rate >= 0.6:
-                return f"Great consistency! You passed {session.get('successful_calls', 0)} out of {session.get('call_count', 0)} calls."
-            else:
-                return "Focus on consistency. Practice your opener and objection handling more."
-        
-        return "Good job continuing the conversation. Focus on acknowledging concerns before redirecting."
-    
-    def _analyze_grammar_performance(self, user_messages: List[Dict]) -> str:
-        """Analyze grammar"""
-        if not user_messages:
-            return "Speak more to get grammar feedback."
-        
-        total_text = ' '.join([msg.get('content', '') for msg in user_messages]).lower()
-        
-        if any(contraction in total_text for contraction in ["i'm", "don't", "we're", "it's"]):
-            return "Great use of contractions! This makes your speech sound more natural."
-        else:
-            return "Try using contractions like 'I'm', 'don't', 'we're' to sound more natural."
-    
-    def _analyze_vocabulary_usage(self, user_messages: List[Dict]) -> str:
-        """Analyze vocabulary"""
-        if not user_messages:
-            return "Speak more to get vocabulary feedback."
-        
-        total_text = ' '.join([msg.get('content', '') for msg in user_messages]).lower()
-        
-        business_words = ['help', 'solve', 'improve', 'solution', 'business', 'team']
-        if any(word in total_text for word in business_words):
-            return "Good use of business vocabulary. This shows professionalism."
-        else:
-            return "Try incorporating more business terms like 'solution', 'improve', or 'help'."
-    
-    def _analyze_rapport_confidence(self, user_messages: List[Dict], session: Dict) -> str:
-        """Analyze rapport and confidence"""
-        if session.get('hang_up_triggered'):
-            return "The prospect hung up. Work on building better first impressions and rapport."
-        
-        if len(user_messages) >= 3:
-            return "Great job keeping the conversation going! This shows good rapport-building skills."
-        else:
-            return "Try to engage more and ask questions to build stronger rapport."
-    
-    def _calculate_overall_score(self, session: Dict) -> int:
-        """Calculate overall score"""
-        evaluation_history = session.get('evaluation_history', [])
-        
-        if not evaluation_history:
-            return 50
-        
-        # Average quality scores
-        scores = [eval['evaluation'].get('quality_score', 5) for eval in evaluation_history]
-        avg_score = sum(scores) / len(scores) if scores else 5
-        
-        # Convert to 0-100 scale
-        base_score = int((avg_score / 8) * 100)
-        
-        # Adjustments
-        if not session.get('hang_up_triggered'):
-            base_score += 10
-        
-        if session.get('mode') in ['marathon', 'legend']:
-            success_rate = session.get('successful_calls', 0) / max(session.get('call_count', 1), 1)
-            base_score = int(base_score * (0.5 + success_rate * 0.5))
-        
-        return max(0, min(100, base_score))
     
     def _determine_session_success(self, session: Dict, overall_score: int) -> bool:
-        """Determine session success"""
+        """Determine session success with enhanced criteria"""
         mode = session['mode']
+        roleplay_id = session['roleplay_id']
         
+        # Base success on overall score and mode requirements
         if mode == 'practice':
+            # Practice mode: success if didn't hang up and reasonable score
             return not session.get('hang_up_triggered', False) and overall_score >= 50
+        
         elif mode == 'marathon':
-            return session['successful_calls'] >= 6
+            # Marathon mode: need 6 successful calls
+            threshold = ROLEPLAY_CONFIG[roleplay_id].get('marathon_threshold', 6)
+            return session['successful_calls'] >= threshold
+        
         elif mode == 'legend':
-            return session['successful_calls'] >= 6
+            # Legend mode: need perfect score
+            threshold = ROLEPLAY_CONFIG[roleplay_id].get('legend_threshold', 6)
+            return session['successful_calls'] >= threshold
+        
+        elif mode == 'challenge':  # Warmup challenge
+            # Success based on score
+            return overall_score >= 70
+        
         else:
-            return overall_score >= 60
+            # Default: success if good score and no hang up
+            return overall_score >= 60 and not session.get('hang_up_triggered', False)
+    
+    def _update_user_progress(self, session: Dict) -> None:
+        """Update user progress for successful sessions"""
+        try:
+            user_id = session['user_id']
+            roleplay_id = session['roleplay_id']
+            mode = session['mode']
+            
+            # Get unlock target
+            config = ROLEPLAY_CONFIG.get(roleplay_id, {})
+            unlock_target = config.get('unlock_target')
+            
+            if unlock_target and mode in ['marathon', 'challenge', 'simulation']:
+                user_context = session['user_context']
+                access_level = user_context.get('access_level', 'limited_trial')
+                
+                # Set expiry based on access level
+                expires_at = None
+                if access_level == 'unlimited_basic':
+                    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+                
+                # Update progress
+                self.supabase_service.update_user_progress(user_id, unlock_target, {
+                    'unlocked_at': datetime.now(timezone.utc).isoformat(),
+                    'expires_at': expires_at.isoformat() if expires_at else None
+                })
+                
+                logger.info(f"Unlocked roleplay {unlock_target} for user {user_id}")
+                
+        except Exception as e:
+            logger.error(f"Error updating user progress: {e}")
     
     def _generate_completion_message(self, session: Dict, success: bool, overall_score: int) -> str:
-        """Generate completion message"""
+        """Generate enhanced completion message"""
         mode = session['mode']
         successful_calls = session.get('successful_calls', 0)
+        total_calls = session.get('call_count', 0)
         
         if mode == 'marathon':
             if success:
-                return f"Outstanding! You passed {successful_calls} out of 10 calls. You've unlocked the next module!"
+                return f"Outstanding! You passed {successful_calls} out of 10 calls. You've unlocked the next module and earned a Legend Mode attempt!"
             else:
-                return f"You completed all 10 calls and passed {successful_calls}. Keep practicing!"
+                return f"You completed all 10 calls and passed {successful_calls}. Keep practicing - you're improving with each call!"
+        
         elif mode == 'legend':
             if success:
-                return "LEGENDARY! Perfect score - you've mastered this module!"
+                return "LEGENDARY! Perfect score - you've mastered this module. Very few people achieve this level!"
             else:
-                return f"Legend attempt complete. You made it through {successful_calls} calls."
-        else:
+                return f"Legend attempt complete. You made it through {successful_calls} calls. To try again, pass Marathon mode first."
+        
+        elif mode == 'challenge':
+            if success:
+                return f"Excellent! Score: {overall_score}/100. You've unlocked the next training module!"
+            else:
+                return f"Challenge complete! Score: {overall_score}/100. Practice more and try again to unlock the next module."
+        
+        else:  # Practice mode
             if overall_score >= 80:
-                return f"Excellent work! Score: {overall_score}/100. You're ready for challenging modes!"
+                return f"Excellent work! Score: {overall_score}/100. You're ready for more challenging modes!"
             elif overall_score >= 60:
-                return f"Good job! Score: {overall_score}/100. Keep practicing to improve."
+                return f"Good job! Score: {overall_score}/100. Keep practicing to improve your skills."
             else:
-                return f"Nice try! Score: {overall_score}/100. Focus on the coaching feedback."
+                return f"Nice try! Score: {overall_score}/100. Focus on the coaching feedback to improve."
     
     def get_session_status(self, session_id: str) -> Optional[Dict[str, Any]]:
-        """Get session status"""
+        """Get current session status with enhanced metrics"""
         session = self.active_sessions.get(session_id)
         if session:
             return {
@@ -667,14 +846,14 @@ class RoleplayEngine:
         return None
     
     def cleanup_expired_sessions(self) -> None:
-        """Clean up expired sessions"""
+        """Clean up sessions that have been inactive for too long"""
         try:
             current_time = datetime.now(timezone.utc)
             expired_sessions = []
             
             for session_id, session in self.active_sessions.items():
                 started_at = datetime.fromisoformat(session['started_at'].replace('Z', '+00:00'))
-                if current_time - started_at > timedelta(hours=2):
+                if current_time - started_at > timedelta(hours=2):  # 2 hour timeout
                     expired_sessions.append(session_id)
             
             for session_id in expired_sessions:
@@ -685,237 +864,10 @@ class RoleplayEngine:
             logger.error(f"Error cleaning up sessions: {e}")
     
     def get_service_status(self) -> Dict[str, Any]:
-        """Get service status"""
+        """Get overall service status"""
         return {
             'active_sessions': len(self.active_sessions),
             'openai_available': self.openai_service.is_available(),
             'openai_status': self.openai_service.get_status(),
             'engine_status': 'running'
         }
-    
-    # ===== FIXED ROLEPLAY RESPONSE PROCESSING =====
-
-    async def process_user_input(self, session_id: str, user_input: str) -> Dict[str, Any]:
-        """Process user input - FIXED VERSION with better conversation flow"""
-        try:
-            logger.info(f"Processing input for session {session_id}: '{user_input[:50]}...'")
-            
-            if session_id not in self.active_sessions:
-                logger.error(f"Session {session_id} not found")
-                raise ValueError("Session not found")
-            
-            session = self.active_sessions[session_id]
-            
-            if not session.get('session_active'):
-                logger.error(f"Session {session_id} is not active")
-                raise ValueError("Session is not active")
-            
-            # Handle SILENCE_TIMEOUT specifically - don't add to conversation history as user message
-            if user_input == '[SILENCE_TIMEOUT]':
-                return self._handle_silence_timeout(session)
-            
-            # Add user input to conversation (only for real user input)
-            session['conversation_history'].append({
-                'role': 'user',
-                'content': user_input,
-                'timestamp': datetime.now(timezone.utc).isoformat(),
-                'stage': session['current_stage']
-            })
-            
-            # Update conversation stage based on actual user messages
-            self._update_conversation_stage(session)
-            
-            # Generate AI response - TRY OpenAI first, then fallback
-            try:
-                logger.info("Attempting OpenAI response generation...")
-                
-                # Prepare roleplay configuration
-                roleplay_config = {
-                    'roleplay_id': session['roleplay_id'],
-                    'mode': session['mode'],
-                    'session_id': session['session_id']
-                }
-                
-                # Call OpenAI service
-                ai_response_data = await self.openai_service.generate_roleplay_response(
-                    user_input,
-                    session['conversation_history'],
-                    session['user_context'],
-                    roleplay_config
-                )
-                
-                if ai_response_data.get('success'):
-                    logger.info("OpenAI response successful")
-                    ai_response = ai_response_data['response']
-                    evaluation = ai_response_data.get('evaluation', {})
-                else:
-                    logger.warning("OpenAI response failed, using simple fallback")
-                    ai_response, evaluation = self._generate_simple_fallback(session, user_input)
-                    
-            except Exception as openai_error:
-                logger.error(f"OpenAI error: {openai_error}, using simple fallback")
-                ai_response, evaluation = self._generate_simple_fallback(session, user_input)
-            
-            # Store evaluation
-            session['evaluation_history'].append({
-                'user_input': user_input,
-                'evaluation': evaluation,
-                'stage': session['current_stage'],
-                'timestamp': datetime.now(timezone.utc).isoformat()
-            })
-            
-            # Check for hang-up conditions
-            if evaluation.get('should_hang_up') or not evaluation.get('should_continue', True):
-                return self._handle_hang_up(session, evaluation.get('hang_up_reason', 'Call ended'))
-            
-            # Add AI response to conversation
-            session['conversation_history'].append({
-                'role': 'assistant',
-                'content': ai_response,
-                'timestamp': datetime.now(timezone.utc).isoformat(),
-                'stage': session['current_stage'],
-                'evaluation_data': evaluation
-            })
-            
-            # Update session state
-            self._update_session_state(session, evaluation)
-            
-            # Update performance metrics
-            self._update_performance_metrics(session, user_input, evaluation)
-            
-            # Check if call should continue
-            call_continues = self._should_call_continue(session, evaluation)
-            
-            # Handle multi-call modes
-            if not call_continues and session['mode'] in ['marathon', 'legend']:
-                call_continues = self._handle_multi_call_progression(session, evaluation)
-            
-            logger.info(f"Response generated: '{ai_response[:50]}...' Call continues: {call_continues}")
-            
-            return {
-                'success': True,
-                'ai_response': ai_response,
-                'call_continues': call_continues,
-                'evaluation': evaluation,
-                'session_state': session['current_stage'],
-                'call_count': session.get('call_count', 0),
-                'successful_calls': session.get('successful_calls', 0)
-            }
-            
-        except Exception as e:
-            logger.error(f"Error processing user input: {e}")
-            return {
-                'success': False,
-                'error': str(e),
-                'call_continues': False
-            }
-
-    def _handle_silence_timeout(self, session: Dict) -> Dict[str, Any]:
-        """Handle silence timeout without adding to conversation history"""
-        logger.info("Handling silence timeout")
-        
-        # Get a patience/impatience response based on conversation stage
-        user_messages = [
-            m for m in session['conversation_history'] 
-            if m.get('role') == 'user' and not m.get('content', '').startswith('[SILENCE_TIMEOUT]')
-        ]
-        
-        if len(user_messages) == 0:
-            ai_response = random.choice(["Hello? Are you there?", "Did I lose you?", "Anyone there?"])
-        elif len(user_messages) == 1:
-            ai_response = random.choice(["Are you still there?", "Hello?", "Did you have a question?"])
-        else:
-            ai_response = random.choice(["I'm waiting...", "Go ahead.", "I don't have all day.", "Are you thinking about it?"])
-        
-        # Add AI response to conversation history (but not the SILENCE_TIMEOUT)
-        session['conversation_history'].append({
-            'role': 'assistant',
-            'content': ai_response,
-            'timestamp': datetime.now(timezone.utc).isoformat(),
-            'stage': session['current_stage'],
-            'silence_response': True
-        })
-        
-        return {
-            'success': True,
-            'ai_response': ai_response,
-            'call_continues': True,
-            'evaluation': {'quality_score': 3, 'should_continue': True},
-            'session_state': session['current_stage']
-        }
-
-    def _update_conversation_stage(self, session: Dict) -> None:
-        """Update conversation stage based on actual conversation progress"""
-        # Count real user messages (not SILENCE_TIMEOUT)
-        user_messages = [
-            m for m in session['conversation_history'] 
-            if m.get('role') == 'user' and not m.get('content', '').startswith('[SILENCE_TIMEOUT]')
-        ]
-        
-        roleplay_id = session['roleplay_id']
-        user_count = len(user_messages)
-        
-        if roleplay_id == 1:  # Opener + Early Objections
-            if user_count <= 1:
-                session['current_stage'] = 'opener_evaluation'
-            elif user_count == 2:
-                session['current_stage'] = 'early_objection'
-            elif user_count == 3:
-                session['current_stage'] = 'objection_response'
-            else:
-                session['current_stage'] = 'mini_pitch'
-        
-        logger.info(f"Updated stage to {session['current_stage']} based on {user_count} user messages")
-
-    def _evaluate_user_input_simple(self, user_input: str, stage: str) -> Dict[str, Any]:
-        """Simple evaluation logic - IMPROVED"""
-        evaluation = {
-            'quality_score': 5,
-            'should_continue': True,
-            'should_hang_up': False,
-            'next_stage': 'in_progress',
-            'pass': True
-        }
-        
-        user_input_lower = user_input.lower()
-        
-        if stage in ['phone_pickup', 'opener_evaluation']:
-            evaluation['quality_score'] = self._evaluate_opener_simple(user_input)
-            evaluation['pass'] = evaluation['quality_score'] >= 4  # Lowered threshold
-            
-            # Don't end call too easily
-            if evaluation['quality_score'] <= 2 and random.random() < 0.15:  # Reduced hang-up chance
-                evaluation['should_hang_up'] = True
-                evaluation['should_continue'] = False
-                evaluation['hang_up_reason'] = 'Poor opener'
-            
-        elif stage == 'early_objection':
-            # Check for acknowledgment and empathy
-            if any(ack in user_input_lower for ack in ['understand', 'get that', 'fair enough', 'totally get', 'appreciate']):
-                evaluation['quality_score'] += 2
-            
-            # Check for question or engagement
-            if user_input.strip().endswith('?') or any(q in user_input_lower for q in ['can i', 'would you', 'could i']):
-                evaluation['quality_score'] += 1
-            
-            # Check for pushing too hard
-            if any(push in user_input_lower for push in ['you should', 'you need', 'you have to']):
-                evaluation['quality_score'] -= 1
-                
-        elif stage in ['objection_response', 'mini_pitch']:
-            # Check for value focus
-            if any(value in user_input_lower for value in ['help', 'save', 'improve', 'solve', 'benefit']):
-                evaluation['quality_score'] += 1
-            
-            # Check for question
-            if user_input.strip().endswith('?'):
-                evaluation['quality_score'] += 1
-            
-            # Check for being too salesy
-            if any(sales in user_input_lower for sales in ['amazing', 'incredible', 'guarantee']):
-                evaluation['quality_score'] -= 1
-        
-        # Ensure score stays in reasonable range
-        evaluation['quality_score'] = max(1, min(8, evaluation['quality_score']))
-        
-        return evaluation

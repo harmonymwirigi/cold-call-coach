@@ -18,15 +18,13 @@ class VoiceHandler {
             maxAlternatives: 1
         };
         
-        // State management - FIXED
+        // State management
         this.currentTranscript = '';
         this.finalTranscript = '';
         this.silenceTimer = null;
-        this.silenceThreshold = 4000; // Increased to 4 seconds
+        this.silenceThreshold = 3000; // 3 seconds of silence
         this.shouldRestart = false;
         this.wasPausedBySystem = false;
-        this.silenceTimeoutSent = false; // NEW: Prevent spam
-        this.lastSpeechTime = 0; // NEW: Track when speech last occurred
         
         this.init();
     }
@@ -188,32 +186,28 @@ class VoiceHandler {
             this.isListening = true;
             this.updateMicrophoneUI(true);
             this.clearVoiceError();
-            this.silenceTimeoutSent = false; // Reset timeout flag
-            this.lastSpeechTime = Date.now();
             this.startSilenceDetection();
         };
         
-        // Speech starts - FIXED
-        this.recognition.onspeechstart = () => {
-            console.log('Speech detected');
-            this.resetSilenceTimer();
-            this.silenceTimeoutSent = false; // Reset when speech starts
+        // Recognition ends
+        this.recognition.onend = () => {
+            console.log('Voice recognition ended');
+            this.isListening = false;
+            this.updateMicrophoneUI(false);
+            this.stopSilenceDetection();
+            
+            // Auto-restart if still supposed to be listening (for continuous mode)
+            if (this.shouldRestart && this.isSupported) {
+                console.log('Auto-restarting recognition...');
+                setTimeout(() => {
+                    this.startListening();
+                }, 100);
+            }
         };
         
-        // Speech ends - FIXED
-        this.recognition.onspeechend = () => {
-            console.log('Speech ended');
-            this.lastSpeechTime = Date.now();
-            this.startSilenceTimer();
-        };
-
-        // Recognition results - FIXED
+        // Recognition results
         this.recognition.onresult = (event) => {
             this.handleRecognitionResult(event);
-            
-            // Reset silence tracking when we get results
-            this.silenceTimeoutSent = false;
-            this.lastSpeechTime = Date.now();
         };
         
         // Recognition errors
@@ -360,10 +354,6 @@ class VoiceHandler {
     processFinalTranscript(transcript) {
         console.log('Processing final transcript:', transcript);
         
-        // Clear timeout state since we have actual input
-        this.silenceTimeoutSent = false;
-        this.stopSilenceDetection();
-        
         // Send to roleplay manager if available and active
         if (this.roleplayManager && this.roleplayManager.isActive) {
             console.log('Sending transcript to roleplay manager:', transcript);
@@ -378,7 +368,6 @@ class VoiceHandler {
             this.updateTranscript('Listening for your response...');
         }, 1000);
     }
-
 
     // Silence detection methods
     startSilenceDetection() {
@@ -395,10 +384,6 @@ class VoiceHandler {
     resetSilenceTimer() {
         this.stopSilenceDetection();
         this.startSilenceTimer();
-        
-        // Reset timeout flag when there's activity
-        this.silenceTimeoutSent = false;
-        this.lastSpeechTime = Date.now();
     }
 
     startSilenceTimer() {
@@ -413,35 +398,18 @@ class VoiceHandler {
     handleSilenceTimeout() {
         console.log('Handling silence timeout');
         
-        // Only send timeout once per listening session
-        if (this.silenceTimeoutSent) {
-            console.log('Silence timeout already sent for this session');
-            return;
-        }
-        
-        // Only trigger if we haven't had speech for a while
-        const timeSinceLastSpeech = Date.now() - this.lastSpeechTime;
-        if (timeSinceLastSpeech < this.silenceThreshold) {
-            console.log('Speech detected recently, skipping timeout');
-            return;
-        }
-        
         // Show a prompt to encourage speaking
-        this.updateTranscript('Still listening... Please continue speaking or click the microphone to stop.');
+        this.updateTranscript('Still listening... Please continue speaking or press the microphone to stop.');
         
-        // Mark that we've sent a timeout for this session
-        this.silenceTimeoutSent = true;
-        
-        // Send SILENCE_TIMEOUT to roleplay manager only if appropriate
-        if (this.roleplayManager && this.roleplayManager.isActive && this.currentTranscript.trim() === '') {
-            console.log('Sending silence timeout to roleplay manager');
-            
-            // Only send timeout after significant silence and if we haven't already
+        // You could also trigger an impatience response from the AI here
+        if (this.roleplayManager && this.roleplayManager.isActive) {
+            // Simulate AI impatience after long silence
             setTimeout(() => {
-                if (this.isListening && this.currentTranscript.trim() === '' && this.silenceTimeoutSent) {
+                if (this.isListening && this.currentTranscript.trim() === '') {
+                    console.log('Triggering AI impatience response');
                     this.roleplayManager.processUserInput('[SILENCE_TIMEOUT]');
                 }
-            }, 1000);
+            }, 2000);
         }
     }
 
@@ -489,7 +457,6 @@ class VoiceHandler {
         
         console.log('Stopping voice recognition...');
         this.shouldRestart = false;
-        this.silenceTimeoutSent = false; // Reset timeout state
         
         if (this.recognition) {
             this.recognition.stop();
@@ -498,6 +465,7 @@ class VoiceHandler {
         this.stopSilenceDetection();
         this.updateTranscript('Voice recognition stopped.');
     }
+
     pauseListening() {
         if (this.isListening) {
             console.log('Pausing voice recognition...');
