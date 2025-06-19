@@ -1,8 +1,6 @@
-<!-- ===== UPDATED ROLEPLAY.HTML TEMPLATE - ROLEPLAY 1.1 COMPLIANT ===== -->
-
 {% extends "base.html" %}
 
-{% block title %}{{ roleplay_config.name if roleplay_config else 'Roleplay 1.1 - Phone Training' }} - Cold Calling Coach{% endblock %}
+{% block title %}{{ roleplay_config.name if roleplay_config else 'Phone Training' }} - Cold Calling Coach{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -21,7 +19,7 @@ body {
     padding: 20px;
 }
 
-/* Phone Container with Roleplay 1.1 enhancements */
+/* Phone Container */
 .phone-container {
     width: 380px;
     height: 680px;
@@ -31,12 +29,6 @@ body {
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
     position: relative;
     overflow: hidden;
-    transition: all 0.3s ease;
-}
-
-.phone-container.roleplay-11-active {
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 30px rgba(34, 197, 94, 0.3);
-    border: 2px solid rgba(34, 197, 94, 0.5);
 }
 
 .phone-screen {
@@ -48,7 +40,7 @@ body {
     overflow: hidden;
 }
 
-/* Status Bar with Roleplay 1.1 indicator */
+/* Status Bar */
 .status-bar {
     display: flex;
     justify-content: space-between;
@@ -57,16 +49,6 @@ body {
     color: white;
     font-size: 14px;
     font-weight: 600;
-}
-
-.status-bar.roleplay-11-active::after {
-    content: "R1.1";
-    background: rgba(34, 197, 94, 0.9);
-    color: white;
-    padding: 2px 6px;
-    border-radius: 8px;
-    font-size: 10px;
-    font-weight: bold;
 }
 
 .time {
@@ -115,13 +97,6 @@ body {
     animation: pulse-avatar 2s infinite;
 }
 
-/* Roleplay 1.1 specific avatar styling */
-.contact-avatar.roleplay-11-active {
-    border: 4px solid rgba(34, 197, 94, 0.8);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 0 20px rgba(34, 197, 94, 0.3);
-    animation: roleplay-11-glow 3s ease-in-out infinite alternate;
-}
-
 @keyframes pulse-avatar {
     0%, 100% { 
         transform: scale(1);
@@ -130,17 +105,6 @@ body {
     50% { 
         transform: scale(1.05);
         border-color: rgba(34, 197, 94, 0.8);
-    }
-}
-
-@keyframes roleplay-11-glow {
-    from { 
-        border-color: rgba(34, 197, 94, 0.5);
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 0 15px rgba(34, 197, 94, 0.3);
-    }
-    to { 
-        border-color: rgba(34, 197, 94, 0.9);
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 0 25px rgba(34, 197, 94, 0.6);
     }
 }
 
@@ -171,7 +135,7 @@ body {
     font-variant-numeric: tabular-nums;
 }
 
-/* Call Controls with Roleplay 1.1 enhancements */
+/* Call Controls */
 .call-controls {
     display: flex;
     justify-content: center;
@@ -230,15 +194,12 @@ body {
     animation: pulse-record 1.5s infinite;
 }
 
-/* Enhanced recording animation for Roleplay 1.1 */
 @keyframes pulse-record {
     0%, 100% { 
         box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4);
-        transform: scale(1);
     }
     50% { 
         box-shadow: 0 4px 30px rgba(239, 68, 68, 0.8), 0 0 0 10px rgba(239, 68, 68, 0.2);
-        transform: scale(1.05);
     }
 }
 
@@ -293,7 +254,7 @@ body {
     51%, 100% { opacity: 0.5; }
 }
 
-/* Mode Selection enhanced for Roleplay 1.1 */
+/* Mode Selection (before call) */
 .mode-selection {
     position: absolute;
     top: 0;
@@ -312,16 +273,9 @@ body {
 
 .mode-selection h3 {
     color: white;
-    margin-bottom: 10px;
+    margin-bottom: 30px;
     text-align: center;
     font-weight: 300;
-}
-
-.mode-selection .roleplay-version {
-    color: rgba(34, 197, 94, 1);
-    font-size: 14px;
-    margin-bottom: 20px;
-    font-weight: 500;
 }
 
 .mode-grid {
@@ -341,7 +295,6 @@ body {
     text-align: center;
     cursor: pointer;
     transition: all 0.3s ease;
-    position: relative;
 }
 
 .mode-option:hover {
@@ -353,20 +306,6 @@ body {
 .mode-option.selected {
     background: rgba(34, 197, 94, 0.3);
     border-color: rgba(34, 197, 94, 0.8);
-}
-
-/* Roleplay 1.1 specific mode option styling */
-.mode-option.roleplay-11::after {
-    content: "New!";
-    position: absolute;
-    top: -5px;
-    right: -5px;
-    background: rgba(34, 197, 94, 0.9);
-    color: white;
-    padding: 2px 6px;
-    border-radius: 8px;
-    font-size: 10px;
-    font-weight: bold;
 }
 
 .mode-option h5 {
@@ -403,7 +342,7 @@ body {
     opacity: 0.6;
 }
 
-/* Feedback Section enhanced for Roleplay 1.1 */
+/* Feedback Section */
 .feedback-section {
     position: absolute;
     top: 0;
@@ -425,16 +364,6 @@ body {
     margin-bottom: 20px;
 }
 
-.feedback-header .roleplay-badge {
-    background: rgba(34, 197, 94, 0.9);
-    color: white;
-    padding: 4px 8px;
-    border-radius: 10px;
-    font-size: 12px;
-    font-weight: bold;
-    margin-bottom: 10px;
-}
-
 .score-circle {
     width: 80px;
     height: 80px;
@@ -447,19 +376,6 @@ body {
     font-size: 24px;
     font-weight: bold;
     color: white;
-    transition: all 0.3s ease;
-}
-
-.score-circle.excellent {
-    background: rgba(34, 197, 94, 0.9);
-}
-
-.score-circle.good {
-    background: rgba(59, 130, 246, 0.9);
-}
-
-.score-circle.needs-improvement {
-    background: rgba(251, 191, 36, 0.9);
 }
 
 .feedback-item {
@@ -468,30 +384,11 @@ body {
     padding: 15px;
     margin-bottom: 10px;
     color: white;
-    transition: all 0.3s ease;
-}
-
-.feedback-item:hover {
-    background: rgba(255, 255, 255, 0.15);
 }
 
 .feedback-item h6 {
     margin-bottom: 8px;
     color: rgba(34, 197, 94, 1);
-    display: flex;
-    align-items: center;
-}
-
-/* Special styling for consecutive passes message */
-.feedback-item.consecutive-passes {
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.1));
-    border: 2px solid #22c55e;
-    animation: celebrate 2s ease-in-out;
-}
-
-@keyframes celebrate {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.02); }
 }
 
 .feedback-actions {
@@ -523,7 +420,7 @@ body {
     background: rgba(34, 197, 94, 1);
 }
 
-/* Live Transcript enhanced for Roleplay 1.1 */
+/* Live Transcript */
 .live-transcript {
     position: absolute;
     bottom: 150px;
@@ -539,48 +436,11 @@ body {
     opacity: 0;
     transform: translateY(20px);
     transition: all 0.3s ease;
-    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .live-transcript.show {
     opacity: 1;
     transform: translateY(0);
-}
-
-/* Roleplay 1.1 active transcript styling */
-.live-transcript.roleplay-11-active {
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(0, 0, 0, 0.8));
-    border: 1px solid rgba(34, 197, 94, 0.3);
-    box-shadow: 0 0 15px rgba(34, 197, 94, 0.2);
-}
-
-/* Silence indicators for Roleplay 1.1 */
-.silence-indicator {
-    color: #ffc107;
-    font-weight: bold;
-    animation: warning-pulse 1s infinite;
-}
-
-@keyframes warning-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
-}
-
-.impatience-warning {
-    color: #f59e0b !important;
-    font-weight: bold;
-    animation: warning-pulse 1s infinite;
-}
-
-.hangup-warning {
-    color: #ef4444 !important;
-    font-weight: bold;
-    animation: critical-pulse 0.5s infinite;
-}
-
-@keyframes critical-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
 }
 
 /* Back Button */
@@ -606,42 +466,6 @@ body {
     transform: translateY(-2px);
 }
 
-/* Roleplay 1.1 progress indicators */
-.progress-indicator {
-    position: absolute;
-    top: 60px;
-    right: 20px;
-    background: rgba(0, 0, 0, 0.7);
-    border-radius: 15px;
-    padding: 10px;
-    color: white;
-    font-size: 12px;
-    z-index: 100;
-    display: none;
-}
-
-.progress-indicator.show {
-    display: block;
-}
-
-.progress-step {
-    display: flex;
-    align-items: center;
-    margin-bottom: 5px;
-}
-
-.progress-step.completed {
-    color: #22c55e;
-}
-
-.progress-step.current {
-    color: #fbbf24;
-}
-
-.progress-step.pending {
-    color: #6b7280;
-}
-
 /* Responsive Design */
 @media (max-width: 480px) {
     .training-container {
@@ -654,39 +478,6 @@ body {
         height: 90vh;
         max-height: 680px;
     }
-    
-    .control-btn {
-        width: 60px;
-        height: 60px;
-        font-size: 20px;
-    }
-    
-    .end-call-btn {
-        width: 60px;
-        height: 60px;
-        font-size: 24px;
-    }
-}
-
-/* Loading animations */
-.spinner-border {
-    width: 1rem;
-    height: 1rem;
-    vertical-align: text-bottom;
-    border: 0.125em solid currentColor;
-    border-right-color: transparent;
-    border-radius: 50%;
-    animation: spinner-border 0.75s linear infinite;
-}
-
-@keyframes spinner-border {
-    to { transform: rotate(360deg); }
-}
-
-.spinner-border-sm {
-    width: 0.875rem;
-    height: 0.875rem;
-    border-width: 0.125em;
 }
 </style>
 {% endblock %}
@@ -698,26 +489,10 @@ body {
         <i class="fas fa-arrow-left me-2"></i>Dashboard
     </a>
 
-    <!-- Roleplay 1.1 Progress Indicator -->
-    <div class="progress-indicator" id="progress-indicator">
-        <div class="progress-step" id="step-opener">
-            <i class="fas fa-phone me-2"></i>Opener
-        </div>
-        <div class="progress-step" id="step-objection">
-            <i class="fas fa-exclamation-triangle me-2"></i>Objection
-        </div>
-        <div class="progress-step" id="step-pitch">
-            <i class="fas fa-bullhorn me-2"></i>Mini-Pitch
-        </div>
-        <div class="progress-step" id="step-discovery">
-            <i class="fas fa-search me-2"></i>Discovery
-        </div>
-    </div>
-
-    <div class="phone-container" id="phone-container">
+    <div class="phone-container">
         <div class="phone-screen">
             <!-- Status Bar -->
-            <div class="status-bar" id="status-bar">
+            <div class="status-bar">
                 <div class="time" id="current-time">9:41</div>
                 <div class="status-icons">
                     <i class="fas fa-signal"></i>
@@ -729,12 +504,11 @@ body {
             <!-- Mode Selection Screen -->
             <div class="mode-selection" id="mode-selection">
                 <h3 id="roleplay-title">Choose Training Mode</h3>
-                <div class="roleplay-version">Roleplay 1.1 - Opener + Objection + Mini-Pitch</div>
                 <div class="mode-grid">
-                    <div class="mode-option roleplay-11" data-mode="practice">
+                    <div class="mode-option" data-mode="practice">
                         <i class="fas fa-user-graduate fa-2x" style="color: #60a5fa;"></i>
                         <h5>Practice Mode</h5>
-                        <small>Single call with detailed CEFR A2 coaching</small>
+                        <small>Single call with detailed feedback</small>
                     </div>
                     <div class="mode-option" data-mode="marathon">
                         <i class="fas fa-running fa-2x" style="color: #fbbf24;"></i>
@@ -748,7 +522,7 @@ body {
                     </div>
                 </div>
                 <button class="start-call-btn" id="start-call-btn" disabled>
-                    Select a mode to start Roleplay 1.1 call
+                    Select a mode to start call
                 </button>
             </div>
 
@@ -766,16 +540,16 @@ body {
 
                 <!-- Live Transcript -->
                 <div class="live-transcript" id="live-transcript">
-                    Waiting for Roleplay 1.1 conversation...
+                    Waiting for conversation...
                 </div>
 
                 <!-- Call Controls -->
                 <div style="margin-top: auto;">
                     <div class="call-controls">
                         <button class="control-btn mute" id="mute-btn" title="Mute">
-                            <i class="fas fa-microphone"></i>
+                            <i class="fas fa-microphone-slash"></i>
                         </button>
-                        <button class="control-btn mic" id="mic-btn" title="Hold to speak (10s=impatience, 15s=hangup)">
+                        <button class="control-btn mic" id="mic-btn" title="Hold to speak">
                             <i class="fas fa-microphone"></i>
                         </button>
                         <button class="control-btn speaker" id="speaker-btn" title="Speaker">
@@ -784,7 +558,7 @@ body {
                     </div>
                     
                     <div class="end-call-container">
-                        <button class="end-call-btn" id="end-call-btn" title="End Roleplay 1.1 call">
+                        <button class="end-call-btn" id="end-call-btn" title="End call">
                             <i class="fas fa-phone"></i>
                         </button>
                     </div>
@@ -794,10 +568,9 @@ body {
             <!-- Feedback Section -->
             <div class="feedback-section" id="feedback-section">
                 <div class="feedback-header">
-                    <div class="roleplay-badge">Roleplay 1.1</div>
                     <div class="score-circle" id="score-circle">85</div>
                     <h4 style="color: white; margin: 0;">Call Complete!</h4>
-                    <p style="color: rgba(255,255,255,0.7); margin: 10px 0;">Here's your CEFR A2 coaching feedback</p>
+                    <p style="color: rgba(255,255,255,0.7); margin: 10px 0;">Here's your coaching feedback</p>
                 </div>
                 
                 <div id="feedback-content">
@@ -823,108 +596,678 @@ body {
      data-user-authenticated="{{ 'true' if session.get('user_id') else 'false' }}"
      style="display: none;">
 </div>
-
-<!-- Voice Error Display -->
-<div id="voice-error" class="alert alert-warning position-fixed" 
-     style="top: 20px; right: 20px; z-index: 9999; max-width: 300px; display: none;">
-    <span id="voice-error-text"></span>
-</div>
 {% endblock %}
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/voice-handler.js') }}"></script>
-<script src="{{ url_for('static', filename='js/roleplay.js') }}"></script>
-
 <script>
-// Additional Roleplay 1.1 specific JavaScript
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('Roleplay 1.1 page loaded');
-    
-    // Add Roleplay 1.1 indicators to the page
-    const phoneContainer = document.getElementById('phone-container');
-    const statusBar = document.getElementById('status-bar');
-    
-    // Mark as Roleplay 1.1 active
-    if (phoneContainer) {
-        phoneContainer.classList.add('roleplay-11-active');
-    }
-    
-    if (statusBar) {
-        statusBar.classList.add('roleplay-11-active');
-    }
-    
-    // Show progress indicator if call is active
-    const progressIndicator = document.getElementById('progress-indicator');
-    
-    // Monitor for call state changes to update progress
-    const observer = new MutationObserver((mutations) => {
-        mutations.forEach((mutation) => {
-            if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-                const callInterface = document.getElementById('call-interface');
-                if (callInterface && callInterface.style.display !== 'none') {
-                    progressIndicator.classList.add('show');
-                } else {
-                    progressIndicator.classList.remove('show');
-                }
-            }
-        });
-    });
-    
-    const callInterface = document.getElementById('call-interface');
-    if (callInterface) {
-        observer.observe(callInterface, { attributes: true });
-    }
-    
-    // Update progress steps based on roleplay manager state
-    window.updateRoleplay11Progress = (stage) => {
-        const steps = ['opener', 'objection', 'pitch', 'discovery'];
-        const currentIndex = steps.indexOf(stage);
+class PhoneRoleplayManager {
+    constructor() {
+        this.selectedMode = null;
+        this.callState = 'idle'; // idle, dialing, ringing, connected, ended
+        this.callStartTime = null;
+        this.durationInterval = null;
+        this.isRecording = false;
+        this.isMuted = false;
+        this.speakerOn = false;
+        this.currentSession = null;
+        this.isActive = false;
+        this.voiceHandler = null;
+        this.aiIsSpeaking = false;
+        this.isProcessing = false;
         
-        steps.forEach((step, index) => {
-            const element = document.getElementById(`step-${step}`);
-            if (element) {
-                element.classList.remove('completed', 'current', 'pending');
-                
-                if (index < currentIndex) {
-                    element.classList.add('completed');
-                } else if (index === currentIndex) {
-                    element.classList.add('current');
-                } else {
-                    element.classList.add('pending');
+        this.init();
+    }
+
+    init() {
+        console.log('Initializing Phone Roleplay Manager...');
+        
+        this.updateTime();
+        setInterval(() => this.updateTime(), 1000);
+        
+        this.loadRoleplayData();
+        this.setupEventListeners();
+        this.initializeModeSelection();
+        
+        // Initialize voice handler
+        if (typeof VoiceHandler !== 'undefined') {
+            this.voiceHandler = new VoiceHandler(this);
+            console.log('Voice handler initialized');
+        }
+    }
+
+    updateTime() {
+        const now = new Date();
+        const time = now.toLocaleTimeString('en-US', { 
+            hour: 'numeric', 
+            minute: '2-digit',
+            hour12: false 
+        });
+        document.getElementById('current-time').textContent = time;
+    }
+
+    loadRoleplayData() {
+        const roleplayId = this.getRoleplayId();
+        if (roleplayId) {
+            this.loadRoleplayInfo(roleplayId);
+        }
+    }
+
+    getRoleplayId() {
+        const pathMatch = window.location.pathname.match(/\/roleplay\/(\d+)/);
+        return pathMatch ? parseInt(pathMatch[1]) : null;
+    }
+
+    async loadRoleplayInfo(roleplayId) {
+        try {
+            const response = await this.apiCall(`/api/roleplay/info/${roleplayId}`);
+            if (response.ok) {
+                const data = await response.json();
+                this.updateRoleplayUI(data);
+            }
+        } catch (error) {
+            console.error('Error loading roleplay info:', error);
+        }
+    }
+
+    updateRoleplayUI(roleplayData) {
+        const titleElement = document.getElementById('roleplay-title');
+        if (titleElement) {
+            titleElement.textContent = roleplayData.name;
+        }
+
+        this.updateProspectInfo(roleplayData);
+    }
+
+    updateProspectInfo(roleplayData) {
+        const avatarElement = document.getElementById('contact-avatar');
+        const nameElement = document.getElementById('contact-name');
+        const titleElement = document.getElementById('contact-info');
+
+        if (nameElement) {
+            nameElement.textContent = this.generateProspectName(roleplayData.job_title);
+        }
+
+        if (titleElement) {
+            titleElement.textContent = `${roleplayData.job_title} • ${roleplayData.industry}`;
+        }
+
+        if (avatarElement) {
+            // Use a more professional stock photo
+            avatarElement.src = `https://images.unsplash.com/photo-${this.getAvatarId(roleplayData.job_title)}?w=150&h=150&fit=crop&crop=face`;
+        }
+    }
+
+    getAvatarId(jobTitle) {
+        const avatarIds = {
+            'CEO': '1507003211169-0a1dd7228f2d',
+            'CTO': '1472099645785-5658abf4ff4e',
+            'VP of Sales': '1519345182560-3f2917c472ef',
+            'Marketing Manager': '1494790108755-74612b16c1be',
+            'Director': '1573496359142-b8d87734a5a2',
+            'Operations Manager': '1560250097-f87d06abe96a'
+        };
+        return avatarIds[jobTitle] || '1507003211169-0a1dd7228f2d';
+    }
+
+    generateProspectName(jobTitle) {
+        const names = {
+            'CEO': ['Alex Morgan', 'Sarah Chen', 'Michael Rodriguez'],
+            'CTO': ['David Kim', 'Jennifer Walsh', 'Robert Singh'],
+            'VP of Sales': ['Lisa Thompson', 'Mark Johnson', 'Amanda Garcia'],
+            'Marketing Manager': ['Emily Davis', 'Chris Wilson', 'Maria Lopez'],
+            'Director': ['Patricia Williams', 'James Davis', 'Linda Miller'],
+            'Operations Manager': ['Robert Taylor', 'Mary Anderson', 'John Wilson']
+        };
+
+        const nameList = names[jobTitle] || ['Jordan Smith', 'Taylor Brown', 'Casey Jones'];
+        return nameList[Math.floor(Math.random() * nameList.length)];
+    }
+
+    setupEventListeners() {
+        // Mode selection
+        document.querySelectorAll('.mode-option').forEach(option => {
+            option.addEventListener('click', () => {
+                this.selectMode(option.dataset.mode);
+            });
+        });
+
+        // Start call
+        document.getElementById('start-call-btn').addEventListener('click', () => {
+            this.startCall();
+        });
+
+        // Call controls
+        document.getElementById('mic-btn').addEventListener('mousedown', () => {
+            this.startRecording();
+        });
+
+        document.getElementById('mic-btn').addEventListener('mouseup', () => {
+            this.stopRecording();
+        });
+
+        document.getElementById('mic-btn').addEventListener('mouseleave', () => {
+            this.stopRecording();
+        });
+
+        document.getElementById('mute-btn').addEventListener('click', () => {
+            this.toggleMute();
+        });
+
+        document.getElementById('speaker-btn').addEventListener('click', () => {
+            this.toggleSpeaker();
+        });
+
+        document.getElementById('end-call-btn').addEventListener('click', () => {
+            this.endCall();
+        });
+
+        // Feedback actions
+        document.getElementById('try-again-btn').addEventListener('click', () => {
+            this.tryAgain();
+        });
+
+        document.getElementById('new-mode-btn').addEventListener('click', () => {
+            this.showModeSelection();
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && this.callState === 'connected') {
+                e.preventDefault();
+                if (!this.isRecording) {
+                    this.startRecording();
                 }
             }
         });
-    };
-    
-    // Initialize progress with opener as current
-    window.updateRoleplay11Progress('opener');
-    
-    // Handle window beforeunload for Roleplay 1.1
-    window.addEventListener('beforeunload', (e) => {
-        if (window.roleplayManager && window.roleplayManager.isActive) {
-            e.preventDefault();
-            e.returnValue = 'Are you sure you want to leave? Your Roleplay 1.1 session will be lost.';
-            return e.returnValue;
+
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'Space' && this.isRecording) {
+                e.preventDefault();
+                this.stopRecording();
+            }
+        });
+    }
+
+    initializeModeSelection() {
+        document.getElementById('mode-selection').style.display = 'flex';
+        document.getElementById('call-interface').style.display = 'none';
+        document.getElementById('feedback-section').style.display = 'none';
+    }
+
+    selectMode(mode) {
+        this.selectedMode = mode;
+        
+        document.querySelectorAll('.mode-option').forEach(option => {
+            option.classList.remove('selected');
+        });
+        
+        document.querySelector(`[data-mode="${mode}"]`).classList.add('selected');
+        
+        const startBtn = document.getElementById('start-call-btn');
+        startBtn.disabled = false;
+        startBtn.textContent = `Start ${this.capitalizeFirst(mode)} Call`;
+    }
+
+    async startCall() {
+        if (!this.selectedMode) return;
+
+        const roleplayId = this.getRoleplayId();
+        console.log('Starting phone call:', { roleplayId, mode: this.selectedMode });
+
+        // Start actual roleplay session
+        try {
+            const response = await this.apiCall('/api/roleplay/start', {
+                method: 'POST',
+                body: JSON.stringify({
+                    roleplay_id: roleplayId,
+                    mode: this.selectedMode
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                this.currentSession = data;
+                this.isActive = true;
+                
+                // Start phone call sequence
+                await this.startPhoneCallSequence(data.initial_response);
+            } else {
+                const errorData = await response.json();
+                this.showError(errorData.error || 'Failed to start roleplay');
+                return;
+            }
+        } catch (error) {
+            console.error('Error starting roleplay:', error);
+            this.showError('Network error. Please try again.');
+            return;
         }
-    });
-    
-    console.log('Roleplay 1.1 enhancements loaded successfully');
+    }
+
+    async startPhoneCallSequence(initialResponse) {
+        // Hide mode selection, show call interface
+        document.getElementById('mode-selection').style.display = 'none';
+        document.getElementById('call-interface').style.display = 'flex';
+
+        await this.dialingState();
+        await this.ringingState();
+        await this.connectedState(initialResponse);
+    }
+
+    async dialingState() {
+        this.callState = 'dialing';
+        this.updateCallStatus('Calling...', 'dialing');
+        
+        const avatar = document.getElementById('contact-avatar');
+        avatar.classList.add('calling');
+        
+        await this.delay(2000);
+    }
+
+    async ringingState() {
+        this.callState = 'ringing';
+        this.updateCallStatus('Ringing...', 'ringing');
+        
+        await this.delay(3000);
+    }
+
+    async connectedState(initialResponse) {
+        this.callState = 'connected';
+        this.updateCallStatus('Connected', 'connected');
+        
+        // Start call timer
+        this.callStartTime = Date.now();
+        this.startCallTimer();
+        
+        // Show live transcript
+        document.getElementById('live-transcript').classList.add('show');
+        
+        // Enable call controls
+        this.enableCallControls();
+        
+        // Play initial AI response
+        if (initialResponse) {
+            await this.playAIResponseAndWaitForUser(initialResponse);
+        } else {
+            this.promptUserToSpeak('The prospect answered. Make your opening!');
+        }
+    }
+
+    updateCallStatus(text, state) {
+        const callInterface = document.getElementById('call-interface');
+        const statusText = document.getElementById('call-status-text');
+        
+        callInterface.className = `call-interface ${state}`;
+        statusText.textContent = text;
+    }
+
+    startCallTimer() {
+        this.durationInterval = setInterval(() => {
+            const elapsed = Date.now() - this.callStartTime;
+            const minutes = Math.floor(elapsed / 60000);
+            const seconds = Math.floor((elapsed % 60000) / 1000);
+            
+            document.getElementById('call-duration').textContent = 
+                `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }, 1000);
+    }
+
+    enableCallControls() {
+        document.getElementById('mic-btn').disabled = false;
+        document.getElementById('mute-btn').disabled = false;
+        document.getElementById('speaker-btn').disabled = false;
+    }
+
+    startRecording() {
+        if (this.callState !== 'connected' || this.isMuted || this.aiIsSpeaking || this.isProcessing) return;
+        
+        this.isRecording = true;
+        const micBtn = document.getElementById('mic-btn');
+        micBtn.classList.add('recording');
+        
+        this.updateTranscript('🎤 You are speaking...');
+        
+        // Start voice recognition
+        if (this.voiceHandler && !this.voiceHandler.isListening) {
+            this.voiceHandler.startListening();
+        }
+    }
+
+    stopRecording() {
+        if (!this.isRecording) return;
+        
+        this.isRecording = false;
+        const micBtn = document.getElementById('mic-btn');
+        micBtn.classList.remove('recording');
+        
+        // Stop voice recognition
+        if (this.voiceHandler && this.voiceHandler.isListening) {
+            this.voiceHandler.stopListening();
+        }
+    }
+
+    async processUserInput(transcript) {
+        if (!this.isActive || !this.currentSession || this.isProcessing || this.aiIsSpeaking) {
+            return;
+        }
+
+        console.log('Processing user input:', transcript);
+        this.isProcessing = true;
+
+        // Stop recording
+        this.stopRecording();
+        this.updateTranscript('Processing your response...');
+
+        try {
+            const response = await this.apiCall('/api/roleplay/respond', {
+                method: 'POST',
+                body: JSON.stringify({
+                    user_input: transcript
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                
+                // Check if call should end
+                if (!data.call_continues) {
+                    await this.endCall(data.success);
+                    return;
+                }
+                
+                // Play AI response
+                await this.playAIResponseAndWaitForUser(data.ai_response);
+                
+            } else {
+                const errorData = await response.json();
+                this.showError(errorData.error || 'Failed to process input');
+                this.promptUserToSpeak('Sorry, please try again...');
+            }
+        } catch (error) {
+            console.error('Error processing user input:', error);
+            this.showError('Network error during call');
+            this.promptUserToSpeak('Network error, please try again...');
+        } finally {
+            this.isProcessing = false;
+        }
+    }
+
+    async playAIResponseAndWaitForUser(text) {
+        try {
+            this.aiIsSpeaking = true;
+            this.updateTranscript(`🎯 Prospect: "${text}"`);
+
+            // Try to play TTS
+            try {
+                const response = await this.apiCall('/api/roleplay/tts', {
+                    method: 'POST',
+                    body: JSON.stringify({ text: text })
+                });
+
+                if (response.ok) {
+                    const audioBlob = await response.blob();
+                    
+                    if (audioBlob.size > 100) {
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        const audio = new Audio(audioUrl);
+                        
+                        await new Promise((resolve) => {
+                            audio.onended = () => {
+                                URL.revokeObjectURL(audioUrl);
+                                resolve();
+                            };
+                            
+                            audio.onerror = () => {
+                                URL.revokeObjectURL(audioUrl);
+                                resolve();
+                            };
+                            
+                            audio.play().catch(() => resolve());
+                        });
+                    } else {
+                        await this.simulateSpeakingTime(text);
+                    }
+                } else {
+                    await this.simulateSpeakingTime(text);
+                }
+            } catch (ttsError) {
+                await this.simulateSpeakingTime(text);
+            }
+
+            this.aiIsSpeaking = false;
+            this.promptUserToSpeak('Your turn! Hold the microphone to respond...');
+            
+        } catch (error) {
+            console.error('Error playing AI response:', error);
+            this.aiIsSpeaking = false;
+            this.promptUserToSpeak('Your turn! Hold the microphone to respond...');
+        }
+    }
+
+    async simulateSpeakingTime(text) {
+        const wordsPerMinute = 150;
+        const words = text.split(' ').length;
+        const speakingTimeMs = (words / wordsPerMinute) * 60 * 1000;
+        const delay = Math.max(1000, Math.min(5000, speakingTimeMs));
+        
+        return new Promise(resolve => setTimeout(resolve, delay));
+    }
+
+    promptUserToSpeak(message) {
+        this.updateTranscript(message);
+        
+        const micBtn = document.getElementById('mic-btn');
+        if (micBtn) {
+            micBtn.classList.add('pulse-animation');
+            setTimeout(() => {
+                micBtn.classList.remove('pulse-animation');
+            }, 3000);
+        }
+    }
+
+    updateTranscript(text) {
+        document.getElementById('live-transcript').textContent = text;
+    }
+
+    toggleMute() {
+        this.isMuted = !this.isMuted;
+        const muteBtn = document.getElementById('mute-btn');
+        
+        if (this.isMuted) {
+            muteBtn.classList.add('active');
+        } else {
+            muteBtn.classList.remove('active');
+        }
+    }
+
+    toggleSpeaker() {
+        this.speakerOn = !this.speakerOn;
+        const speakerBtn = document.getElementById('speaker-btn');
+        
+        if (this.speakerOn) {
+            speakerBtn.classList.add('active');
+        } else {
+            speakerBtn.classList.remove('active');
+        }
+    }
+
+    async endCall(success = false) {
+        if (!this.isActive) return;
+
+        this.callState = 'ended';
+        this.updateCallStatus('Call ended', 'ended');
+        this.isActive = false;
+        this.aiIsSpeaking = false;
+        
+        if (this.durationInterval) {
+            clearInterval(this.durationInterval);
+        }
+        
+        if (this.voiceHandler) {
+            this.voiceHandler.stopListening();
+        }
+        
+        this.stopRecording();
+        document.getElementById('live-transcript').classList.remove('show');
+
+        try {
+            const response = await this.apiCall('/api/roleplay/end', {
+                method: 'POST',
+                body: JSON.stringify({ success: success })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setTimeout(() => {
+                    this.showFeedback(data.coaching);
+                }, 2000);
+            }
+        } catch (error) {
+            console.error('Error ending roleplay:', error);
+            setTimeout(() => {
+                this.showFeedback(null);
+            }, 2000);
+        }
+    }
+
+    showFeedback(coaching) {
+        document.getElementById('call-interface').style.display = 'none';
+        document.getElementById('feedback-section').style.display = 'flex';
+        
+        if (coaching) {
+            this.populateFeedback(coaching);
+            this.animateScore(coaching.overall_score || 75);
+        } else {
+            this.animateScore(75);
+        }
+    }
+
+    populateFeedback(coaching) {
+        const content = document.getElementById('feedback-content');
+        content.innerHTML = '';
+
+        if (coaching.coaching) {
+            if (coaching.coaching.sales_coaching) {
+                content.innerHTML += `
+                    <div class="feedback-item">
+                        <h6><i class="fas fa-chart-line me-2"></i>Sales Performance</h6>
+                        <p style="margin: 0; font-size: 14px;">${coaching.coaching.sales_coaching}</p>
+                    </div>
+                `;
+            }
+            
+            if (coaching.coaching.grammar_coaching) {
+                content.innerHTML += `
+                    <div class="feedback-item">
+                        <h6><i class="fas fa-spell-check me-2"></i>Grammar & Structure</h6>
+                        <p style="margin: 0; font-size: 14px;">${coaching.coaching.grammar_coaching}</p>
+                    </div>
+                `;
+            }
+            
+            if (coaching.coaching.vocabulary_coaching) {
+                content.innerHTML += `
+                    <div class="feedback-item">
+                        <h6><i class="fas fa-book me-2"></i>Vocabulary</h6>
+                        <p style="margin: 0; font-size: 14px;">${coaching.coaching.vocabulary_coaching}</p>
+                    </div>
+                `;
+            }
+            
+            if (coaching.coaching.rapport_assertiveness) {
+                content.innerHTML += `
+                    <div class="feedback-item">
+                        <h6><i class="fas fa-handshake me-2"></i>Rapport & Confidence</h6>
+                        <p style="margin: 0; font-size: 14px;">${coaching.coaching.rapport_assertiveness}</p>
+                    </div>
+                `;
+            }
+        }
+    }
+
+    animateScore(targetScore) {
+        const scoreElement = document.getElementById('score-circle');
+        let currentScore = 0;
+        const increment = targetScore / 30;
+        
+        const timer = setInterval(() => {
+            currentScore += increment;
+            if (currentScore >= targetScore) {
+                currentScore = targetScore;
+                clearInterval(timer);
+            }
+            scoreElement.textContent = Math.round(currentScore);
+        }, 50);
+    }
+
+    tryAgain() {
+        this.startCall();
+    }
+
+    showModeSelection() {
+        document.getElementById('feedback-section').style.display = 'none';
+        this.initializeModeSelection();
+        this.selectedMode = null;
+        
+        document.querySelectorAll('.mode-option').forEach(option => {
+            option.classList.remove('selected');
+        });
+        
+        document.getElementById('start-call-btn').disabled = true;
+        document.getElementById('start-call-btn').textContent = 'Select a mode to start call';
+    }
+
+    showError(message) {
+        this.updateTranscript(`❌ Error: ${message}`);
+    }
+
+    async apiCall(endpoint, options = {}) {
+        const defaultOptions = {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`
+            }
+        };
+
+        const response = await fetch(endpoint, { ...defaultOptions, ...options });
+        
+        if (response.status === 401) {
+            window.location.href = '/login';
+            throw new Error('Authentication required');
+        }
+
+        return response;
+    }
+
+    capitalizeFirst(str) {
+        return str.charAt(0).toUpperCase() + str.slice(1);
+    }
+
+    delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+}
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    if (window.location.pathname.includes('/roleplay/')) {
+        window.roleplayManager = new PhoneRoleplayManager();
+    }
 });
 
-// Global function to update score circle color based on score
-window.updateScoreCircleColor = (score) => {
-    const scoreCircle = document.getElementById('score-circle');
-    if (scoreCircle) {
-        scoreCircle.classList.remove('excellent', 'good', 'needs-improvement');
-        
-        if (score >= 85) {
-            scoreCircle.classList.add('excellent');
-        } else if (score >= 70) {
-            scoreCircle.classList.add('good');
-        } else {
-            scoreCircle.classList.add('needs-improvement');
-        }
+// Add CSS for animations
+const style = document.createElement('style');
+style.textContent = `
+    .pulse-animation {
+        animation: pulse 1.5s infinite !important;
     }
-};
+    
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+    }
+`;
+document.head.appendChild(style);
 </script>
 {% endblock %}
