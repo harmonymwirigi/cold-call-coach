@@ -1,474 +1,594 @@
-<!-- ===== UPDATED TEMPLATES/ROLEPLAY.HTML (WITH FIXES) ===== -->
 {% extends "base.html" %}
 
-{% block title %}{{ roleplay_config.name if roleplay_config else 'Roleplay Training' }} - Cold Calling Coach{% endblock %}
+{% block title %}{{ roleplay_config.name if roleplay_config else 'Phone Training' }} - Cold Calling Coach{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/roleplay.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/voice.css') }}">
 <style>
-/* Additional roleplay-specific styles */
-.roleplay-container {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+body {
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
     min-height: 100vh;
-    padding: 1rem 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    margin: 0;
 }
 
-.roleplay-header {
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(10px);
-    border-radius: 20px;
-    padding: 1.5rem;
-    margin-bottom: 2rem;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: white;
+.training-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
 }
 
-.back-button {
-    background: rgba(255, 255, 255, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.3);
+/* Phone Container */
+.phone-container {
+    width: 380px;
+    height: 680px;
+    background: #000;
+    border-radius: 40px;
+    padding: 20px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    position: relative;
+    overflow: hidden;
+}
+
+.phone-screen {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+    border-radius: 25px;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Status Bar */
+.status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
     color: white;
-    border-radius: 10px;
-    padding: 0.5rem 1rem;
-    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.time {
+    font-size: 16px;
+}
+
+.status-icons {
+    display: flex;
+    gap: 5px;
+}
+
+/* Call Interface */
+.call-interface {
+    height: calc(100% - 50px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px;
+    color: white;
+    text-align: center;
+}
+
+/* Call Status */
+.call-status {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     transition: all 0.3s ease;
 }
 
-.back-button:hover {
+.contact-avatar {
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    object-fit: cover;
+    margin-bottom: 20px;
+    transition: all 0.3s ease;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.contact-avatar.calling {
+    animation: pulse-avatar 2s infinite;
+}
+
+@keyframes pulse-avatar {
+    0%, 100% { 
+        transform: scale(1);
+        border-color: rgba(255, 255, 255, 0.3);
+    }
+    50% { 
+        transform: scale(1.05);
+        border-color: rgba(34, 197, 94, 0.8);
+    }
+}
+
+.contact-name {
+    font-size: 28px;
+    font-weight: 300;
+    margin-bottom: 10px;
+    letter-spacing: 0.5px;
+}
+
+.contact-info {
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 20px;
+}
+
+.call-status-text {
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 10px;
+    min-height: 25px;
+}
+
+.call-duration {
+    font-size: 16px;
+    color: rgba(34, 197, 94, 1);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Call Controls */
+.call-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 40px;
+    margin-bottom: 30px;
+}
+
+.control-btn {
+    width: 65px;
+    height: 65px;
+    border-radius: 50%;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.control-btn:hover {
+    transform: scale(1.1);
+}
+
+.control-btn:active {
+    transform: scale(0.95);
+}
+
+.control-btn.mute {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.control-btn.mute.active {
+    background: rgba(239, 68, 68, 0.9);
+}
+
+.control-btn.speaker {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.control-btn.speaker.active {
+    background: rgba(59, 130, 246, 0.9);
+}
+
+.control-btn.mic {
+    background: rgba(34, 197, 94, 0.9);
+    box-shadow: 0 4px 20px rgba(34, 197, 94, 0.4);
+}
+
+.control-btn.mic.recording {
+    background: rgba(239, 68, 68, 0.9);
+    animation: pulse-record 1.5s infinite;
+}
+
+@keyframes pulse-record {
+    0%, 100% { 
+        box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4);
+    }
+    50% { 
+        box-shadow: 0 4px 30px rgba(239, 68, 68, 0.8), 0 0 0 10px rgba(239, 68, 68, 0.2);
+    }
+}
+
+/* End Call Button */
+.end-call-container {
+    display: flex;
+    justify-content: center;
+}
+
+.end-call-btn {
+    width: 65px;
+    height: 65px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(239, 68, 68, 0.9);
+    color: white;
+    font-size: 28px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4);
+}
+
+.end-call-btn:hover {
+    transform: scale(1.1);
+    background: rgba(220, 38, 38, 1);
+}
+
+.end-call-btn:active {
+    transform: scale(0.95);
+}
+
+/* Call States */
+.call-interface.dialing .call-status-text {
+    color: rgba(59, 130, 246, 1);
+}
+
+.call-interface.ringing .call-status-text {
+    color: rgba(251, 191, 36, 1);
+    animation: blink 1s infinite;
+}
+
+.call-interface.connected .call-status-text {
+    color: rgba(34, 197, 94, 1);
+}
+
+.call-interface.ended .call-status-text {
+    color: rgba(239, 68, 68, 1);
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.5; }
+}
+
+/* Mode Selection (before call) */
+.mode-selection {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+    border-radius: 25px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 10;
+}
+
+.mode-selection h3 {
+    color: white;
+    margin-bottom: 30px;
+    text-align: center;
+    font-weight: 300;
+}
+
+.mode-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 15px;
+    width: 100%;
+    max-width: 280px;
+}
+
+.mode-option {
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 15px;
+    padding: 20px;
+    color: white;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.mode-option:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.4);
+    transform: translateY(-2px);
+}
+
+.mode-option.selected {
+    background: rgba(34, 197, 94, 0.3);
+    border-color: rgba(34, 197, 94, 0.8);
+}
+
+.mode-option h5 {
+    margin: 10px 0 5px 0;
+    font-weight: 500;
+}
+
+.mode-option small {
+    opacity: 0.8;
+}
+
+.start-call-btn {
+    margin-top: 20px;
+    background: rgba(34, 197, 94, 0.9);
+    border: none;
+    border-radius: 25px;
+    padding: 15px 40px;
+    color: white;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    width: 100%;
+}
+
+.start-call-btn:hover:not(:disabled) {
+    background: rgba(34, 197, 94, 1);
+    transform: translateY(-2px);
+}
+
+.start-call-btn:disabled {
+    background: rgba(255, 255, 255, 0.2);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* Feedback Section */
+.feedback-section {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+    border-radius: 25px;
+    display: none;
+    flex-direction: column;
+    padding: 20px;
+    z-index: 10;
+    overflow-y: auto;
+}
+
+.feedback-header {
+    text-align: center;
+    color: white;
+    margin-bottom: 20px;
+}
+
+.score-circle {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: rgba(34, 197, 94, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 10px;
+    font-size: 24px;
+    font-weight: bold;
+    color: white;
+}
+
+.feedback-item {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 15px;
+    margin-bottom: 10px;
+    color: white;
+}
+
+.feedback-item h6 {
+    margin-bottom: 8px;
+    color: rgba(34, 197, 94, 1);
+}
+
+.feedback-actions {
+    margin-top: auto;
+    display: flex;
+    gap: 10px;
+}
+
+.feedback-btn {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    border-radius: 10px;
+    padding: 12px;
+    color: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.feedback-btn:hover {
     background: rgba(255, 255, 255, 0.3);
+}
+
+.feedback-btn.primary {
+    background: rgba(34, 197, 94, 0.9);
+}
+
+.feedback-btn.primary:hover {
+    background: rgba(34, 197, 94, 1);
+}
+
+/* Live Transcript */
+.live-transcript {
+    position: absolute;
+    bottom: 150px;
+    left: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.8);
+    border-radius: 15px;
+    padding: 15px;
+    color: white;
+    font-size: 14px;
+    max-height: 100px;
+    overflow-y: auto;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all 0.3s ease;
+}
+
+.live-transcript.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Back Button */
+.back-to-dashboard {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    border-radius: 25px;
+    padding: 10px 20px;
+    text-decoration: none;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    z-index: 100;
+}
+
+.back-to-dashboard:hover {
+    background: rgba(255, 255, 255, 0.2);
     color: white;
     text-decoration: none;
     transform: translateY(-2px);
 }
 
-.prospect-card {
-    background: white;
-    border-radius: 20px;
-    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
-    overflow: hidden;
-    margin-bottom: 2rem;
-    transition: transform 0.3s ease;
-}
-
-.prospect-card:hover {
-    transform: translateY(-5px);
-}
-
-.prospect-header {
-    background: linear-gradient(45deg, #667eea, #764ba2);
-    color: white;
-    padding: 1rem;
-    text-align: center;
-}
-
-.prospect-avatar {
-    width: 100px;
-    height: 100px;
-    border-radius: 50%;
-    border: 4px solid rgba(255, 255, 255, 0.3);
-    object-fit: cover;
-    margin-bottom: 1rem;
-    transition: transform 0.3s ease;
-}
-
-.prospect-avatar:hover {
-    transform: scale(1.05);
-}
-
-.conversation-container {
-    background: white;
-    border-radius: 20px;
-    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
-    overflow: hidden;
-    max-height: 500px;
-}
-
-.conversation-header {
-    background: #f8f9fa;
-    padding: 1rem;
-    border-bottom: 1px solid #dee2e6;
-    font-weight: 600;
-    color: #495057;
-}
-
-.voice-control-card {
-    background: white;
-    border-radius: 20px;
-    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
-    padding: 2rem;
-    text-align: center;
-    position: relative;
-    overflow: hidden;
-}
-
-.voice-control-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 4px;
-    background: linear-gradient(90deg, #667eea, #764ba2, #667eea);
-    background-size: 200% 100%;
-    animation: shimmer 3s ease-in-out infinite;
-}
-
-@keyframes shimmer {
-    0%, 100% { background-position: 0% 0%; }
-    50% { background-position: 100% 0%; }
-}
-
-.mode-selection-card {
-    background: white;
-    border-radius: 20px;
-    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
-    padding: 2rem;
-    margin-bottom: 2rem;
-}
-
-.coaching-card {
-    background: white;
-    border-radius: 20px;
-    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
-    overflow: hidden;
-    animation: slideInUp 0.5s ease;
-}
-
-@keyframes slideInUp {
-    from {
-        opacity: 0;
-        transform: translateY(30px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.alert-banner {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 1050;
-    max-width: 400px;
-    border-radius: 10px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
-}
-
-.session-progress {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-    padding: 1rem;
-    margin-top: 1rem;
-    color: white;
-}
-
-.progress-indicator {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 0.5rem;
-}
-
-.loading-screen {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(255, 255, 255, 0.95);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    z-index: 2000;
-}
-
-.loading-spinner {
-    width: 60px;
-    height: 60px;
-    border: 4px solid #f3f3f3;
-    border-top: 4px solid #667eea;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin-bottom: 1rem;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-    .roleplay-container {
-        padding: 0.5rem 0;
+/* Responsive Design */
+@media (max-width: 480px) {
+    .training-container {
+        padding: 10px;
     }
     
-    .roleplay-header {
-        padding: 1rem;
-        margin-bottom: 1rem;
-    }
-    
-    .prospect-avatar {
-        width: 80px;
-        height: 80px;
-    }
-    
-    .voice-control-card,
-    .mode-selection-card,
-    .coaching-card {
-        margin-bottom: 1rem;
-        padding: 1.5rem;
-    }
-    
-    .conversation-container {
-        max-height: 300px;
+    .phone-container {
+        width: 100%;
+        max-width: 380px;
+        height: 90vh;
+        max-height: 680px;
     }
 }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="roleplay-container">
-    <div class="container-fluid">
-        <!-- Header Section -->
-        <div class="roleplay-header">
-            <div class="row align-items-center">
-                <div class="col-auto">
-                    <a href="/dashboard" class="back-button">
-                        <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
-                    </a>
-                </div>
-                <div class="col">
-                    <h1 id="roleplay-title" class="mb-1">Loading...</h1>
-                    <p id="roleplay-description" class="mb-0 opacity-75">Loading roleplay information...</p>
-                </div>
-                <div class="col-auto">
-                    <div class="session-progress" id="session-progress" style="display: none;">
-                        <div class="progress-indicator">
-                            <span id="session-mode">Practice</span>
-                            <span id="call-counter">Call 1/1</span>
-                        </div>
-                        <div class="progress" style="height: 4px;">
-                            <div class="progress-bar bg-light" id="session-progress-bar" style="width: 0%"></div>
-                        </div>
-                    </div>
+<div class="training-container">
+    <!-- Back to Dashboard -->
+    <a href="/dashboard" class="back-to-dashboard">
+        <i class="fas fa-arrow-left me-2"></i>Dashboard
+    </a>
+
+    <div class="phone-container">
+        <div class="phone-screen">
+            <!-- Status Bar -->
+            <div class="status-bar">
+                <div class="time" id="current-time">9:41</div>
+                <div class="status-icons">
+                    <i class="fas fa-signal"></i>
+                    <i class="fas fa-wifi"></i>
+                    <i class="fas fa-battery-three-quarters"></i>
                 </div>
             </div>
-        </div>
 
-        <div class="row">
-            <!-- Left Column: Prospect Info & Conversation -->
-            <div class="col-lg-4 order-lg-1 order-2">
-                <!-- Prospect Information Card -->
-                <div class="prospect-card">
-                    <div class="prospect-header">
-                        <img src="https://via.placeholder.com/100x100/6c757d/ffffff?text=👤" 
-                             alt="Prospect" 
-                             class="prospect-avatar" 
-                             id="prospect-avatar">
-                        <h5 id="prospect-name" class="mb-1">Alex Morgan</h5>
-                        <p id="prospect-title" class="mb-0 opacity-75">CEO</p>
-                        <small id="prospect-industry" class="opacity-75">Technology</small>
+            <!-- Mode Selection Screen -->
+            <div class="mode-selection" id="mode-selection">
+                <h3 id="roleplay-title">Choose Training Mode</h3>
+                <div class="mode-grid">
+                    <div class="mode-option" data-mode="practice">
+                        <i class="fas fa-user-graduate fa-2x" style="color: #60a5fa;"></i>
+                        <h5>Practice Mode</h5>
+                        <small>Single call with detailed feedback</small>
                     </div>
-                    <div class="p-3">
-                        <!-- AI Status Indicator -->
-                        <div class="ai-status-indicator text-center">
-                            <div id="ai-status" class="ai-status listening">
-                                <i class="fas fa-circle me-1"></i>
-                                AI is ready
-                            </div>
-                        </div>
+                    <div class="mode-option" data-mode="marathon">
+                        <i class="fas fa-running fa-2x" style="color: #fbbf24;"></i>
+                        <h5>Marathon Mode</h5>
+                        <small>10 calls, need 6 to pass</small>
+                    </div>
+                    <div class="mode-option" data-mode="legend">
+                        <i class="fas fa-trophy fa-2x" style="color: #f87171;"></i>
+                        <h5>Legend Mode</h5>
+                        <small>6 perfect calls (sudden death)</small>
                     </div>
                 </div>
+                <button class="start-call-btn" id="start-call-btn" disabled>
+                    Select a mode to start call
+                </button>
+            </div>
 
-                <!-- Conversation Log -->
-                <div class="conversation-container">
-                    <div class="conversation-header">
-                        <i class="fas fa-comments me-2"></i>Conversation Log
-                        <button class="btn btn-sm btn-outline-secondary float-end" onclick="clearConversation()">
-                            <i class="fas fa-eraser"></i>
+            <!-- Call Interface -->
+            <div class="call-interface" id="call-interface" style="display: none;">
+                <!-- Call Status -->
+                <div class="call-status">
+                    <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face" 
+                         alt="Contact" class="contact-avatar" id="contact-avatar">
+                    <div class="contact-name" id="contact-name">Alex Morgan</div>
+                    <div class="contact-info" id="contact-info">CTO • TechCorp</div>
+                    <div class="call-status-text" id="call-status-text">Calling...</div>
+                    <div class="call-duration" id="call-duration">00:00</div>
+                </div>
+
+                <!-- Live Transcript -->
+                <div class="live-transcript" id="live-transcript">
+                    Waiting for conversation...
+                </div>
+
+                <!-- Call Controls -->
+                <div style="margin-top: auto;">
+                    <div class="call-controls">
+                        <button class="control-btn mute" id="mute-btn" title="Mute">
+                            <i class="fas fa-microphone-slash"></i>
+                        </button>
+                        <button class="control-btn mic" id="mic-btn" title="Hold to speak">
+                            <i class="fas fa-microphone"></i>
+                        </button>
+                        <button class="control-btn speaker" id="speaker-btn" title="Speaker">
+                            <i class="fas fa-volume-up"></i>
                         </button>
                     </div>
-                    <div class="conversation-log" id="conversation-log">
-                        <div class="text-center text-muted p-4">
-                            <i class="fas fa-phone-alt fa-2x mb-2 opacity-50"></i>
-                            <div>Start the roleplay to begin conversation</div>
-                        </div>
+                    
+                    <div class="end-call-container">
+                        <button class="end-call-btn" id="end-call-btn" title="End call">
+                            <i class="fas fa-phone"></i>
+                        </button>
                     </div>
                 </div>
             </div>
 
-            <!-- Right Column: Main Training Interface -->
-            <div class="col-lg-8 order-lg-2 order-1">
-                <!-- Mode Selection Section -->
-                <div id="mode-selection-section">
-                    <div class="mode-selection-card">
-                        <h3 class="text-center mb-4">
-                            <i class="fas fa-play-circle text-primary me-2"></i>
-                            Choose Your Training Mode
-                        </h3>
-                        
-                        <div class="row g-3">
-                            <div class="col-md-4">
-                                <button class="btn btn-outline-primary w-100 h-100 mode-btn" 
-                                        data-mode="practice"
-                                        style="min-height: 120px;">
-                                    <div class="d-flex flex-column align-items-center">
-                                        <i class="fas fa-user-graduate fa-2x mb-2"></i>
-                                        <strong>Practice Mode</strong>
-                                        <small class="mt-1 opacity-75">Single call + coaching feedback</small>
-                                    </div>
-                                </button>
-                            </div>
-                            <div class="col-md-4">
-                                <button class="btn btn-outline-warning w-100 h-100 mode-btn" 
-                                        data-mode="marathon"
-                                        style="min-height: 120px;">
-                                    <div class="d-flex flex-column align-items-center">
-                                        <i class="fas fa-running fa-2x mb-2"></i>
-                                        <strong>Marathon Mode</strong>
-                                        <small class="mt-1 opacity-75">10 calls, need 6 to pass</small>
-                                    </div>
-                                </button>
-                            </div>
-                            <div class="col-md-4">
-                                <button class="btn btn-outline-danger w-100 h-100 mode-btn" 
-                                        data-mode="legend"
-                                        style="min-height: 120px;">
-                                    <div class="d-flex flex-column align-items-center">
-                                        <i class="fas fa-trophy fa-2x mb-2"></i>
-                                        <strong>Legend Mode</strong>
-                                        <small class="mt-1 opacity-75">6 perfect calls (sudden death)</small>
-                                    </div>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="text-center mt-4">
-                            <button id="start-training-btn" class="btn btn-success btn-lg" disabled>
-                                <i class="fas fa-rocket me-2"></i>
-                                Select a mode to start training
-                            </button>
-                        </div>
-
-                        <!-- Mode Information -->
-                        <div class="alert alert-info mt-3" id="mode-info" style="display: none;">
-                            <div id="mode-details"></div>
-                        </div>
-                    </div>
+            <!-- Feedback Section -->
+            <div class="feedback-section" id="feedback-section">
+                <div class="feedback-header">
+                    <div class="score-circle" id="score-circle">85</div>
+                    <h4 style="color: white; margin: 0;">Call Complete!</h4>
+                    <p style="color: rgba(255,255,255,0.7); margin: 10px 0;">Here's your coaching feedback</p>
                 </div>
-
-                <!-- Active Training Section -->
-                <div id="active-training-section" style="display: none;">
-                    <div class="voice-control-card">
-                        <h3 class="mb-3">
-                            <i class="fas fa-microphone text-primary me-2"></i>
-                            Cold Call in Progress
-                        </h3>
-                        
-                        <p class="text-muted mb-4">
-                            Use the microphone button or press <kbd>Ctrl</kbd> + <kbd>Space</kbd> to speak
-                        </p>
-
-                        <!-- Main Microphone Button -->
-                        <div class="mb-4">
-                            <button id="mic-button" class="mic-button btn btn-primary" disabled>
-                                <i class="fas fa-microphone"></i>
-                            </button>
-                        </div>
-
-                        <!-- Live Transcript Display -->
-                        <div class="transcript-display mb-4">
-                            <div id="live-transcript" class="live-transcript">
-                                Waiting for training to start...
-                            </div>
-                        </div>
-
-                        <!-- Voice Error Display -->
-                        <div id="voice-error" class="alert alert-warning" style="display: none;">
-                            <i class="fas fa-exclamation-triangle me-2"></i>
-                            <span id="voice-error-text"></span>
-                        </div>
-
-                        <!-- Training Controls -->
-                        <div class="d-flex justify-content-center gap-3">
-                            <button id="pause-training-btn" class="btn btn-outline-warning" style="display: none;">
-                                <i class="fas fa-pause me-2"></i>Pause
-                            </button>
-                            <button id="end-training-btn" class="btn btn-outline-danger">
-                                <i class="fas fa-stop me-2"></i>End Training
-                            </button>
-                            <button id="abort-training-btn" class="btn btn-outline-secondary">
-                                <i class="fas fa-times me-2"></i>Abort
-                            </button>
-                        </div>
-
-                        <!-- Quick Tips -->
-                        <div class="mt-4">
-                            <small class="text-muted">
-                                <strong>Tips:</strong> Speak clearly, wait for AI responses, be natural and confident
-                            </small>
-                        </div>
-
-                        <!-- Keyboard Shortcuts -->
-                        <div class="keyboard-shortcuts mt-3">
-                            <h6>Keyboard Shortcuts:</h6>
-                            <div class="shortcut">
-                                <span>Toggle microphone</span>
-                                <kbd>Ctrl + Space</kbd>
-                            </div>
-                            <div class="shortcut">
-                                <span>End training</span>
-                                <kbd>Escape</kbd>
-                            </div>
-                        </div>
-                    </div>
+                
+                <div id="feedback-content">
+                    <!-- Feedback will be populated here -->
                 </div>
-
-                <!-- Coaching Feedback Section -->
-                <div id="coaching-feedback-section" class="coaching-card" style="display: none;">
-                    <div class="card-header bg-primary text-white">
-                        <h4 class="mb-0">
-                            <i class="fas fa-chalkboard-teacher me-2"></i>
-                            Your Coaching Feedback
-                        </h4>
-                    </div>
-                    <div class="card-body" id="coaching-content">
-                        <!-- Coaching content will be populated here -->
-                    </div>
-                    <div class="card-footer bg-light">
-                        <div class="d-flex justify-content-center gap-3">
-                            <button id="try-again-btn" class="btn btn-primary">
-                                <i class="fas fa-redo me-2"></i>Try Again
-                            </button>
-                            <button id="change-mode-btn" class="btn btn-outline-secondary">
-                                <i class="fas fa-cog me-2"></i>Change Mode
-                            </button>
-                            <a href="/dashboard" class="btn btn-outline-primary">
-                                <i class="fas fa-home me-2"></i>Dashboard
-                            </a>
-                        </div>
-                    </div>
+                
+                <div class="feedback-actions">
+                    <button class="feedback-btn" id="try-again-btn">
+                        <i class="fas fa-redo me-2"></i>Try Again
+                    </button>
+                    <button class="feedback-btn primary" id="new-mode-btn">
+                        <i class="fas fa-phone me-2"></i>New Call
+                    </button>
                 </div>
             </div>
         </div>
     </div>
 </div>
-
-<!-- Loading Screen -->
-<div id="loading-screen" class="loading-screen" style="display: none;">
-    <div class="loading-spinner"></div>
-    <h4 id="loading-text">Loading...</h4>
-    <p id="loading-subtext" class="text-muted"></p>
-</div>
-
-<!-- Alert Banner Container -->
-<div id="alert-container"></div>
-
-<!-- Audio Element for TTS Playback -->
-<audio id="tts-audio" preload="none"></audio>
 
 <!-- Hidden Data -->
 <div id="roleplay-data" 
@@ -479,275 +599,675 @@
 {% endblock %}
 
 {% block extra_js %}
-<!-- Include Voice Handler -->
 <script src="{{ url_for('static', filename='js/voice-handler.js') }}"></script>
-
-<!-- Include Main Roleplay Script -->
-<script src="{{ url_for('static', filename='js/roleplay.js') }}"></script>
-
-<!-- Additional Roleplay Template Script -->
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize roleplay template specific functionality
-    initializeRoleplayTemplate();
-});
-
-function initializeRoleplayTemplate() {
-    // Get roleplay data from template
-    const roleplayData = document.getElementById('roleplay-data');
-    const roleplayId = parseInt(roleplayData.dataset.roleplayId);
-    const isAuthenticated = roleplayData.dataset.userAuthenticated === 'true';
-    
-    // Check authentication
-    if (!isAuthenticated) {
-        showAlert('Please log in to access training modules', 'warning');
-        setTimeout(() => {
-            window.location.href = '/login';
-        }, 2000);
-        return;
+class PhoneRoleplayManager {
+    constructor() {
+        this.selectedMode = null;
+        this.callState = 'idle'; // idle, dialing, ringing, connected, ended
+        this.callStartTime = null;
+        this.durationInterval = null;
+        this.isRecording = false;
+        this.isMuted = false;
+        this.speakerOn = false;
+        this.currentSession = null;
+        this.isActive = false;
+        this.voiceHandler = null;
+        this.aiIsSpeaking = false;
+        this.isProcessing = false;
+        
+        this.init();
     }
-    
-    // Initialize UI elements
-    setupModeButtons();
-    setupKeyboardShortcuts();
-    setupResponsiveHandlers();
-    
-    console.log(`Roleplay template initialized for roleplay ${roleplayId}`);
-}
 
-function setupModeButtons() {
-    const modeButtons = document.querySelectorAll('.mode-btn');
-    const startButton = document.getElementById('start-training-btn');
-    const modeInfo = document.getElementById('mode-info');
-    const modeDetails = document.getElementById('mode-details');
-    
-    let selectedMode = null;
-    
-    modeButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            const mode = this.dataset.mode;
-            
-            // Update selected mode
-            selectedMode = mode;
-            
-            // Update button states
-            modeButtons.forEach(btn => {
-                btn.classList.remove('btn-primary', 'btn-warning', 'btn-danger');
-                btn.classList.add('btn-outline-primary', 'btn-outline-warning', 'btn-outline-danger');
-            });
-            
-            // Highlight selected button
-            this.classList.remove('btn-outline-' + getButtonColor(mode));
-            this.classList.add('btn-' + getButtonColor(mode));
-            
-            // Update start button
-            startButton.disabled = false;
-            startButton.innerHTML = `<i class="fas fa-rocket me-2"></i>Start ${capitalizeFirst(mode)} Mode`;
-            
-            // Show mode information
-            modeDetails.innerHTML = getModeDescription(mode);
-            modeInfo.style.display = 'block';
-        });
-    });
-    
-    // Start button handler
-    startButton.addEventListener('click', function() {
-        if (selectedMode && typeof roleplayManager !== 'undefined') {
-            roleplayManager.selectedMode = selectedMode;
-            roleplayManager.startRoleplay();
+    init() {
+        console.log('Initializing Phone Roleplay Manager...');
+        
+        this.updateTime();
+        setInterval(() => this.updateTime(), 1000);
+        
+        this.loadRoleplayData();
+        this.setupEventListeners();
+        this.initializeModeSelection();
+        
+        // Initialize voice handler
+        if (typeof VoiceHandler !== 'undefined') {
+            this.voiceHandler = new VoiceHandler(this);
+            console.log('Voice handler initialized');
         }
-    });
-}
+    }
 
-function getButtonColor(mode) {
-    const colors = {
-        'practice': 'primary',
-        'marathon': 'warning', 
-        'legend': 'danger'
-    };
-    return colors[mode] || 'primary';
-}
+    updateTime() {
+        const now = new Date();
+        const time = now.toLocaleTimeString('en-US', { 
+            hour: 'numeric', 
+            minute: '2-digit',
+            hour12: false 
+        });
+        document.getElementById('current-time').textContent = time;
+    }
 
-function getModeDescription(mode) {
-    const descriptions = {
-        'practice': `
-            <strong>Practice Mode:</strong> Perfect for learning and skill building.
-            <ul class="mb-0 mt-2">
-                <li>Single roleplay call with AI prospect</li>
-                <li>Detailed coaching feedback after each call</li>
-                <li>No pressure - focus on improvement</li>
-                <li>Immediate feedback on all aspects</li>
-            </ul>
-        `,
-        'marathon': `
-            <strong>Marathon Mode:</strong> Test your consistency across multiple calls.
-            <ul class="mb-0 mt-2">
-                <li>10 consecutive calls with different objections</li>
-                <li>Need 6 successful calls to pass and unlock next module</li>
-                <li>Builds endurance and confidence</li>
-                <li>Earn Legend Mode attempt upon passing</li>
-            </ul>
-        `,
-        'legend': `
-            <strong>Legend Mode:</strong> The ultimate challenge for sales professionals.
-            <ul class="mb-0 mt-2">
-                <li>6 consecutive calls - must succeed on ALL</li>
-                <li>One failure ends the attempt (sudden death)</li>
-                <li>Only available after passing Marathon Mode</li>
-                <li>Bragging rights for the best of the best!</li>
-            </ul>
-        `
-    };
-    return descriptions[mode] || '';
-}
+    loadRoleplayData() {
+        const roleplayId = this.getRoleplayId();
+        if (roleplayId) {
+            this.loadRoleplayInfo(roleplayId);
+        }
+    }
 
-function setupKeyboardShortcuts() {
-    document.addEventListener('keydown', function(e) {
-        // Escape key to end training
-        if (e.key === 'Escape' && document.getElementById('active-training-section').style.display !== 'none') {
-            if (confirm('Are you sure you want to end the training session?')) {
-                if (typeof roleplayManager !== 'undefined') {
-                    roleplayManager.endRoleplay();
+    getRoleplayId() {
+        const pathMatch = window.location.pathname.match(/\/roleplay\/(\d+)/);
+        return pathMatch ? parseInt(pathMatch[1]) : null;
+    }
+
+    async loadRoleplayInfo(roleplayId) {
+        try {
+            const response = await this.apiCall(`/api/roleplay/info/${roleplayId}`);
+            if (response.ok) {
+                const data = await response.json();
+                this.updateRoleplayUI(data);
+            }
+        } catch (error) {
+            console.error('Error loading roleplay info:', error);
+        }
+    }
+
+    updateRoleplayUI(roleplayData) {
+        const titleElement = document.getElementById('roleplay-title');
+        if (titleElement) {
+            titleElement.textContent = roleplayData.name;
+        }
+
+        this.updateProspectInfo(roleplayData);
+    }
+
+    updateProspectInfo(roleplayData) {
+        const avatarElement = document.getElementById('contact-avatar');
+        const nameElement = document.getElementById('contact-name');
+        const titleElement = document.getElementById('contact-info');
+
+        if (nameElement) {
+            nameElement.textContent = this.generateProspectName(roleplayData.job_title);
+        }
+
+        if (titleElement) {
+            titleElement.textContent = `${roleplayData.job_title} • ${roleplayData.industry}`;
+        }
+
+        if (avatarElement) {
+            // Use a more professional stock photo
+            avatarElement.src = `https://images.unsplash.com/photo-${this.getAvatarId(roleplayData.job_title)}?w=150&h=150&fit=crop&crop=face`;
+        }
+    }
+
+    getAvatarId(jobTitle) {
+        const avatarIds = {
+            'CEO': '1507003211169-0a1dd7228f2d',
+            'CTO': '1472099645785-5658abf4ff4e',
+            'VP of Sales': '1519345182560-3f2917c472ef',
+            'Marketing Manager': '1494790108755-74612b16c1be',
+            'Director': '1573496359142-b8d87734a5a2',
+            'Operations Manager': '1560250097-f87d06abe96a'
+        };
+        return avatarIds[jobTitle] || '1507003211169-0a1dd7228f2d';
+    }
+
+    generateProspectName(jobTitle) {
+        const names = {
+            'CEO': ['Alex Morgan', 'Sarah Chen', 'Michael Rodriguez'],
+            'CTO': ['David Kim', 'Jennifer Walsh', 'Robert Singh'],
+            'VP of Sales': ['Lisa Thompson', 'Mark Johnson', 'Amanda Garcia'],
+            'Marketing Manager': ['Emily Davis', 'Chris Wilson', 'Maria Lopez'],
+            'Director': ['Patricia Williams', 'James Davis', 'Linda Miller'],
+            'Operations Manager': ['Robert Taylor', 'Mary Anderson', 'John Wilson']
+        };
+
+        const nameList = names[jobTitle] || ['Jordan Smith', 'Taylor Brown', 'Casey Jones'];
+        return nameList[Math.floor(Math.random() * nameList.length)];
+    }
+
+    setupEventListeners() {
+        // Mode selection
+        document.querySelectorAll('.mode-option').forEach(option => {
+            option.addEventListener('click', () => {
+                this.selectMode(option.dataset.mode);
+            });
+        });
+
+        // Start call
+        document.getElementById('start-call-btn').addEventListener('click', () => {
+            this.startCall();
+        });
+
+        // Call controls
+        document.getElementById('mic-btn').addEventListener('mousedown', () => {
+            this.startRecording();
+        });
+
+        document.getElementById('mic-btn').addEventListener('mouseup', () => {
+            this.stopRecording();
+        });
+
+        document.getElementById('mic-btn').addEventListener('mouseleave', () => {
+            this.stopRecording();
+        });
+
+        document.getElementById('mute-btn').addEventListener('click', () => {
+            this.toggleMute();
+        });
+
+        document.getElementById('speaker-btn').addEventListener('click', () => {
+            this.toggleSpeaker();
+        });
+
+        document.getElementById('end-call-btn').addEventListener('click', () => {
+            this.endCall();
+        });
+
+        // Feedback actions
+        document.getElementById('try-again-btn').addEventListener('click', () => {
+            this.tryAgain();
+        });
+
+        document.getElementById('new-mode-btn').addEventListener('click', () => {
+            this.showModeSelection();
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && this.callState === 'connected') {
+                e.preventDefault();
+                if (!this.isRecording) {
+                    this.startRecording();
                 }
             }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'Space' && this.isRecording) {
+                e.preventDefault();
+                this.stopRecording();
+            }
+        });
+    }
+
+    initializeModeSelection() {
+        document.getElementById('mode-selection').style.display = 'flex';
+        document.getElementById('call-interface').style.display = 'none';
+        document.getElementById('feedback-section').style.display = 'none';
+    }
+
+    selectMode(mode) {
+        this.selectedMode = mode;
+        
+        document.querySelectorAll('.mode-option').forEach(option => {
+            option.classList.remove('selected');
+        });
+        
+        document.querySelector(`[data-mode="${mode}"]`).classList.add('selected');
+        
+        const startBtn = document.getElementById('start-call-btn');
+        startBtn.disabled = false;
+        startBtn.textContent = `Start ${this.capitalizeFirst(mode)} Call`;
+    }
+
+    async startCall() {
+        if (!this.selectedMode) return;
+
+        const roleplayId = this.getRoleplayId();
+        console.log('Starting phone call:', { roleplayId, mode: this.selectedMode });
+
+        // Start actual roleplay session
+        try {
+            const response = await this.apiCall('/api/roleplay/start', {
+                method: 'POST',
+                body: JSON.stringify({
+                    roleplay_id: roleplayId,
+                    mode: this.selectedMode
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                this.currentSession = data;
+                this.isActive = true;
+                
+                // Start phone call sequence
+                await this.startPhoneCallSequence(data.initial_response);
+            } else {
+                const errorData = await response.json();
+                this.showError(errorData.error || 'Failed to start roleplay');
+                return;
+            }
+        } catch (error) {
+            console.error('Error starting roleplay:', error);
+            this.showError('Network error. Please try again.');
+            return;
+        }
+    }
+
+    async startPhoneCallSequence(initialResponse) {
+        // Hide mode selection, show call interface
+        document.getElementById('mode-selection').style.display = 'none';
+        document.getElementById('call-interface').style.display = 'flex';
+
+        await this.dialingState();
+        await this.ringingState();
+        await this.connectedState(initialResponse);
+    }
+
+    async dialingState() {
+        this.callState = 'dialing';
+        this.updateCallStatus('Calling...', 'dialing');
+        
+        const avatar = document.getElementById('contact-avatar');
+        avatar.classList.add('calling');
+        
+        await this.delay(2000);
+    }
+
+    async ringingState() {
+        this.callState = 'ringing';
+        this.updateCallStatus('Ringing...', 'ringing');
+        
+        await this.delay(3000);
+    }
+
+    async connectedState(initialResponse) {
+        this.callState = 'connected';
+        this.updateCallStatus('Connected', 'connected');
+        
+        // Start call timer
+        this.callStartTime = Date.now();
+        this.startCallTimer();
+        
+        // Show live transcript
+        document.getElementById('live-transcript').classList.add('show');
+        
+        // Enable call controls
+        this.enableCallControls();
+        
+        // Play initial AI response
+        if (initialResponse) {
+            await this.playAIResponseAndWaitForUser(initialResponse);
+        } else {
+            this.promptUserToSpeak('The prospect answered. Make your opening!');
+        }
+    }
+
+    updateCallStatus(text, state) {
+        const callInterface = document.getElementById('call-interface');
+        const statusText = document.getElementById('call-status-text');
+        
+        callInterface.className = `call-interface ${state}`;
+        statusText.textContent = text;
+    }
+
+    startCallTimer() {
+        this.durationInterval = setInterval(() => {
+            const elapsed = Date.now() - this.callStartTime;
+            const minutes = Math.floor(elapsed / 60000);
+            const seconds = Math.floor((elapsed % 60000) / 1000);
+            
+            document.getElementById('call-duration').textContent = 
+                `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }, 1000);
+    }
+
+    enableCallControls() {
+        document.getElementById('mic-btn').disabled = false;
+        document.getElementById('mute-btn').disabled = false;
+        document.getElementById('speaker-btn').disabled = false;
+    }
+
+    startRecording() {
+        if (this.callState !== 'connected' || this.isMuted || this.aiIsSpeaking || this.isProcessing) return;
+        
+        this.isRecording = true;
+        const micBtn = document.getElementById('mic-btn');
+        micBtn.classList.add('recording');
+        
+        this.updateTranscript('🎤 You are speaking...');
+        
+        // Start voice recognition
+        if (this.voiceHandler && !this.voiceHandler.isListening) {
+            this.voiceHandler.startListening();
+        }
+    }
+
+    stopRecording() {
+        if (!this.isRecording) return;
+        
+        this.isRecording = false;
+        const micBtn = document.getElementById('mic-btn');
+        micBtn.classList.remove('recording');
+        
+        // Stop voice recognition
+        if (this.voiceHandler && this.voiceHandler.isListening) {
+            this.voiceHandler.stopListening();
+        }
+    }
+
+    async processUserInput(transcript) {
+        if (!this.isActive || !this.currentSession || this.isProcessing || this.aiIsSpeaking) {
+            return;
+        }
+
+        console.log('Processing user input:', transcript);
+        this.isProcessing = true;
+
+        // Stop recording
+        this.stopRecording();
+        this.updateTranscript('Processing your response...');
+
+        try {
+            const response = await this.apiCall('/api/roleplay/respond', {
+                method: 'POST',
+                body: JSON.stringify({
+                    user_input: transcript
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                
+                // Check if call should end
+                if (!data.call_continues) {
+                    await this.endCall(data.success);
+                    return;
+                }
+                
+                // Play AI response
+                await this.playAIResponseAndWaitForUser(data.ai_response);
+                
+            } else {
+                const errorData = await response.json();
+                this.showError(errorData.error || 'Failed to process input');
+                this.promptUserToSpeak('Sorry, please try again...');
+            }
+        } catch (error) {
+            console.error('Error processing user input:', error);
+            this.showError('Network error during call');
+            this.promptUserToSpeak('Network error, please try again...');
+        } finally {
+            this.isProcessing = false;
+        }
+    }
+
+    async playAIResponseAndWaitForUser(text) {
+        try {
+            this.aiIsSpeaking = true;
+            this.updateTranscript(`🎯 Prospect: "${text}"`);
+
+            // Try to play TTS
+            try {
+                const response = await this.apiCall('/api/roleplay/tts', {
+                    method: 'POST',
+                    body: JSON.stringify({ text: text })
+                });
+
+                if (response.ok) {
+                    const audioBlob = await response.blob();
+                    
+                    if (audioBlob.size > 100) {
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        const audio = new Audio(audioUrl);
+                        
+                        await new Promise((resolve) => {
+                            audio.onended = () => {
+                                URL.revokeObjectURL(audioUrl);
+                                resolve();
+                            };
+                            
+                            audio.onerror = () => {
+                                URL.revokeObjectURL(audioUrl);
+                                resolve();
+                            };
+                            
+                            audio.play().catch(() => resolve());
+                        });
+                    } else {
+                        await this.simulateSpeakingTime(text);
+                    }
+                } else {
+                    await this.simulateSpeakingTime(text);
+                }
+            } catch (ttsError) {
+                await this.simulateSpeakingTime(text);
+            }
+
+            this.aiIsSpeaking = false;
+            this.promptUserToSpeak('Your turn! Hold the microphone to respond...');
+            
+        } catch (error) {
+            console.error('Error playing AI response:', error);
+            this.aiIsSpeaking = false;
+            this.promptUserToSpeak('Your turn! Hold the microphone to respond...');
+        }
+    }
+
+    async simulateSpeakingTime(text) {
+        const wordsPerMinute = 150;
+        const words = text.split(' ').length;
+        const speakingTimeMs = (words / wordsPerMinute) * 60 * 1000;
+        const delay = Math.max(1000, Math.min(5000, speakingTimeMs));
+        
+        return new Promise(resolve => setTimeout(resolve, delay));
+    }
+
+    promptUserToSpeak(message) {
+        this.updateTranscript(message);
+        
+        const micBtn = document.getElementById('mic-btn');
+        if (micBtn) {
+            micBtn.classList.add('pulse-animation');
+            setTimeout(() => {
+                micBtn.classList.remove('pulse-animation');
+            }, 3000);
+        }
+    }
+
+    updateTranscript(text) {
+        document.getElementById('live-transcript').textContent = text;
+    }
+
+    toggleMute() {
+        this.isMuted = !this.isMuted;
+        const muteBtn = document.getElementById('mute-btn');
+        
+        if (this.isMuted) {
+            muteBtn.classList.add('active');
+        } else {
+            muteBtn.classList.remove('active');
+        }
+    }
+
+    toggleSpeaker() {
+        this.speakerOn = !this.speakerOn;
+        const speakerBtn = document.getElementById('speaker-btn');
+        
+        if (this.speakerOn) {
+            speakerBtn.classList.add('active');
+        } else {
+            speakerBtn.classList.remove('active');
+        }
+    }
+
+    async endCall(success = false) {
+        if (!this.isActive) return;
+
+        this.callState = 'ended';
+        this.updateCallStatus('Call ended', 'ended');
+        this.isActive = false;
+        this.aiIsSpeaking = false;
+        
+        if (this.durationInterval) {
+            clearInterval(this.durationInterval);
         }
         
-        // F1 for help
-        if (e.key === 'F1') {
-            e.preventDefault();
-            showHelpModal();
+        if (this.voiceHandler) {
+            this.voiceHandler.stopListening();
         }
-    });
-}
+        
+        this.stopRecording();
+        document.getElementById('live-transcript').classList.remove('show');
 
-function setupResponsiveHandlers() {
-    // Handle window resize
-    window.addEventListener('resize', function() {
-        adjustLayoutForScreen();
-    });
-    
-    // Initial adjustment
-    adjustLayoutForScreen();
-}
+        try {
+            const response = await this.apiCall('/api/roleplay/end', {
+                method: 'POST',
+                body: JSON.stringify({ success: success })
+            });
 
-function adjustLayoutForScreen() {
-    const isMobile = window.innerWidth < 768;
-    const conversationContainer = document.querySelector('.conversation-container');
-    
-    if (conversationContainer) {
-        if (isMobile) {
-            conversationContainer.style.maxHeight = '250px';
-        } else {
-            conversationContainer.style.maxHeight = '500px';
-        }
-    }
-}
-
-function clearConversation() {
-    const conversationLog = document.getElementById('conversation-log');
-    if (conversationLog) {
-        conversationLog.innerHTML = `
-            <div class="text-center text-muted p-4">
-                <i class="fas fa-phone-alt fa-2x mb-2 opacity-50"></i>
-                <div>Conversation cleared</div>
-            </div>
-        `;
-    }
-}
-
-function showAlert(message, type = 'info', duration = 5000) {
-    const alertContainer = document.getElementById('alert-container');
-    const alertId = 'alert-' + Date.now();
-    
-    const alertHTML = `
-        <div id="${alertId}" class="alert alert-${type} alert-dismissible alert-banner" role="alert">
-            <i class="fas fa-${getAlertIcon(type)} me-2"></i>
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-    `;
-    
-    alertContainer.insertAdjacentHTML('beforeend', alertHTML);
-    
-    // Auto-dismiss after duration
-    if (duration > 0) {
-        setTimeout(() => {
-            const alert = document.getElementById(alertId);
-            if (alert) {
-                alert.remove();
+            if (response.ok) {
+                const data = await response.json();
+                setTimeout(() => {
+                    this.showFeedback(data.coaching);
+                }, 2000);
             }
-        }, duration);
+        } catch (error) {
+            console.error('Error ending roleplay:', error);
+            setTimeout(() => {
+                this.showFeedback(null);
+            }, 2000);
+        }
+    }
+
+    showFeedback(coaching) {
+        document.getElementById('call-interface').style.display = 'none';
+        document.getElementById('feedback-section').style.display = 'flex';
+        
+        if (coaching) {
+            this.populateFeedback(coaching);
+            this.animateScore(coaching.overall_score || 75);
+        } else {
+            this.animateScore(75);
+        }
+    }
+
+    populateFeedback(coaching) {
+        const content = document.getElementById('feedback-content');
+        content.innerHTML = '';
+
+        if (coaching.coaching) {
+            if (coaching.coaching.sales_coaching) {
+                content.innerHTML += `
+                    <div class="feedback-item">
+                        <h6><i class="fas fa-chart-line me-2"></i>Sales Performance</h6>
+                        <p style="margin: 0; font-size: 14px;">${coaching.coaching.sales_coaching}</p>
+                    </div>
+                `;
+            }
+            
+            if (coaching.coaching.grammar_coaching) {
+                content.innerHTML += `
+                    <div class="feedback-item">
+                        <h6><i class="fas fa-spell-check me-2"></i>Grammar & Structure</h6>
+                        <p style="margin: 0; font-size: 14px;">${coaching.coaching.grammar_coaching}</p>
+                    </div>
+                `;
+            }
+            
+            if (coaching.coaching.vocabulary_coaching) {
+                content.innerHTML += `
+                    <div class="feedback-item">
+                        <h6><i class="fas fa-book me-2"></i>Vocabulary</h6>
+                        <p style="margin: 0; font-size: 14px;">${coaching.coaching.vocabulary_coaching}</p>
+                    </div>
+                `;
+            }
+            
+            if (coaching.coaching.rapport_assertiveness) {
+                content.innerHTML += `
+                    <div class="feedback-item">
+                        <h6><i class="fas fa-handshake me-2"></i>Rapport & Confidence</h6>
+                        <p style="margin: 0; font-size: 14px;">${coaching.coaching.rapport_assertiveness}</p>
+                    </div>
+                `;
+            }
+        }
+    }
+
+    animateScore(targetScore) {
+        const scoreElement = document.getElementById('score-circle');
+        let currentScore = 0;
+        const increment = targetScore / 30;
+        
+        const timer = setInterval(() => {
+            currentScore += increment;
+            if (currentScore >= targetScore) {
+                currentScore = targetScore;
+                clearInterval(timer);
+            }
+            scoreElement.textContent = Math.round(currentScore);
+        }, 50);
+    }
+
+    tryAgain() {
+        this.startCall();
+    }
+
+    showModeSelection() {
+        document.getElementById('feedback-section').style.display = 'none';
+        this.initializeModeSelection();
+        this.selectedMode = null;
+        
+        document.querySelectorAll('.mode-option').forEach(option => {
+            option.classList.remove('selected');
+        });
+        
+        document.getElementById('start-call-btn').disabled = true;
+        document.getElementById('start-call-btn').textContent = 'Select a mode to start call';
+    }
+
+    showError(message) {
+        this.updateTranscript(`❌ Error: ${message}`);
+    }
+
+    async apiCall(endpoint, options = {}) {
+        const defaultOptions = {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`
+            }
+        };
+
+        const response = await fetch(endpoint, { ...defaultOptions, ...options });
+        
+        if (response.status === 401) {
+            window.location.href = '/login';
+            throw new Error('Authentication required');
+        }
+
+        return response;
+    }
+
+    capitalizeFirst(str) {
+        return str.charAt(0).toUpperCase() + str.slice(1);
+    }
+
+    delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 }
 
-function getAlertIcon(type) {
-    const icons = {
-        'success': 'check-circle',
-        'warning': 'exclamation-triangle',
-        'danger': 'times-circle',
-        'info': 'info-circle'
-    };
-    return icons[type] || 'info-circle';
-}
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    if (window.location.pathname.includes('/roleplay/')) {
+        window.roleplayManager = new PhoneRoleplayManager();
+    }
+});
 
-function showHelpModal() {
-    const helpContent = `
-        <div class="modal fade" id="helpModal" tabindex="-1">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Training Help & Tips</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <h6>Getting Started:</h6>
-                        <ul>
-                            <li>Choose a training mode that matches your skill level</li>
-                            <li>Allow microphone access when prompted</li>
-                            <li>Speak clearly and naturally</li>
-                            <li>Wait for AI responses before continuing</li>
-                        </ul>
-                        
-                        <h6>Keyboard Shortcuts:</h6>
-                        <ul>
-                            <li><kbd>Ctrl + Space</kbd> - Toggle microphone</li>
-                            <li><kbd>Escape</kbd> - End training session</li>
-                            <li><kbd>F1</kbd> - Show this help</li>
-                        </ul>
-                        
-                        <h6>Troubleshooting:</h6>
-                        <ul>
-                            <li>If voice recognition isn't working, check microphone permissions</li>
-                            <li>If AI doesn't respond, check your internet connection</li>
-                            <li>For best results, use Chrome, Edge, or Safari browsers</li>
-                            <li>TTS (AI voice) may not be available in all browsers</li>
-                        </ul>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Got it!</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
+// Add CSS for animations
+const style = document.createElement('style');
+style.textContent = `
+    .pulse-animation {
+        animation: pulse 1.5s infinite !important;
+    }
     
-    document.body.insertAdjacentHTML('beforeend', helpContent);
-    const modal = new bootstrap.Modal(document.getElementById('helpModal'));
-    modal.show();
-    
-    // Clean up modal after hiding
-    document.getElementById('helpModal').addEventListener('hidden.bs.modal', function() {
-        this.remove();
-    });
-}
-
-function capitalizeFirst(str) {
-    return str.charAt(0).toUpperCase() + str.slice(1);
-}
-
-// Export functions for global access
-window.clearConversation = clearConversation;
-window.showAlert = showAlert;
-window.showHelpModal = showHelpModal;
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+    }
+`;
+document.head.appendChild(style);
 </script>
 {% endblock %}

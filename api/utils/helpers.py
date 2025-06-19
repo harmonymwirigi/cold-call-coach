@@ -291,6 +291,7 @@ def require_admin(f):
     def decorated_function(*args, **kwargs):
         # First check authentication
         if 'user_id' not in session:
+            logger.warning("Admin access denied: No user_id in session")
             if request.is_json:
                 return jsonify({'error': 'Authentication required'}), 401
             else:
@@ -302,20 +303,58 @@ def require_admin(f):
             profile = supabase_service.get_user_profile_by_service(session['user_id'])
             
             if not profile:
+                logger.warning(f"Admin access denied: Profile not found for user {session['user_id']}")
                 return jsonify({'error': 'User profile not found'}), 404
             
-            # Check if user is admin (you can define admin logic here)
-            admin_email = os.getenv('REACT_APP_ADMIN_EMAIL')
-            user_email = profile.get('email')  # Would need to get email from auth
+            logger.info(f"Checking admin access for user {session['user_id']}")
+            logger.info(f"User access_level: {profile.get('access_level')}")
             
-            # For now, simple admin check - you can enhance this
-            if admin_email and user_email and user_email.lower() == admin_email.lower():
-                return f(*args, **kwargs)
-            
-            # Alternative: check access_level
+            # Check access_level first (if you've updated schema)
             if profile.get('access_level') == 'admin':
+                logger.info("Admin access granted via access_level")
                 return f(*args, **kwargs)
             
+            # Fallback: Check if user is admin via environment variable
+            admin_email = os.getenv('REACT_APP_ADMIN_EMAIL')
+            logger.info(f"Admin email from env: {admin_email}")
+            
+            if admin_email:
+                try:
+                    access_token = session.get('access_token')
+                    if access_token:
+                        user = supabase_service.authenticate_user(access_token)
+                        if user:
+                            # Handle different user object formats
+                            user_email = None
+                            
+                            # Try different ways to get email
+                            if hasattr(user, 'email'):
+                                user_email = user.email
+                            elif isinstance(user, dict) and 'email' in user:
+                                user_email = user['email']
+                            elif hasattr(user, 'user') and hasattr(user.user, 'email'):
+                                user_email = user.user.email
+                            elif isinstance(user, dict) and 'user' in user and isinstance(user['user'], dict):
+                                user_email = user['user'].get('email')
+                            
+                            logger.info(f"User email extracted: {user_email}")
+                            logger.info(f"Comparing with admin email: {admin_email}")
+                            
+                            if user_email and user_email.lower().strip() == admin_email.lower().strip():
+                                logger.info("Admin access granted via email match")
+                                return f(*args, **kwargs)
+                            else:
+                                logger.warning(f"Email mismatch: '{user_email}' != '{admin_email}'")
+                        else:
+                            logger.warning("Failed to authenticate user with token")
+                    else:
+                        logger.warning("No access token found in session")
+                except Exception as e:
+                    logger.error(f"Error getting user email: {e}")
+            else:
+                logger.warning("No REACT_APP_ADMIN_EMAIL environment variable set")
+            
+            logger.warning(f"Admin access denied for user {session['user_id']}")
             return jsonify({'error': 'Admin privileges required'}), 403
             
         except Exception as e:
