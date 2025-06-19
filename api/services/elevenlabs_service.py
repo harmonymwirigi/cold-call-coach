@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 class ElevenLabsService:
     def __init__(self):
-        self.api_key = os.getenv('ELEVENLABS_API_KEY')
+        self.api_key = os.getenv('REACT_APP_ELEVENLABS_API_KEY')
         self.base_url = "https://api.elevenlabs.io/v1"
         self.is_enabled = bool(self.api_key)
         
