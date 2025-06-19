@@ -22,13 +22,7 @@ class VoiceHandler {
         this.currentTranscript = '';
         this.finalTranscript = '';
         this.silenceTimer = null;
-        
-        // ===== UPDATED: Roleplay 1 silence thresholds (10s/15s) =====
-        this.impatience_threshold = 10000;  // 10 seconds for impatience trigger
-        this.hangup_threshold = 15000;      // 15 seconds for hang-up
-        this.current_silence_time = 0;      // Track current silence duration
-        this.silence_start_time = null;     // When silence started
-        
+        this.silenceThreshold = 3000; // 3 seconds of silence
         this.shouldRestart = false;
         this.wasPausedBySystem = false;
         
@@ -183,7 +177,106 @@ class VoiceHandler {
         }
     }
 
+    setupRecognitionEventHandlers() {
+        if (!this.recognition) return;
+        
+        // Recognition starts
+        this.recognition.onstart = () => {
+            console.log('Voice recognition started');
+            this.isListening = true;
+            this.updateMicrophoneUI(true);
+            this.clearVoiceError();
+            this.startSilenceDetection();
+        };
+        
+        // Recognition ends
+        this.recognition.onend = () => {
+            console.log('Voice recognition ended');
+            this.isListening = false;
+            this.updateMicrophoneUI(false);
+            this.stopSilenceDetection();
+            
+            // Auto-restart if still supposed to be listening (for continuous mode)
+            if (this.shouldRestart && this.isSupported) {
+                console.log('Auto-restarting recognition...');
+                setTimeout(() => {
+                    this.startListening();
+                }, 100);
+            }
+        };
+        
+        // Recognition results
+        this.recognition.onresult = (event) => {
+            this.handleRecognitionResult(event);
+        };
+        
+        // Recognition errors
+        this.recognition.onerror = (event) => {
+            this.handleRecognitionError(event);
+        };
+        
+        // No speech detected
+        this.recognition.onnomatch = () => {
+            console.log('No speech was recognized');
+            this.updateTranscript('No speech detected. Please try speaking again.');
+        };
+        
+        // Audio starts
+        this.recognition.onaudiostart = () => {
+            console.log('Audio input started');
+        };
+        
+        // Audio ends
+        this.recognition.onaudioend = () => {
+            console.log('Audio input ended');
+        };
+        
+        // Speech starts
+        this.recognition.onspeechstart = () => {
+            console.log('Speech detected');
+            this.resetSilenceTimer();
+        };
+        
+        // Speech ends
+        this.recognition.onspeechend = () => {
+            console.log('Speech ended');
+            this.startSilenceTimer();
+        };
+    }
 
+    handleRecognitionResult(event) {
+        let interimTranscript = '';
+        let finalTranscript = '';
+        
+        // Process all results
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const result = event.results[i];
+            const transcript = result[0].transcript;
+            
+            if (result.isFinal) {
+                finalTranscript += transcript + ' ';
+                console.log('Final transcript received:', transcript);
+            } else {
+                interimTranscript += transcript;
+                console.log('Interim transcript:', transcript);
+            }
+        }
+        
+        // Update current transcript
+        this.currentTranscript = finalTranscript + interimTranscript;
+        
+        // Update UI
+        this.updateTranscript(this.currentTranscript);
+        
+        // Process final results
+        if (finalTranscript.trim().length > 0) {
+            this.finalTranscript += finalTranscript;
+            this.processFinalTranscript(finalTranscript.trim());
+        }
+        
+        // Reset silence timer when speech is detected
+        this.resetSilenceTimer();
+    }
 
     handleRecognitionError(event) {
         console.error('Voice recognition error:', event.error);
@@ -258,244 +351,8 @@ class VoiceHandler {
         }
     }
 
-    
-
-    // Silence detection methods
-    // ===== UPDATED: Enhanced silence detection methods =====
-    
-    startSilenceDetection() {
-        console.log('Starting silence detection with Roleplay 1 thresholds');
-        this.silence_start_time = Date.now();
-        this.current_silence_time = 0;
-        this.resetSilenceTimer();
-    }
-
-    stopSilenceDetection() {
-        console.log('Stopping silence detection');
-        if (this.silenceTimer) {
-            clearInterval(this.silenceTimer);
-            this.silenceTimer = null;
-        }
-        this.silence_start_time = null;
-        this.current_silence_time = 0;
-    }
-
-    resetSilenceTimer() {
-        this.stopSilenceDetection();
-        this.startSilenceTimer();
-    }
-
-    startSilenceTimer() {
-        // Use interval instead of timeout to track progressive silence
-        this.silenceTimer = setInterval(() => {
-            if (this.silence_start_time && this.isListening) {
-                this.current_silence_time = Date.now() - this.silence_start_time;
-                
-                // Check for impatience trigger (10 seconds)
-                if (this.current_silence_time >= this.impatience_threshold && 
-                    this.current_silence_time < this.impatience_threshold + 1000) {
-                    console.log('10-second silence threshold reached - triggering impatience');
-                    this.handleImpatience();
-                }
-                
-                // Check for hang-up trigger (15 seconds)
-                if (this.current_silence_time >= this.hangup_threshold) {
-                    console.log('15-second silence threshold reached - triggering hang-up');
-                    this.handleSilenceHangup();
-                }
-            }
-        }, 1000); // Check every second
-    }
-
-    handleImpatience() {
-        console.log('Handling 10-second silence - sending impatience trigger');
-        
-        // Update transcript to show impatience
-        this.updateTranscript('⏰ 10 seconds of silence detected... The prospect is getting impatient...');
-        
-        // Send special impatience trigger to roleplay manager
-        if (this.roleplayManager && this.roleplayManager.isActive) {
-            this.roleplayManager.processUserInput('[SILENCE_IMPATIENCE]');
-        }
-    }
-
-    handleSilenceHangup() {
-        console.log('Handling 15-second silence - triggering hang-up');
-        
-        // Stop listening immediately
-        this.stopListening();
-        
-        // Update transcript
-        this.updateTranscript('📞 15 seconds of silence - The prospect hung up due to long silence.');
-        
-        // Send hang-up trigger to roleplay manager
-        if (this.roleplayManager && this.roleplayManager.isActive) {
-            this.roleplayManager.processUserInput('[SILENCE_HANGUP]');
-        }
-    }
-
-    handleSilenceTimeout() {
-        // This method is kept for backward compatibility but now uses the new system
-        const elapsed = this.current_silence_time;
-        
-        if (elapsed >= this.hangup_threshold) {
-            this.handleSilenceHangup();
-        } else if (elapsed >= this.impatience_threshold) {
-            this.handleImpatience();
-        }
-    }
-
-    // ===== UPDATED: Speech detection methods =====
-    
-    setupRecognitionEventHandlers() {
-        if (!this.recognition) return;
-        
-        // Recognition starts
-        this.recognition.onstart = () => {
-            console.log('Voice recognition started');
-            this.isListening = true;
-            this.updateMicrophoneUI(true);
-            this.clearVoiceError();
-            this.startSilenceDetection();
-        };
-        
-        // Recognition ends
-        this.recognition.onend = () => {
-            console.log('Voice recognition ended');
-            this.isListening = false;
-            this.updateMicrophoneUI(false);
-            this.stopSilenceDetection();
-            
-            // Auto-restart if still supposed to be listening (for continuous mode)
-            if (this.shouldRestart && this.isSupported) {
-                console.log('Auto-restarting recognition...');
-                setTimeout(() => {
-                    this.startListening();
-                }, 100);
-            }
-        };
-        
-        // Recognition results
-        this.recognition.onresult = (event) => {
-            this.handleRecognitionResult(event);
-        };
-        
-        // Recognition errors
-        this.recognition.onerror = (event) => {
-            this.handleRecognitionError(event);
-        };
-        
-        // No speech detected
-        this.recognition.onnomatch = () => {
-            console.log('No speech was recognized');
-            this.updateTranscript('No speech detected. Please try speaking again.');
-        };
-        
-        // Audio starts
-        this.recognition.onaudiostart = () => {
-            console.log('Audio input started');
-        };
-        
-        // Audio ends
-        this.recognition.onaudioend = () => {
-            console.log('Audio input ended');
-        };
-        
-        // Speech starts - RESET silence timer when speech detected
-        this.recognition.onspeechstart = () => {
-            console.log('Speech detected - resetting silence timer');
-            this.resetSilenceTimer();
-        };
-        
-        // Speech ends - START silence timer when speech stops
-        this.recognition.onspeechend = () => {
-            console.log('Speech ended - starting silence detection');
-            this.silence_start_time = Date.now();
-        };
-    }
-
-    handleRecognitionResult(event) {
-        let interimTranscript = '';
-        let finalTranscript = '';
-        
-        // Process all results
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-            const result = event.results[i];
-            const transcript = result[0].transcript;
-            
-            if (result.isFinal) {
-                finalTranscript += transcript + ' ';
-                console.log('Final transcript received:', transcript);
-                
-                // Reset silence detection when we get final transcript
-                this.resetSilenceTimer();
-            } else {
-                interimTranscript += transcript;
-                console.log('Interim transcript:', transcript);
-                
-                // Reset silence detection even for interim results (shows active speech)
-                if (transcript.trim().length > 0) {
-                    this.silence_start_time = Date.now();
-                }
-            }
-        }
-        
-        // Update current transcript
-        this.currentTranscript = finalTranscript + interimTranscript;
-        
-        // Update UI
-        this.updateTranscript(this.currentTranscript);
-        
-        // Process final results
-        if (finalTranscript.trim().length > 0) {
-            this.finalTranscript += finalTranscript;
-            this.processFinalTranscript(finalTranscript.trim());
-        }
-    }
-
-    // ===== UPDATED: Add silence status display =====
-    
-    updateTranscript(text) {
-        if (this.transcriptElement) {
-            // Add silence indicator if we're tracking silence
-            let displayText = text;
-            
-            if (this.silence_start_time && this.isListening) {
-                const silenceSeconds = Math.floor(this.current_silence_time / 1000);
-                if (silenceSeconds >= 5) { // Show silence indicator after 5 seconds
-                    displayText += ` ⏱️ (${silenceSeconds}s silence)`;
-                }
-            }
-            
-            this.transcriptElement.textContent = displayText;
-        }
-    }
-
-    // ===== UPDATED: Enhanced microphone UI =====
-    
-    updateMicrophoneUI(isListening) {
-        if (!this.micButton) return;
-        
-        if (isListening) {
-            this.micButton.classList.add('listening', 'btn-danger');
-            this.micButton.classList.remove('btn-primary');
-            this.micButton.innerHTML = '<i class="fas fa-stop"></i>';
-            this.micButton.title = 'Click to stop listening (Ctrl+Space) | 10s=impatience, 15s=hangup';
-        } else {
-            this.micButton.classList.remove('listening', 'btn-danger');
-            this.micButton.classList.add('btn-primary');
-            this.micButton.innerHTML = '<i class="fas fa-microphone"></i>';
-            this.micButton.title = 'Click to start listening (Ctrl+Space)';
-        }
-    }
-
-    // ===== ROLEPLAY MANAGER INTEGRATION =====
-    
     processFinalTranscript(transcript) {
         console.log('Processing final transcript:', transcript);
-        
-        // Stop silence detection since we have a complete response
-        this.stopSilenceDetection();
         
         // Send to roleplay manager if available and active
         if (this.roleplayManager && this.roleplayManager.isActive) {
@@ -512,72 +369,49 @@ class VoiceHandler {
         }, 1000);
     }
 
-    // ===== CLEANUP AND UTILITY METHODS =====
-    
-    stopListening() {
-        if (!this.isListening) {
-            console.log('Not listening, nothing to stop');
-            return;
+    // Silence detection methods
+    startSilenceDetection() {
+        this.resetSilenceTimer();
+    }
+
+    stopSilenceDetection() {
+        if (this.silenceTimer) {
+            clearTimeout(this.silenceTimer);
+            this.silenceTimer = null;
         }
-        
-        console.log('Stopping voice recognition...');
-        this.shouldRestart = false;
-        
-        if (this.recognition) {
-            this.recognition.stop();
-        }
-        
+    }
+
+    resetSilenceTimer() {
         this.stopSilenceDetection();
-        this.updateTranscript('Voice recognition stopped.');
+        this.startSilenceTimer();
     }
 
-    destroy() {
-        console.log('Destroying Voice Handler...');
-        
-        this.stopListening();
-        this.shouldRestart = false;
-        
-        if (this.recognition) {
-            this.recognition.onstart = null;
-            this.recognition.onend = null;
-            this.recognition.onresult = null;
-            this.recognition.onerror = null;
-            this.recognition.onnomatch = null;
-            this.recognition = null;
-        }
-        
-        this.stopSilenceDetection();
-        
-        // Remove event listeners
-        if (this.handleKeydown) {
-            document.removeEventListener('keydown', this.handleKeydown);
-        }
-        if (this.handleVisibilityChange) {
-            document.removeEventListener('visibilitychange', this.handleVisibilityChange);
-        }
-        if (this.handleWindowBlur) {
-            window.removeEventListener('blur', this.handleWindowBlur);
-        }
-        if (this.handleWindowFocus) {
-            window.removeEventListener('focus', this.handleWindowFocus);
-        }
-        
-        console.log('Voice Handler destroyed');
+    startSilenceTimer() {
+        this.silenceTimer = setTimeout(() => {
+            if (this.isListening) {
+                console.log('Silence timeout reached');
+                this.handleSilenceTimeout();
+            }
+        }, this.silenceThreshold);
     }
 
-    // ===== GETTER METHODS FOR DEBUGGING =====
-    
-    getSilenceStatus() {
-        return {
-            isListening: this.isListening,
-            silenceStartTime: this.silence_start_time,
-            currentSilenceTime: this.current_silence_time,
-            impatience_threshold: this.impatience_threshold,
-            hangup_threshold: this.hangup_threshold,
-            silenceSeconds: this.silence_start_time ? Math.floor(this.current_silence_time / 1000) : 0
-        };
+    handleSilenceTimeout() {
+        console.log('Handling silence timeout');
+        
+        // Show a prompt to encourage speaking
+        this.updateTranscript('Still listening... Please continue speaking or press the microphone to stop.');
+        
+        // You could also trigger an impatience response from the AI here
+        if (this.roleplayManager && this.roleplayManager.isActive) {
+            // Simulate AI impatience after long silence
+            setTimeout(() => {
+                if (this.isListening && this.currentTranscript.trim() === '') {
+                    console.log('Triggering AI impatience response');
+                    this.roleplayManager.processUserInput('[SILENCE_TIMEOUT]');
+                }
+            }, 2000);
+        }
     }
-
 
     // Main control methods
     async toggleListening() {
@@ -615,7 +449,23 @@ class VoiceHandler {
         }
     }
 
-    
+    stopListening() {
+        if (!this.isListening) {
+            console.log('Not listening, nothing to stop');
+            return;
+        }
+        
+        console.log('Stopping voice recognition...');
+        this.shouldRestart = false;
+        
+        if (this.recognition) {
+            this.recognition.stop();
+        }
+        
+        this.stopSilenceDetection();
+        this.updateTranscript('Voice recognition stopped.');
+    }
+
     pauseListening() {
         if (this.isListening) {
             console.log('Pausing voice recognition...');
@@ -651,7 +501,27 @@ class VoiceHandler {
     }
 
     // UI update methods
-    
+    updateMicrophoneUI(isListening) {
+        if (!this.micButton) return;
+        
+        if (isListening) {
+            this.micButton.classList.add('listening', 'btn-danger');
+            this.micButton.classList.remove('btn-primary');
+            this.micButton.innerHTML = '<i class="fas fa-stop"></i>';
+            this.micButton.title = 'Click to stop listening (Ctrl+Space)';
+        } else {
+            this.micButton.classList.remove('listening', 'btn-danger');
+            this.micButton.classList.add('btn-primary');
+            this.micButton.innerHTML = '<i class="fas fa-microphone"></i>';
+            this.micButton.title = 'Click to start listening (Ctrl+Space)';
+        }
+    }
+
+    updateTranscript(text) {
+        if (this.transcriptElement) {
+            this.transcriptElement.textContent = text;
+        }
+    }
 
     showVoiceError(message) {
         console.error('Voice error:', message);
@@ -700,52 +570,41 @@ class VoiceHandler {
         return this.isListening;
     }
 
+    // Cleanup method
+    destroy() {
+        console.log('Destroying Voice Handler...');
+        
+        this.stopListening();
+        this.shouldRestart = false;
+        
+        if (this.recognition) {
+            this.recognition.onstart = null;
+            this.recognition.onend = null;
+            this.recognition.onresult = null;
+            this.recognition.onerror = null;
+            this.recognition.onnomatch = null;
+            this.recognition = null;
+        }
+        
+        this.stopSilenceDetection();
+        
+        // Remove event listeners
+        if (this.handleKeydown) {
+            document.removeEventListener('keydown', this.handleKeydown);
+        }
+        if (this.handleVisibilityChange) {
+            document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+        }
+        if (this.handleWindowBlur) {
+            window.removeEventListener('blur', this.handleWindowBlur);
+        }
+        if (this.handleWindowFocus) {
+            window.removeEventListener('focus', this.handleWindowFocus);
+        }
+        
+        console.log('Voice Handler destroyed');
+    }
 }
-
-const enhancedStyle = document.createElement('style');
-enhancedStyle.textContent = `
-    .pulse-animation {
-        animation: pulse 1.5s infinite !important;
-    }
-    
-    @keyframes pulse {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.05); }
-        100% { transform: scale(1); }
-    }
-    
-    .mic-button.listening {
-        position: relative;
-        animation: listening-glow 2s ease-in-out infinite alternate;
-    }
-    
-    @keyframes listening-glow {
-        from { box-shadow: 0 0 5px rgba(220, 53, 69, 0.5); }
-        to { box-shadow: 0 0 20px rgba(220, 53, 69, 0.8), 0 0 30px rgba(220, 53, 69, 0.6); }
-    }
-    
-    .silence-indicator {
-        font-family: monospace;
-        color: #ffc107;
-        font-weight: bold;
-    }
-    
-    .ai-status.speaking {
-        color: #dc3545 !important;
-        font-weight: bold;
-    }
-    
-    .ai-status.listening {
-        color: #28a745 !important;
-        font-weight: bold;
-    }
-    
-    .ai-status.answering {
-        color: #ffc107 !important;
-        font-weight: bold;
-    }
-`;
-document.head.appendChild(enhancedStyle);
 
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
