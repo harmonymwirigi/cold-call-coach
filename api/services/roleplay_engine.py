@@ -49,7 +49,7 @@ class RoleplayEngine:
         
         # Stage flow for different modes
         self.stage_flow = {
-            'practice': {  # Original 1.1 flow
+            'practice': {  # Original 1.1 flow with extended conversation
                 'phone_pickup': 'opener_evaluation',
                 'opener_evaluation': 'early_objection',
                 'early_objection': 'objection_handling',
@@ -237,12 +237,20 @@ class RoleplayEngine:
             # Evaluate user input using AI
             evaluation = self._evaluate_user_input(session, user_input, evaluation_stage)
             
-            # Update conversation quality tracking
+            # Update conversation quality tracking (for all modes)
             self._update_conversation_quality(session, evaluation)
             
             # Store evaluation for potential coaching
             if session['mode'] in ['marathon', 'legend']:
                 self._store_coaching_data(session, evaluation, user_input, evaluation_stage)
+            else:
+                # For Practice mode, store individual evaluations for real-time feedback
+                session.setdefault('live_evaluations', []).append({
+                    'stage': evaluation_stage,
+                    'evaluation': evaluation,
+                    'user_input': user_input,
+                    'timestamp': datetime.now(timezone.utc).isoformat()
+                })
             
             # Check for random hang-up (Marathon mode only, after opener pass)
             random_hangup = self._check_random_hangup(session, evaluation)
@@ -296,7 +304,9 @@ class RoleplayEngine:
                     'max_calls': session['max_calls'],
                     'calls_passed': session['calls_passed'],
                     'calls_failed': session['calls_failed']
-                }
+                },
+                # Add real-time coaching for Practice mode
+                'live_coaching': self._get_live_coaching(session, evaluation) if session['settings']['real_time_coaching'] else None
             }
             
         except Exception as e:
@@ -687,6 +697,79 @@ class RoleplayEngine:
             logger.error(f"Evaluation error: {e}")
             return self._basic_evaluation(user_input, evaluation_stage)
 
+    def _get_live_coaching(self, session: Dict, evaluation: Dict) -> Optional[Dict[str, str]]:
+        """Provide real-time coaching feedback for Practice mode"""
+        if not session['settings'].get('real_time_coaching', False):
+            return None
+        
+        stage = evaluation.get('stage', 'unknown')
+        score = evaluation.get('score', 0)
+        passed = evaluation.get('passed', False)
+        criteria_met = evaluation.get('criteria_met', [])
+        
+        coaching = {}
+        
+        # Stage-specific live coaching
+        if stage == 'opener':
+            if passed:
+                coaching['feedback'] = "Great opener! You showed empathy and ended with a question."
+                coaching['tip'] = "Keep this natural tone for the rest of the call."
+            else:
+                missing = []
+                if 'shows_empathy' not in criteria_met:
+                    missing.append("Try: 'I know this is out of the blue...'")
+                if 'casual_tone' not in criteria_met:
+                    missing.append("Use contractions: 'I'm calling' not 'I am calling'")
+                if 'ends_with_question' not in criteria_met:
+                    missing.append("End with: 'Can I tell you why I'm calling?'")
+                
+                coaching['feedback'] = f"Opener needs work (score: {score}/4)"
+                coaching['tip'] = " | ".join(missing[:2])  # Max 2 tips
+        
+        elif stage == 'objection_handling':
+            if passed:
+                coaching['feedback'] = "Excellent objection handling! You stayed calm and asked a question."
+                coaching['tip'] = "This builds trust and keeps the conversation going."
+            else:
+                tips = []
+                if 'acknowledges_calmly' not in criteria_met:
+                    tips.append("Start with: 'Fair enough' or 'I understand'")
+                if 'forward_question' not in criteria_met:
+                    tips.append("End with a question to move forward")
+                
+                coaching['feedback'] = f"Objection handling needs improvement (score: {score}/4)"
+                coaching['tip'] = " | ".join(tips[:2])
+        
+        elif stage == 'mini_pitch':
+            if passed:
+                coaching['feedback'] = "Perfect mini-pitch! Short, outcome-focused, and natural."
+                coaching['tip'] = "This is exactly how to present value quickly."
+            else:
+                tips = []
+                if 'short_pitch' not in criteria_met:
+                    tips.append("Keep it under 30 words")
+                if 'outcome_focused' not in criteria_met:
+                    tips.append("Focus on results: 'save time', 'increase sales'")
+                
+                coaching['feedback'] = f"Mini-pitch needs refinement (score: {score}/4)"
+                coaching['tip'] = " | ".join(tips[:2])
+        
+        elif stage == 'soft_discovery':
+            if passed:
+                coaching['feedback'] = "Great discovery question! Open-ended and relevant."
+                coaching['tip'] = "Listen carefully to their answer for follow-up opportunities."
+            else:
+                coaching['feedback'] = f"Discovery could be stronger (score: {score}/3)"
+                coaching['tip'] = "Ask open questions: 'What's your biggest challenge with...?'"
+        
+        # Only return coaching if we have something useful to say
+        if coaching:
+            coaching['stage'] = stage
+            coaching['timestamp'] = datetime.now(timezone.utc).isoformat()
+            return coaching
+        
+        return None
+
     def _update_conversation_quality(self, session: Dict, evaluation: Dict):
         """Track overall conversation quality for better flow decisions"""
         score = evaluation.get('score', 0)
@@ -703,6 +786,86 @@ class RoleplayEngine:
         session['conversation_quality'] = ((current_quality * (total_turns - 1)) + turn_quality) / total_turns
         
         logger.info(f"Conversation quality: {session['conversation_quality']:.1f}% (this turn: {turn_quality:.1f}%)")
+
+    def _update_conversation_quality(self, session: Dict, evaluation: Dict):
+        """Track overall conversation quality for better flow decisions"""
+        score = evaluation.get('score', 0)
+        max_score = 4
+        
+        # Calculate quality percentage for this turn
+        turn_quality = (score / max_score) * 100
+        
+        # Update running average
+        total_turns = session['turn_count']
+        current_quality = session.get('conversation_quality', 0)
+        
+        if total_turns == 1:
+            # First turn sets the baseline
+            session['conversation_quality'] = turn_quality
+        else:
+            # Weighted average (recent turns matter more)
+            session['conversation_quality'] = ((current_quality * (total_turns - 1)) + turn_quality) / total_turns
+        
+        logger.info(f"Conversation quality: {session['conversation_quality']:.1f}% (this turn: {turn_quality:.1f}%)")
+
+    def _should_hang_up_now(self, session: Dict, evaluation: Dict, user_input: str) -> bool:
+        """Determine if prospect should hang up right now - IMPROVED LOGIC"""
+        current_stage = session['current_stage']
+        mode = session.get('mode', 'practice')
+        
+        # Never hang up on first interaction (phone pickup response)
+        if session['turn_count'] <= 1:
+            return False
+        
+        # Practice mode is more forgiving than Marathon/Legend
+        if mode == 'practice':
+            # Don't hang up if conversation quality is good
+            conversation_quality = session.get('conversation_quality', 0)
+            if conversation_quality >= 60:  # If conversation is going well, reduce hang-up chance
+                logger.info(f"Good conversation quality ({conversation_quality:.1f}%), reducing hang-up chance")
+                return False
+        
+        # Get hang up probability from evaluation
+        hang_up_prob = evaluation.get('hang_up_probability', 0.1)
+        
+        # Increase probability for poor performance, but be more lenient in Practice mode
+        score = evaluation.get('score', 0)
+        
+        if current_stage == 'opener_evaluation':
+            if mode == 'practice':
+                if score <= 1:
+                    hang_up_prob = 0.3  # More forgiving in Practice
+                elif score == 2:
+                    hang_up_prob = 0.1
+                else:
+                    hang_up_prob = 0.02
+            else:  # Marathon/Legend
+                if score <= 1:
+                    hang_up_prob = 0.5  # Less forgiving
+                elif score == 2:
+                    hang_up_prob = 0.2
+                else:
+                    hang_up_prob = 0.05
+        
+        elif current_stage in ['objection_handling', 'early_objection']:
+            if not evaluation.get('passed', True):
+                hang_up_prob = 0.15 if mode == 'practice' else 0.25
+        
+        # Practice mode: Reduce hang-up chance as conversation progresses
+        if mode == 'practice' and session['turn_count'] >= 3:
+            hang_up_prob *= 0.4  # Significantly reduce hang-up chance for longer conversations
+        
+        # Marathon/Legend: Slightly reduce hang-up chance for longer conversations
+        elif mode in ['marathon', 'legend'] and session['turn_count'] >= 3:
+            hang_up_prob *= 0.7
+        
+        # Random decision
+        should_hang_up = random.random() < hang_up_prob
+        
+        if should_hang_up:
+            logger.info(f"Hang up triggered: mode={mode}, stage={current_stage}, score={score}, prob={hang_up_prob}")
+        
+        return should_hang_up
 
     # Rest of the methods remain the same as in the original implementation...
     
@@ -769,7 +932,50 @@ class RoleplayEngine:
             return True
         
         # Original Practice mode logic (1.1)
-        return self._should_call_continue_improved(session, evaluation)
+        if mode == 'practice':
+            return self._should_call_continue_practice_mode(session, evaluation)
+        else:
+            return self._should_call_continue_improved(session, evaluation)
+
+    def _should_call_continue_practice_mode(self, session: Dict, evaluation: Dict) -> bool:
+        """Practice mode (1.1) call continuation logic with extended conversation"""
+        
+        # End if hung up
+        if session.get('hang_up_triggered'):
+            logger.info("Call ending: hang up triggered")
+            return False
+        
+        # End if reached final stage
+        if session['current_stage'] == 'call_ended':
+            logger.info("Call ending: reached final stage")
+            return False
+        
+        # Don't end at discovery stage immediately - allow extended conversation
+        if session['current_stage'] == 'soft_discovery':
+            if session['stage_turn_count'] >= 3 and session['turn_count'] >= 6:
+                logger.info("Call ending: completed discovery stage with sufficient conversation")
+                return False
+        
+        # Extended conversation can go longer in Practice mode
+        if session['current_stage'] == 'extended_conversation':
+            # End if conversation has gone on long enough AND quality is declining
+            conversation_quality = session.get('conversation_quality', 50)
+            if session['stage_turn_count'] >= 4 and session['turn_count'] >= 10:
+                if conversation_quality < 40:  # Only end if quality is poor
+                    logger.info("Call ending: extended conversation with poor quality")
+                    return False
+                elif session['turn_count'] >= 20:  # Hard limit for very long conversations
+                    logger.info("Call ending: reached maximum conversation length")
+                    return False
+        
+        # Higher turn limit for natural conversations in Practice mode
+        max_total_turns = session['settings'].get('max_total_turns', 25)
+        if session['turn_count'] >= max_total_turns:
+            logger.info(f"Call ending: reached turn limit ({max_total_turns})")
+            return False
+        
+        logger.info(f"Call continuing: stage={session['current_stage']}, turn={session['turn_count']}, quality={session.get('conversation_quality', 0):.1f}%")
+        return True
 
     def _should_call_continue_improved(self, session: Dict, evaluation: Dict) -> bool:
         """IMPROVED: Determine if call should continue with better logic (Practice mode)"""
@@ -1083,9 +1289,18 @@ class RoleplayEngine:
         elif current_stage == 'soft_discovery':
             # For Marathon/Legend, discovery completion is handled separately
             if mode not in ['marathon', 'legend']:
-                # Practice mode: Move to extended conversation
+                # Practice mode: Move to extended conversation for natural flow
                 if session['stage_turn_count'] >= 2:
                     should_progress = True
+            else:
+                # Marathon/Legend: Check for call completion after discovery
+                if evaluation.get('passed', False) and session['stage_turn_count'] >= 1:
+                    # Discovery passed, this call is complete
+                    should_progress = False  # Handle completion separately
+        
+        elif current_stage == 'extended_conversation':
+            # Practice mode only - can stay here for multiple turns
+            pass
         
         if should_progress:
             next_stage = self.stage_flow[mode].get(current_stage)

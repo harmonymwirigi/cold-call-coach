@@ -536,23 +536,49 @@ class PhoneRoleplayManager {
             this.voiceHandler.enableInterruption();
         }
         
-        // Update UI to show natural mode
+        // Update UI to show mode-specific features
         const micBtn = document.getElementById('mic-btn');
         if (micBtn) {
             micBtn.disabled = false;
-            
-            if (this.marathonState.isMarathonMode || this.marathonState.isLegendMode) {
-                micBtn.title = 'Marathon/Legend Mode - No feedback until end of run';
-            } else {
-                micBtn.title = 'Practice Mode - Real-time feedback available';
-            }
-            
             micBtn.classList.add('natural-mode');
+            
+            if (this.selectedMode === 'practice') {
+                micBtn.title = 'Practice Mode - Real-time coaching available';
+                micBtn.classList.add('practice-mode');
+            } else if (this.marathonState.isMarathonMode || this.marathonState.isLegendMode) {
+                micBtn.title = 'Marathon/Legend Mode - No feedback until end of run';
+                micBtn.classList.add(this.marathonState.isLegendMode ? 'legend-mode' : 'marathon-mode');
+            }
+        }
+        
+        // Update transcript for mode-specific styling
+        const transcript = document.getElementById('live-transcript');
+        if (transcript) {
+            if (this.selectedMode === 'practice') {
+                transcript.classList.add('practice-mode');
+            } else if (this.marathonState.isMarathonMode) {
+                transcript.classList.add('marathon-active');
+            } else if (this.marathonState.isLegendMode) {
+                transcript.classList.add('legend-active');
+            }
+        }
+        
+        // Update call interface styling
+        const callInterface = document.getElementById('call-interface');
+        if (callInterface) {
+            if (this.selectedMode === 'practice') {
+                callInterface.classList.add('practice-mode');
+            } else if (this.marathonState.isMarathonMode) {
+                callInterface.classList.add('marathon-mode');
+            } else if (this.marathonState.isLegendMode) {
+                callInterface.classList.add('legend-mode');
+            }
         }
         
         // Show mode-specific instructions
-        const modeText = this.marathonState.isMarathonMode ? 'Marathon' : 
-                        this.marathonState.isLegendMode ? 'Legend' : 'Practice';
+        const modeText = this.selectedMode === 'practice' ? 'Practice (Real-time coaching)' : 
+                        this.marathonState.isMarathonMode ? 'Marathon' : 
+                        this.marathonState.isLegendMode ? 'Legend' : 'Training';
         this.updateTranscript(`🤖 ${modeText} mode ready - speak when you want!`);
     }
 
@@ -667,6 +693,11 @@ class PhoneRoleplayManager {
             if (response.ok) {
                 const data = await response.json();
                 console.log('✅ AI response received:', data);
+                
+                // Handle real-time coaching for Practice mode
+                if (data.live_coaching && this.selectedMode === 'practice') {
+                    this.displayLiveCoaching(data.live_coaching);
+                }
                 
                 // Update Marathon state if provided
                 if (data.call_info) {
@@ -864,6 +895,62 @@ class PhoneRoleplayManager {
         return new Promise(resolve => setTimeout(resolve, delay));
     }
 
+    displayLiveCoaching(coaching) {
+        console.log('📚 Displaying live coaching for Practice mode:', coaching);
+        
+        // Create or update live coaching display
+        let coachingDisplay = document.getElementById('live-coaching-display');
+        if (!coachingDisplay) {
+            coachingDisplay = document.createElement('div');
+            coachingDisplay.id = 'live-coaching-display';
+            coachingDisplay.className = 'live-coaching-display';
+            
+            // Insert after the live transcript
+            const transcript = document.getElementById('live-transcript');
+            if (transcript && transcript.parentNode) {
+                transcript.parentNode.insertBefore(coachingDisplay, transcript.nextSibling);
+            }
+        }
+        
+        // Determine coaching style based on feedback
+        const isPositive = coaching.feedback.toLowerCase().includes('great') || 
+                          coaching.feedback.toLowerCase().includes('excellent') || 
+                          coaching.feedback.toLowerCase().includes('perfect');
+        
+        const coachingClass = isPositive ? 'positive' : 'improvement';
+        const icon = isPositive ? '✅' : '💡';
+        
+        coachingDisplay.innerHTML = `
+            <div class="coaching-content ${coachingClass}">
+                <div class="coaching-header">
+                    <span class="coaching-icon">${icon}</span>
+                    <span class="coaching-stage">${coaching.stage.toUpperCase()} FEEDBACK</span>
+                </div>
+                <div class="coaching-feedback">${coaching.feedback}</div>
+                ${coaching.tip ? `<div class="coaching-tip">💡 ${coaching.tip}</div>` : ''}
+            </div>
+        `;
+        
+        // Show the coaching display
+        coachingDisplay.style.display = 'block';
+        coachingDisplay.classList.add('show');
+        
+        // Auto-hide after 8 seconds unless it's improvement feedback
+        if (isPositive) {
+            setTimeout(() => {
+                if (coachingDisplay) {
+                    coachingDisplay.classList.remove('show');
+                    setTimeout(() => {
+                        if (coachingDisplay && coachingDisplay.parentNode) {
+                            coachingDisplay.style.display = 'none';
+                        }
+                    }, 300);
+                }
+            }, 5000);
+        }
+        // Keep improvement feedback visible longer
+    }
+
     addToConversationHistory(sender, message) {
         this.conversationHistory.push({
             sender: sender,
@@ -1053,9 +1140,22 @@ class PhoneRoleplayManager {
         document.getElementById('call-interface').style.display = 'none';
         document.getElementById('feedback-section').style.display = 'flex';
         
+        // Add Practice mode styling
+        const feedbackSection = document.getElementById('feedback-section');
+        if (feedbackSection) {
+            feedbackSection.classList.add('practice-mode');
+        }
+        
         const feedbackHeader = document.querySelector('.feedback-header h4');
         if (feedbackHeader) {
             feedbackHeader.textContent = 'Practice Mode Complete!';
+        }
+        
+        // Update feedback badge
+        const feedbackBadge = document.getElementById('feedback-mode-badge');
+        if (feedbackBadge) {
+            feedbackBadge.className = 'practice-badge';
+            feedbackBadge.textContent = 'Practice v1.1';
         }
         
         if (coaching) {
