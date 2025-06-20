@@ -1,6 +1,5 @@
-# ===== UPDATED API/SERVICES/OPENAI_SERVICE.PY - ROLEPLAY 1.1 COMPLIANT =====
+# ===== FIXED API/SERVICES/OPENAI_SERVICE.PY - SIMPLE & WORKING =====
 
-import openai
 import os
 import json
 import random
@@ -8,904 +7,541 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
+# Use the correct OpenAI import for 2024
+try:
+    from openai import OpenAI
+except ImportError:
+    print("ERROR: Please install openai: pip install openai")
+    OpenAI = None
+
 logger = logging.getLogger(__name__)
 
 class OpenAIService:
     def __init__(self):
         self.api_key = os.getenv('REACT_APP_OPENAI_API_KEY')
-        self.model = "gpt-4o-mini"  # Using efficient model for faster responses
-        self.is_enabled = bool(self.api_key)
+        self.model = "gpt-4o-mini"  # Fast and efficient model
+        self.is_enabled = bool(self.api_key and OpenAI)
         
-        if self.api_key:
-            openai.api_key = self.api_key
-            logger.info("OpenAI service initialized for Roleplay 1.1")
+        if self.is_enabled:
+            self.client = OpenAI(api_key=self.api_key)
+            logger.info("OpenAI service initialized successfully")
+            # Test the connection
+            self._test_connection()
         else:
-            logger.warning("OpenAI API key not provided - using fallback responses")
+            logger.warning("OpenAI service disabled - no API key or library not installed")
+            self.client = None
         
-        # Load Roleplay 1.1 system prompts
-        self.system_prompts = self._load_roleplay_11_prompts()
-        self.coaching_prompts = self._load_roleplay_11_coaching_prompts()
-        
-        # Roleplay 1.1 fallback responses
-        self.fallback_responses = self._load_roleplay_11_fallbacks()
-        
-        # Roleplay 1.1 specifications
-        self.roleplay_11_specs = {
-            'early_objections': [
-                "What's this about?", "I'm not interested", "We don't take cold calls",
-                "Now is not a good time", "I have a meeting", "Can you call me later?",
-                "I'm about to go into a meeting", "Send me an email", "Can you send me the information?",
-                "Can you message me on WhatsApp?", "Who gave you this number?", "This is my personal number",
-                "Where did you get my number?", "What are you trying to sell me?", "Is this a sales call?",
-                "Is this a cold call?", "Are you trying to sell me something?", "We are ok for the moment",
-                "We are all good / all set", "We're not looking for anything right now",
-                "We are not changing anything", "How long is this going to take?", "Is this going to take long?",
-                "What company are you calling from?", "Who are you again?", "Where are you calling from?",
-                "I never heard of you", "Not interested right now", "Just send me the details"
-            ],
-            'impatience_phrases': [
-                "Hello? Are you still with me?", "Can you hear me?", "Just checking you're there…",
-                "Still on the line?", "I don't have much time for this.", "Sounds like you are gone.",
-                "Are you an idiot.", "What is going on.", "Are you okay to continue?", "I am afraid I have to go"
-            ]
-        }
+        # Load roleplay prompts and fallbacks
+        self._load_roleplay_1_prompts()
+        self._load_fallback_responses()
 
-    def _load_roleplay_11_prompts(self) -> Dict[str, str]:
-        """Load system prompts specifically for Roleplay 1.1"""
-        return {
-            "roleplay_11_prospect": """You are an AI-powered English Cold Calling Coach simulating Roleplay 1.1: "Opener + Early Objection + Mini-Pitch (Practice Mode)".
+    def _test_connection(self):
+        """Test OpenAI connection and log the result"""
+        try:
+            # Simple test call
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": "Hi"}],
+                max_tokens=5
+            )
+            logger.info("✅ OpenAI connection test successful")
+            return True
+        except Exception as e:
+            logger.error(f"❌ OpenAI connection test failed: {e}")
+            self.is_enabled = False
+            return False
 
-## CRITICAL BEHAVIOR RULES FOR ROLEPLAY 1.1
+    def _load_roleplay_1_prompts(self):
+        """Load Roleplay 1.1 specific prompts"""
+        self.roleplay_1_prompts = {
+            "prospect_system": """You are a realistic business prospect receiving a COLD CALL. This is Roleplay 1.1 training.
 
-**STAY IN CHARACTER**: You are the PROSPECT receiving a cold call, NOT the coach. Never break character.
+CRITICAL: Stay in character as the prospect at all times. Never break character.
 
-**ROLEPLAY 1.1 FLOW**:
-1. Phone Pickup → SDR gives opener → Evaluate opener (pass/fail)
-2. If opener passes → Give early objection → SDR handles objection → Evaluate handling (pass/fail)  
-3. If objection handling passes → SDR gives mini-pitch → Evaluate pitch (pass/fail)
-4. SDR asks soft discovery question → Evaluate question (pass/fail) → End call
+YOU ARE: {job_title} at a {industry} company
+CURRENT STAGE: {stage}
 
-**LANGUAGE SPECIFICATIONS**:
-- You speak CEFR C2 level English (sophisticated, native-level)
-- Use complex vocabulary, natural contractions, realistic interruptions
-- Keep responses SHORT (1-2 sentences typically)
-- No mid-call feedback or coaching - stay in character always
+ROLEPLAY 1.1 FLOW:
+1. Phone Pickup → SDR gives opener
+2. Evaluate opener → Give early objection if good, hang up if bad  
+3. SDR handles objection → Give mini-pitch opportunity if handled well
+4. SDR gives mini-pitch → Give discovery opportunity if good
+5. SDR asks discovery → End call with result
 
-**PROSPECT PERSONA**: You are a {job_title} at a {industry} company.
-
-**CURRENT STAGE**: {current_stage}
-**CONVERSATION HISTORY**: 
-{conversation_context}
-
-**LATEST SDR INPUT**: "{user_input}"
-
-**STAGE-SPECIFIC BEHAVIOR**:
+STAGE-SPECIFIC BEHAVIOR:
 {stage_instructions}
 
-**RESPONSE INSTRUCTIONS**:
-- Respond as the {job_title} would in this exact situation
-- Use sophisticated, native-level English (CEFR C2)
-- Keep response brief and conversational (1-2 sentences)
-- Show realistic prospect behavior for current stage
-- Be challenging but fair - this is training
-- Never give coaching or feedback - stay in character
+Keep responses SHORT (1-2 sentences). Be realistic and challenging but fair.
+This is training - help them learn by being a realistic prospect.""",
 
-Respond now as the prospect:""",
+            "evaluation_system": """Evaluate this Roleplay 1.1 interaction as an expert sales trainer.
 
-            "opener_evaluation": """**OPENER EVALUATION STAGE**
-The SDR just delivered their opening line. Evaluate based on these criteria:
-- Clear cold call opener (not just greeting)
-- Casual, confident tone with contractions
-- Shows empathy for the interruption  
-- Ends with soft question
+CONVERSATION:
+{conversation}
 
-**Response Rules**:
-- If opener scores 0-1 criteria: 80% chance to hang up ("Not interested. *click*")
-- If opener scores 2 criteria: 30% chance to hang up, otherwise early objection
-- If opener scores 3-4 criteria: 10% chance to hang up, otherwise engage with mild objection
+USER'S LATEST INPUT: "{user_input}"
+CURRENT STAGE: {stage}
 
-**Hang-up responses**: "Not interested.", "Please don't call here again.", "I'm hanging up now."
-**Objection responses**: Choose from the 29-item early objection list, never repeat consecutively.""",
+EVALUATE BASED ON ROLEPLAY 1.1 RUBRIC:
+{rubric_criteria}
 
-            "objection_handling": """**OBJECTION HANDLING STAGE**
-You gave an objection. Evaluate how they handle it:
-- Do they acknowledge calmly? ("Fair enough", "I understand")
-- Do they avoid arguing or immediate pitching?
-- Do they reframe briefly in 1 sentence?
-- Do they end with forward-moving question?
-
-**Response Rules**:
-- If handled well (3+ criteria): Show mild interest but maintain skepticism
-- If handled poorly: Give stronger objection or hang up
-- If they pitch immediately: "I didn't ask for a sales pitch. Goodbye."
-
-**Engagement**: "Alright, I'm listening.", "Go ahead, what is it?", "You have 30 seconds."
-**Resistance**: "I already told you I'm not interested.", "Are you not listening to me?""",
-
-            "mini_pitch_evaluation": """**MINI-PITCH EVALUATION STAGE**
-Listen to their pitch and evaluate:
-- Is it short (1-2 sentences, under 30 words)?
-- Does it focus on outcomes/benefits, not features?
-- Is the language simple and jargon-free?
-- Does it sound natural, not robotic?
-
-**Response Rules**:
-- If pitch is good (3+ criteria): Show interest, ask follow-up
-- If pitch is poor: Show confusion or disinterest
-- Lead them to soft discovery question
-
-**Positive**: "That's interesting. Tell me more.", "How exactly do you do that?"
-**Negative**: "I don't understand.", "That sounds like everything else.""",
-
-            "soft_discovery": """**SOFT DISCOVERY STAGE**
-They should ask a soft discovery question. Evaluate:
-- Is question tied to their pitch?
-- Is it open-ended and curious?
-- Is tone soft and non-pushy?
-
-**Response Rules**:
-- If question is good (2+ criteria): Answer positively, then hang up with interest
-- If question is poor: Show disinterest and hang up
-- This determines final PASS/FAIL
-
-**Success**: "That's a good question. Send me information. Goodbye."
-**Failure**: "That's not relevant. This isn't going anywhere. Goodbye.""",
-
-            "silence_impatience": """**SILENCE IMPATIENCE (10 seconds)**
-The SDR has been silent for 10 seconds. Show impatience with one of these phrases:
-"Hello? Are you still with me?", "Can you hear me?", "Just checking you're there…",
-"Still on the line?", "I don't have much time for this.", "Sounds like you are gone.",
-"Are you an idiot.", "What is going on.", "Are you okay to continue?", "I am afraid I have to go"
-
-Use exactly one phrase, then wait for their response.""",
-
-            "silence_hangup": """**SILENCE HANGUP (15 seconds)**
-The SDR has been silent for 15 seconds total. Hang up immediately:
-"I don't have time for this. Goodbye." or "Are you there? I'm hanging up."
-
-The call ends here - mark as FAIL."""
+RESPOND WITH VALID JSON:
+{
+  "score": <0-4>,
+  "passed": <true/false>,
+  "criteria_met": ["criterion1", "criterion2"],
+  "feedback": "Brief feedback",
+  "should_continue": <true/false>,
+  "next_action": "continue|objection|pitch|discovery|hangup"
+}"""
         }
 
-    def _load_roleplay_11_coaching_prompts(self) -> Dict[str, str]:
-        """Load coaching prompts specifically for Roleplay 1.1"""
-        return {
-            "roleplay_11_coaching": """Analyze this Roleplay 1.1 session and provide coaching feedback in CEFR A2 English (simple, clear language for Spanish speakers learning English).
+        self.stage_instructions = {
+            "phone_pickup": "Answer like a busy professional: 'Hello?' or 'Hi there.'",
+            
+            "opener_evaluation": """Evaluate their opener:
+- 0-1 criteria met: 80% chance hang up ("Not interested. *click*")  
+- 2 criteria met: 30% chance hang up, otherwise give objection
+- 3-4 criteria met: 10% chance hang up, otherwise give mild objection
 
-## SESSION ANALYSIS
-**Roleplay**: 1.1 - Opener + Early Objection + Mini-Pitch
-**Prospect**: {prospect_job_title} in {prospect_industry}
-**Mode**: Practice
+Criteria: 1) Clear opener (not just greeting) 2) Casual tone with contractions 3) Shows empathy 4) Ends with soft question""",
 
-## CONVERSATION TRANSCRIPT
-{conversation_transcript}
+            "early_objection": """Give ONE of these objections:
+"What's this about?", "I'm not interested", "Now is not a good time", "I have a meeting", 
+"Send me an email", "Who gave you this number?", "Is this a sales call?", "We're all good"
 
-## RUBRIC RESULTS
-{rubric_results}
+Be realistic and challenging.""",
 
-## COACHING REQUIREMENTS (CEFR A2 English - Simple and Clear)
+            "objection_handling": """They should: 1) Acknowledge calmly 2) Not argue 3) Reframe briefly 4) Ask forward question
+If handled well: "Alright, I'm listening" / "Go ahead, what is it?"
+If handled poorly: Stronger objection or hang up""",
 
-Provide exactly ONE item per category using simple English:
+            "mini_pitch": """They should give short pitch focused on outcomes, not features.
+If good pitch: "That's interesting. Tell me more." / "How exactly do you do that?"
+If poor pitch: "I don't understand" / "That sounds like everything else" """,
 
-### 1. SALES COACHING
-Focus on sales performance based on rubric results:
-- If opener failed: "Your opening needs work. Try: 'Hi, I know this is out of the blue, but can I tell you why I'm calling?'"
-- If objection handling failed: "When they object, say 'I understand' first. Don't argue. Then ask a question."
-- If mini-pitch failed: "Keep your pitch short. Talk about the problem you solve, not your product features."
-- If soft discovery failed: "Ask open questions like 'How do you handle that now?' Don't be pushy."
-- If all passed: "Great job! You passed all sales steps. Keep practicing to get even better."
-
-### 2. GRAMMAR COACHING
-Look for Spanish→English interference patterns:
-- Contractions: "Use 'I'm' instead of 'I am'. It sounds more natural."
-- Articles: "You use 'the' too much. Sometimes you don't need it."
-- Word order: Focus on most common mistakes
-- If good: "Good grammar! Keep using contractions like 'I'm' and 'can't'."
-
-### 3. VOCABULARY COACHING  
-Check for unnatural word choices:
-- False friends: "You said 'assist'. Use 'attend' for meetings. 'Assist' means 'help'."
-- Business terms: "Say 'book a meeting' not 'win a meeting'."
-- Jargon: "Use simple words. Say 'use' instead of 'utilize'."
-- If good: "Good word choices! Keep using simple, clear business language."
-
-### 4. PRONUNCIATION COACHING
-Note unclear words (based on low ASR confidence if available):
-- Format: "Word: 'schedule' - Say it like: 'SKED-jool'"
-- Common issues for Spanish speakers
-- If good: "Good pronunciation! Speak clearly and not too fast."
-
-### 5. RAPPORT & ASSERTIVENESS
-Evaluate confidence and empathy:
-- Low confidence: "Show empathy at the start. Say 'I know this is unexpected'."
-- Too pushy: "Stay calm when they object. Say 'I understand' and don't argue."
-- If good: "Good rapport! You sound professional and friendly."
-
-## OUTPUT FORMAT
-Return exactly this structure:
-```
-SALES: [One specific tip based on failed rubric or praise if passed]
-GRAMMAR: [One grammar tip in simple English]
-VOCABULARY: [One vocabulary tip focusing on business language]  
-PRONUNCIATION: [One pronunciation tip or praise]
-RAPPORT: [One tip about confidence/empathy or praise]
-```
-
-Keep all feedback in CEFR A2 level English - short sentences, simple words, clear instructions.""",
-
-            "score_calculation": """Calculate Roleplay 1.1 performance score (0-100) based on:
-
-**Rubric Performance (60%)**:
-- Opener passed: +15 points
-- Objection handling passed: +15 points  
-- Mini-pitch passed: +15 points
-- Soft discovery passed: +15 points
-
-**Completion Bonus (40%)**:
-- Completed without hang-up: +10 points
-- Overall call passed (all rubrics): +10 points
-- Participation (reached each stage): +20 points
-
-**Base Score**: 40 points (for attempting the roleplay)
-
-Return only the numerical score (0-100)."""
+            "soft_discovery": """They should ask open question tied to their pitch.
+If good question: End positively "That's a good question. Send me info. Goodbye."
+If poor question: End negatively "Not relevant. This isn't going anywhere." """
         }
 
-    def _load_roleplay_11_fallbacks(self) -> Dict[str, List[str]]:
-        """Load fallback responses for Roleplay 1.1 when OpenAI unavailable"""
-        return {
-            "phone_pickup": ["Hello?", "Hi there.", "Good morning.", "Yes?"],
-            
-            "early_objection": [
-                "What's this about?", "I'm not interested", "We don't take cold calls",
-                "Now is not a good time", "I have a meeting", "Send me an email",
-                "Who gave you this number?", "What are you trying to sell me?",
-                "Is this a sales call?", "We are all good", "How long is this going to take?"
-            ],
-            
-            "objection_response": [
-                "Alright, I'm listening.", "Go ahead, what is it?", "You have 30 seconds.",
-                "This better be good.", "What exactly do you do?", "I'm still not interested.",
-                "Are you not listening to me?"
-            ],
-            
-            "mini_pitch_response": [
-                "That's interesting. Tell me more.", "How exactly do you do that?",
-                "What does that look like?", "I don't understand what you're saying.",
-                "That sounds like everything else.", "Too complicated."
-            ],
-            
-            "hangup_responses": {
-                "opener_fail": ["Not interested.", "Please don't call here again.", "I'm hanging up now."],
-                "objection_fail": ["I already told you I'm not interested.", "You're not listening. Goodbye."],
-                "discovery_success": ["That's a good question. Send me information. Goodbye."],
-                "discovery_fail": ["That's not relevant to us. Goodbye.", "This isn't going anywhere."],
-                "silence": ["I don't have time for this. Goodbye.", "Are you there? I'm hanging up."]
-            }
-        }
+        self.rubric_criteria = {
+            "opener": """OPENER RUBRIC (need 3/4 to pass):
+1. Clear cold call opener (not just greeting)
+2. Casual tone (uses contractions like "I'm", "don't") 
+3. Shows empathy ("I know this is out of the blue")
+4. Ends with soft question ("Can I tell you why I'm calling?")""",
 
-    # ===== ROLEPLAY 1.1 SPECIALIZED METHODS =====
-
-    async def generate_roleplay_response(self, user_input: str, conversation_history: List[Dict], 
-                                       user_context: Dict, roleplay_config: Dict) -> Dict[str, Any]:
-        """Generate roleplay response with Roleplay 1.1 specialization"""
-        try:
-            roleplay_id = roleplay_config.get('roleplay_id', 1)
-            
-            if roleplay_id == 1:
-                # Use specialized Roleplay 1.1 handling
-                return await self._generate_roleplay_11_response(user_input, conversation_history, user_context, roleplay_config)
-            else:
-                # Use existing general handling for other roleplays
-                return await self._generate_general_roleplay_response(user_input, conversation_history, user_context, roleplay_config)
-                
-        except Exception as e:
-            logger.error(f"Error generating roleplay response: {e}")
-            return self._generate_fallback_response(user_input, conversation_history, roleplay_config)
-
-    async def _generate_roleplay_11_response(self, user_input: str, conversation_history: List[Dict], 
-                                          user_context: Dict, roleplay_config: Dict) -> Dict[str, Any]:
-        """Specialized response generation for Roleplay 1.1"""
-        try:
-            # Build the specialized Roleplay 1.1 prompt
-            prompt = self._build_roleplay_11_prompt(user_input, conversation_history, user_context, roleplay_config)
-            
-            # Generate AI response using OpenAI
-            ai_response = await self._call_openai_chat(prompt, user_input)
-            
-            if ai_response:
-                # Quick evaluation for Roleplay 1.1
-                evaluation = await self._quick_evaluate_roleplay_11(user_input, conversation_history, roleplay_config)
-                
-                return {
-                    'success': True,
-                    'response': ai_response,
-                    'evaluation': evaluation,
-                    'should_continue': evaluation.get('should_continue', True),
-                    'stage': evaluation.get('next_stage', 'in_progress'),
-                    'roleplay_11_enhanced': True
-                }
-            else:
-                # Fallback if OpenAI fails
-                return self._generate_roleplay_11_fallback(user_input, conversation_history, roleplay_config)
-                
-        except Exception as e:
-            logger.error(f"Error in Roleplay 1.1 response generation: {e}")
-            return self._generate_roleplay_11_fallback(user_input, conversation_history, roleplay_config)
-
-    def _build_roleplay_11_prompt(self, user_input: str, conversation_history: List[Dict], 
-                               user_context: Dict, roleplay_config: Dict) -> str:
-        """Build specialized prompt for Roleplay 1.1"""
-        
-        # Get prospect persona details
-        prospect_title = user_context.get('prospect_job_title', 'CTO')
-        prospect_industry = user_context.get('prospect_industry', 'Technology')
-        
-        # Determine current stage
-        current_stage = self._determine_roleplay_11_stage(conversation_history)
-        
-        # Get stage-specific instructions
-        stage_instructions = self._get_roleplay_11_stage_instructions(current_stage)
-        
-        # Format conversation context
-        conversation_context = self._format_conversation_history(conversation_history)
-        
-        # Build the specialized Roleplay 1.1 prompt
-        prompt = self.system_prompts["roleplay_11_prospect"].format(
-            job_title=prospect_title,
-            industry=prospect_industry,
-            current_stage=current_stage,
-            conversation_context=conversation_context,
-            user_input=user_input,
-            stage_instructions=stage_instructions
-        )
-        
-        return prompt
-
-    def _determine_roleplay_11_stage(self, conversation_history: List[Dict]) -> str:
-        """Determine current stage in Roleplay 1.1 flow"""
-        if not conversation_history:
-            return "phone_pickup"
-        
-        # Count user messages to determine stage
-        user_messages = [msg for msg in conversation_history if msg.get('role') == 'user']
-        
-        if len(user_messages) == 0:
-            return "phone_pickup"
-        elif len(user_messages) == 1:
-            return "opener_evaluation"
-        elif len(user_messages) == 2:
-            return "objection_handling"
-        elif len(user_messages) == 3:
-            return "mini_pitch_evaluation"
-        elif len(user_messages) >= 4:
-            return "soft_discovery"
-        
-        return "in_progress"
-
-    def _get_roleplay_11_stage_instructions(self, stage: str) -> str:
-        """Get detailed stage instructions for Roleplay 1.1"""
-        
-        instructions = {
-            "phone_pickup": "Answer the phone like a busy professional. Say 'Hello?' or similar short greeting.",
-            
-            "opener_evaluation": self.system_prompts["opener_evaluation"],
-            
-            "objection_handling": self.system_prompts["objection_handling"],
-            
-            "mini_pitch_evaluation": self.system_prompts["mini_pitch_evaluation"],
-            
-            "soft_discovery": self.system_prompts["soft_discovery"],
-            
-            "silence_impatience": self.system_prompts["silence_impatience"],
-            
-            "silence_hangup": self.system_prompts["silence_hangup"]
-        }
-        
-        return instructions.get(stage, "Continue natural conversation as a realistic prospect.")
-
-    async def _quick_evaluate_roleplay_11(self, user_input: str, conversation_history: List[Dict], 
-                                       roleplay_config: Dict) -> Dict[str, Any]:
-        """Quick evaluation for Roleplay 1.1 using OpenAI"""
-        try:
-            # Build evaluation prompt
-            eval_prompt = self._build_roleplay_11_evaluation_prompt(user_input, conversation_history)
-            
-            # Get evaluation from OpenAI
-            eval_response = await self._call_openai_chat(eval_prompt, "Evaluate this Roleplay 1.1 interaction.")
-            
-            if eval_response:
-                # Parse the evaluation response
-                return self._parse_roleplay_11_evaluation(eval_response)
-            else:
-                # Fallback evaluation
-                return self._basic_roleplay_11_evaluation(user_input, conversation_history)
-                
-        except Exception as e:
-            logger.error(f"Error in Roleplay 1.1 evaluation: {e}")
-            return self._basic_roleplay_11_evaluation(user_input, conversation_history)
-
-    def _build_roleplay_11_evaluation_prompt(self, user_input: str, conversation_history: List[Dict]) -> str:
-        """Build evaluation prompt for Roleplay 1.1 rubrics"""
-        
-        stage = self._determine_roleplay_11_stage(conversation_history)
-        
-        evaluation_prompt = f"""Analyze this Roleplay 1.1 interaction for evaluation:
-
-**CURRENT STAGE**: {stage}
-**SDR INPUT**: "{user_input}"
-
-**EVALUATION CRITERIA FOR {stage.upper()}**:
-"""
-
-        if stage in ['phone_pickup', 'opener_evaluation']:
-            evaluation_prompt += """
-**OPENER RUBRIC** (Need 3/4 to pass):
-1. Clear cold call opener (pattern interrupt, permission-based, or value-first) - NOT just greeting
-2. Casual, confident tone (uses contractions like "I'm", "don't", "we're")  
-3. Shows empathy ("I know this is out of the blue", "You don't know me", etc.)
-4. Ends with soft question ("Can I tell you why I'm calling?")
-
-**HANG-UP PROBABILITY**: 
-- 0-1 criteria: 80% hang-up chance
-- 2 criteria: 30% hang-up chance  
-- 3-4 criteria: 10% hang-up chance"""
-
-        elif stage == 'objection_handling':
-            evaluation_prompt += """
-**OBJECTION HANDLING RUBRIC** (Need 3/4 to pass):
-1. Acknowledges calmly ("Fair enough", "Totally get that", "I understand")
-2. Doesn't argue or pitch immediately
+            "objection_handling": """OBJECTION HANDLING RUBRIC (need 3/4 to pass):
+1. Acknowledges calmly ("Fair enough", "I understand")
+2. Doesn't argue or pitch immediately  
 3. Reframes or buys time in 1 sentence
-4. Ends with forward-moving question
+4. Ends with forward-moving question""",
 
-**AUTO-FAIL**: Gets defensive, ignores objection, pitches immediately"""
-
-        elif stage == 'mini_pitch_evaluation':
-            evaluation_prompt += """
-**MINI-PITCH RUBRIC** (Need 3/4 to pass):
+            "mini_pitch": """MINI-PITCH RUBRIC (need 3/4 to pass):
 1. Short (1-2 sentences, under 30 words)
-2. Focuses on problem solved or outcome delivered (not features)
-3. Simple English, no jargon or buzzwords
-4. Sounds natural, not robotic or memorized
+2. Focuses on outcomes/problems solved (not features)
+3. Simple English, no jargon 
+4. Sounds natural, not robotic""",
 
-**AUTO-FAIL**: Too long, feature-focused, jargon-heavy, scripted"""
-
-        elif stage == 'soft_discovery':
-            evaluation_prompt += """
-**SOFT DISCOVERY RUBRIC** (Need 2/3 to pass):
+            "soft_discovery": """SOFT DISCOVERY RUBRIC (need 2/3 to pass):
 1. Short question tied to the pitch
 2. Open/curious question (not leading)
-3. Soft, non-pushy tone
-
-**AUTO-FAIL**: No question, too broad, sounds pushy"""
-
-        evaluation_prompt += f"""
-
-**RESPONSE FORMAT**:
-- PASS/FAIL: [Pass/Fail]
-- SCORE: [0-4 for criteria met]
-- CRITERIA_MET: [List specific criteria met]
-- SHOULD_HANGUP: [True/False]
-- NEXT_STAGE: [Next conversation stage]
-
-Analyze: "{user_input}" """
-
-        return evaluation_prompt
-
-    def _parse_roleplay_11_evaluation(self, eval_response: str) -> Dict[str, Any]:
-        """Parse OpenAI evaluation response for Roleplay 1.1"""
-        try:
-            response_lower = eval_response.lower()
-            
-            # Extract pass/fail
-            passed = 'pass' in response_lower and 'fail' not in response_lower.replace('pass', '')
-            
-            # Extract hang-up decision
-            should_hangup = 'should_hangup: true' in response_lower or 'hang up' in response_lower
-            
-            # Extract score (look for numbers)
-            import re
-            score_match = re.search(r'score[:\s]*(\d+)', response_lower)
-            score = int(score_match.group(1)) if score_match else (3 if passed else 1)
-            
-            # Extract criteria
-            criteria_met = []
-            if 'clear opener' in response_lower or 'clear cold call' in response_lower:
-                criteria_met.append('clear_opener')
-            if 'casual' in response_lower or 'contractions' in response_lower:
-                criteria_met.append('casual_tone')
-            if 'empathy' in response_lower or 'out of the blue' in response_lower:
-                criteria_met.append('shows_empathy')
-            if 'question' in response_lower and 'soft' in response_lower:
-                criteria_met.append('soft_question')
-            
-            return {
-                'passed': passed,
-                'should_continue': not should_hangup,
-                'should_hangup': should_hangup,
-                'criteria_met': criteria_met,
-                'quality_score': score,
-                'evaluation_source': 'openai',
-                'raw_evaluation': eval_response
-            }
-            
-        except Exception as e:
-            logger.error(f"Error parsing Roleplay 1.1 evaluation: {e}")
-            return self._basic_roleplay_11_evaluation("", [])
-
-    def _basic_roleplay_11_evaluation(self, user_input: str, conversation_history: List[Dict]) -> Dict[str, Any]:
-        """Basic fallback evaluation for Roleplay 1.1"""
-        # Simple heuristic evaluation
-        user_input_lower = user_input.lower()
-        score = 2  # Base score
-        
-        # Basic checks for opener
-        if any(contraction in user_input_lower for contraction in ["i'm", "don't", "can't", "we're"]):
-            score += 1
-        
-        if any(empathy in user_input_lower for empathy in ["know this is", "out of the blue", "don't know me"]):
-            score += 2
-        
-        if user_input.strip().endswith('?'):
-            score += 1
-        
-        return {
-            'passed': score >= 3,
-            'should_continue': score >= 2,
-            'should_hangup': score < 2,
-            'quality_score': score,
-            'evaluation_source': 'fallback'
+3. Soft, non-pushy tone"""
         }
 
-    def _generate_roleplay_11_fallback(self, user_input: str, conversation_history: List[Dict], 
-                                     roleplay_config: Dict) -> Dict[str, Any]:
-        """Generate fallback response for Roleplay 1.1"""
-        try:
-            stage = self._determine_roleplay_11_stage(conversation_history)
+    def _load_fallback_responses(self):
+        """Load fallback responses when OpenAI fails"""
+        self.fallbacks = {
+            "phone_pickup": ["Hello?", "Hi there.", "Good morning.", "Yes?"],
             
-            # Map stages to appropriate responses
-            if stage in ["phone_pickup", "opener_evaluation"]:
-                # Use early objection
-                responses = self.roleplay_11_specs['early_objections'][:10]
-            elif stage == "objection_handling":
-                responses = self.fallback_responses["objection_response"]
-            elif stage == "mini_pitch_evaluation":
-                responses = self.fallback_responses["mini_pitch_response"]
-            elif stage == "soft_discovery":
-                # Determine if hanging up positively or negatively
-                responses = self.fallback_responses["hangup_responses"]["discovery_success"]
-            else:
-                responses = ["I see. Tell me more.", "Go on.", "That's interesting."]
+            "early_objections": [
+                "What's this about?", "I'm not interested", "Now is not a good time",
+                "I have a meeting", "Send me an email", "Who gave you this number?",
+                "Is this a sales call?", "We're all good"
+            ],
             
-            selected_response = random.choice(responses)
+            "objection_responses": [
+                "Alright, I'm listening.", "Go ahead, what is it?", "You have 30 seconds.",
+                "This better be good.", "What exactly do you do?"
+            ],
             
-            # Basic evaluation
-            evaluation = {
-                'quality_score': 3,
-                'should_continue': stage != "soft_discovery",
-                'next_stage': 'in_progress'
+            "pitch_responses": [
+                "That's interesting. Tell me more.", "How exactly do you do that?",
+                "What does that look like?", "I don't understand what you're saying."
+            ],
+            
+            "discovery_endings": {
+                "positive": ["That's a good question. Send me information. Goodbye.",
+                           "Interesting. Email me the details."],
+                "negative": ["That's not relevant to us. Goodbye.",
+                           "This conversation isn't going anywhere."]
             }
-            
-            logger.info(f"Using Roleplay 1.1 fallback response: {selected_response}")
-            
-            return {
-                'success': True,
-                'response': selected_response,
-                'evaluation': evaluation,
-                'should_continue': evaluation['should_continue'],
-                'stage': 'in_progress',
-                'fallback_used': True
-            }
-            
-        except Exception as e:
-            logger.error(f"Error generating Roleplay 1.1 fallback: {e}")
-            return {
-                'success': False,
-                'error': str(e),
-                'response': "Can you repeat that?",
-                'evaluation': {'quality_score': 3, 'should_continue': True}
-            }
+        }
 
-    # ===== ROLEPLAY 1.1 COACHING METHODS =====
+    # ===== MAIN ROLEPLAY 1.1 METHODS =====
 
-    async def generate_coaching_feedback(self, session_data: Dict, user_context: Dict) -> Dict[str, Any]:
-        """Generate comprehensive coaching feedback for Roleplay 1.1"""
+    def generate_roleplay_response(self, user_input: str, conversation_history: List[Dict], 
+                                 user_context: Dict, current_stage: str) -> Dict[str, Any]:
+        """Generate AI prospect response for Roleplay 1.1"""
         try:
+            logger.info(f"Generating response for stage: {current_stage}")
+            
             if not self.is_enabled:
-                return self._generate_roleplay_11_fallback_coaching(session_data)
+                logger.warning("OpenAI disabled, using fallback")
+                return self._generate_fallback_response(current_stage, user_input)
             
-            conversation = session_data.get('conversation_history', [])
-            rubric_scores = session_data.get('rubric_scores', {})
+            # Build the prompt
+            prompt = self._build_prospect_prompt(user_input, conversation_history, user_context, current_stage)
             
-            # Format conversation for analysis
-            conversation_transcript = self._format_conversation_for_coaching(conversation)
-            rubric_results = self._format_rubric_results(rubric_scores)
-            
-            # Build coaching prompt
-            coaching_prompt = self.coaching_prompts["roleplay_11_coaching"].format(
-                prospect_job_title=user_context.get('prospect_job_title', 'CTO'),
-                prospect_industry=user_context.get('prospect_industry', 'Technology'),
-                conversation_transcript=conversation_transcript,
-                rubric_results=rubric_results
-            )
-            
-            # Generate coaching feedback
-            coaching_response = await self._call_openai_chat(coaching_prompt, "Generate Roleplay 1.1 coaching.")
-            
-            if coaching_response:
-                # Parse coaching into categories
-                coaching_feedback = self._parse_roleplay_11_coaching(coaching_response)
-                
-                # Calculate overall score
-                overall_score = self._calculate_roleplay_11_score(session_data, rubric_scores)
-                
-                return {
-                    'success': True,
-                    'coaching': coaching_feedback,
-                    'overall_score': overall_score,
-                    'raw_feedback': coaching_response
-                }
-            else:
-                return self._generate_roleplay_11_fallback_coaching(session_data)
-            
-        except Exception as e:
-            logger.error(f"Error generating Roleplay 1.1 coaching: {e}")
-            return self._generate_roleplay_11_fallback_coaching(session_data)
-
-    def _format_rubric_results(self, rubric_scores: Dict) -> str:
-        """Format rubric results for coaching prompt"""
-        if not rubric_scores:
-            return "No rubric data available."
-        
-        formatted = []
-        for stage, scores in rubric_scores.items():
-            passed = scores.get('passed', False)
-            criteria_met = scores.get('criteria_met', [])
-            score = scores.get('score', 0)
-            
-            formatted.append(f"{stage.upper()}: {'PASS' if passed else 'FAIL'} ({score}/4 criteria)")
-            if criteria_met:
-                formatted.append(f"  - Criteria met: {', '.join(criteria_met)}")
-        
-        return "\n".join(formatted)
-
-    def _parse_roleplay_11_coaching(self, coaching_text: str) -> Dict[str, str]:
-        """Parse coaching feedback into Roleplay 1.1 categories"""
-        try:
-            # Look for the structured format
-            lines = coaching_text.split('\n')
-            coaching = {}
-            
-            for line in lines:
-                line = line.strip()
-                if line.startswith('SALES:'):
-                    coaching['sales_coaching'] = line.replace('SALES:', '').strip()
-                elif line.startswith('GRAMMAR:'):
-                    coaching['grammar_coaching'] = line.replace('GRAMMAR:', '').strip()
-                elif line.startswith('VOCABULARY:'):
-                    coaching['vocabulary_coaching'] = line.replace('VOCABULARY:', '').strip()
-                elif line.startswith('PRONUNCIATION:'):
-                    coaching['pronunciation_coaching'] = line.replace('PRONUNCIATION:', '').strip()
-                elif line.startswith('RAPPORT:'):
-                    coaching['rapport_assertiveness'] = line.replace('RAPPORT:', '').strip()
-            
-            # Fill in missing categories with defaults
-            if 'sales_coaching' not in coaching:
-                coaching['sales_coaching'] = 'Practice your opening and objection handling techniques.'
-            if 'grammar_coaching' not in coaching:
-                coaching['grammar_coaching'] = 'Use contractions like "I\'m" and "don\'t" to sound natural.'
-            if 'vocabulary_coaching' not in coaching:
-                coaching['vocabulary_coaching'] = 'Use simple, clear business language.'
-            if 'pronunciation_coaching' not in coaching:
-                coaching['pronunciation_coaching'] = 'Speak clearly and not too fast.'
-            if 'rapport_assertiveness' not in coaching:
-                coaching['rapport_assertiveness'] = 'Be polite but confident in your delivery.'
-            
-            return {'coaching': coaching}
-            
-        except Exception as e:
-            logger.error(f"Error parsing Roleplay 1.1 coaching: {e}")
-            return self._generate_roleplay_11_fallback_coaching({})['coaching']
-
-    def _calculate_roleplay_11_score(self, session_data: Dict, rubric_scores: Dict) -> int:
-        """Calculate score for Roleplay 1.1 based on rubric performance"""
-        base_score = 40  # Base participation score
-        
-        # Add points for each passed rubric (15 points each)
-        for stage, scores in rubric_scores.items():
-            if scores.get('passed', False):
-                base_score += 15
-        
-        # Bonus for completion without hang-up
-        if not session_data.get('hang_up_triggered', False):
-            base_score += 10
-        
-        # Bonus for overall pass
-        if session_data.get('overall_call_result') == 'pass':
-            base_score += 10
-        
-        return min(100, max(0, base_score))
-
-    def _generate_roleplay_11_fallback_coaching(self, session_data: Dict) -> Dict[str, Any]:
-        """Generate basic coaching when OpenAI unavailable"""
-        return {
-            'success': True,
-            'coaching': {
-                'coaching': {
-                    'sales_coaching': 'Practice your opening with empathy. Say "I know this is out of the blue".',
-                    'grammar_coaching': 'Use contractions like "I\'m" and "don\'t" to sound natural.',
-                    'vocabulary_coaching': 'Use simple, clear business words. Say "book a meeting".',
-                    'pronunciation_coaching': 'Speak clearly and not too fast. Practice key words.',
-                    'rapport_assertiveness': 'Be polite but confident. Show empathy first.'
-                }
-            },
-            'overall_score': 65,
-            'fallback_used': True
-        }
-
-    # ===== GENERAL METHODS (existing functionality) =====
-
-    async def _generate_general_roleplay_response(self, user_input: str, conversation_history: List[Dict], 
-                                                user_context: Dict, roleplay_config: Dict) -> Dict[str, Any]:
-        """General roleplay response for non-Roleplay 1.1 scenarios"""
-        try:
-            # Use existing general roleplay logic
-            prompt = self._build_general_roleplay_prompt(user_input, conversation_history, user_context, roleplay_config)
-            response = await self._call_openai_chat(prompt, user_input)
-            
-            if response:
-                evaluation = await self._quick_evaluate_input(user_input, conversation_history, roleplay_config)
-                return {
-                    'success': True,
-                    'response': response,
-                    'evaluation': evaluation,
-                    'should_continue': evaluation.get('should_continue', True),
-                    'stage': evaluation.get('next_stage', 'in_progress')
-                }
-            else:
-                return self._generate_fallback_response(user_input, conversation_history, roleplay_config)
-            
-        except Exception as e:
-            logger.error(f"Error generating general roleplay response: {e}")
-            return self._generate_fallback_response(user_input, conversation_history, roleplay_config)
-
-    def _build_general_roleplay_prompt(self, user_input: str, conversation_history: List[Dict], 
-                                     user_context: Dict, roleplay_config: Dict) -> str:
-        """Build general roleplay prompt for non-1.1 scenarios"""
-        # Use existing prompt building logic
-        return f"""You are a business professional receiving a cold call. 
-        Respond naturally and realistically to: "{user_input}"
-        Keep responses brief and conversational."""
-
-    async def _call_openai_chat(self, system_prompt: str, user_message: str) -> Optional[str]:
-        """Make API call to OpenAI with error handling"""
-        try:
-            import openai
-            
-            openai.api_key = self.api_key
-            
-            logger.info(f"Making OpenAI API call for Roleplay 1.1: {user_message[:50]}...")
-            
-            response = openai.ChatCompletion.create(
+            # Call OpenAI
+            response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message}
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": f"User said: '{user_input}'. Respond as the prospect."}
                 ],
-                temperature=0.8,  # Higher temperature for natural variation
-                max_tokens=150,   # Shorter responses for realistic phone conversation
-                presence_penalty=0.1,
-                frequency_penalty=0.1
+                temperature=0.8,
+                max_tokens=100,  # Keep responses short
+                timeout=10
             )
             
             ai_response = response.choices[0].message.content.strip()
-            ai_response = self._clean_ai_response(ai_response)
+            logger.info(f"OpenAI response: {ai_response[:50]}...")
             
-            logger.info(f"OpenAI Roleplay 1.1 response: {ai_response[:100]}...")
-            return ai_response
+            return {
+                'success': True,
+                'response': ai_response,
+                'source': 'openai'
+            }
             
         except Exception as e:
-            if 'openai' in str(e).lower():
-                if 'rate_limit' in str(e).lower():
-                    logger.warning("OpenAI rate limit exceeded")
-                elif 'authentication' in str(e).lower():
-                    logger.error("OpenAI authentication failed - check API key")
-                elif 'insufficient_quota' in str(e).lower():
-                    logger.error("OpenAI quota exceeded - add billing")
-                else:
-                    logger.error(f"OpenAI API error: {e}")
-            else:
-                logger.error(f"Unexpected error calling OpenAI: {e}")
+            logger.error(f"OpenAI error: {e}")
+            return self._generate_fallback_response(current_stage, user_input)
+
+    def evaluate_user_input(self, user_input: str, conversation_history: List[Dict], 
+                          current_stage: str) -> Dict[str, Any]:
+        """Evaluate user input using Roleplay 1.1 rubrics"""
+        try:
+            logger.info(f"Evaluating input for stage: {current_stage}")
             
-            return None
+            if not self.is_enabled:
+                logger.warning("OpenAI disabled, using basic evaluation")
+                return self._basic_evaluation(user_input, current_stage)
+            
+            # Build evaluation prompt
+            conversation_text = self._format_conversation(conversation_history)
+            rubric = self.rubric_criteria.get(current_stage, "Evaluate the input quality (1-5)")
+            
+            prompt = self.roleplay_1_prompts["evaluation_system"].format(
+                conversation=conversation_text,
+                user_input=user_input,
+                stage=current_stage,
+                rubric_criteria=rubric
+            )
+            
+            # Call OpenAI for evaluation
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,  # Lower temperature for consistent evaluation
+                max_tokens=200,
+                timeout=10
+            )
+            
+            # Parse the JSON response
+            eval_text = response.choices[0].message.content.strip()
+            logger.info(f"Evaluation response: {eval_text}")
+            
+            try:
+                evaluation = json.loads(eval_text)
+                evaluation['source'] = 'openai'
+                return evaluation
+            except json.JSONDecodeError:
+                logger.warning("Failed to parse evaluation JSON, using basic evaluation")
+                return self._basic_evaluation(user_input, current_stage)
+                
+        except Exception as e:
+            logger.error(f"Evaluation error: {e}")
+            return self._basic_evaluation(user_input, current_stage)
 
-    def _clean_ai_response(self, response: str) -> str:
-        """Clean AI response for realistic conversation"""
-        # Remove quotes and artifacts
-        response = response.replace('"', '').replace("*", "").strip()
-        
-        # Remove meta-commentary
-        if response.startswith("As a") or response.startswith("I am"):
-            lines = response.split('\n')
-            for line in lines:
-                if len(line.strip()) > 0 and not line.startswith("As") and not line.startswith("I am"):
-                    response = line.strip()
-                    break
-        
-        # Keep responses realistic length for phone conversation
-        if len(response) > 200:
-            sentences = response.split('. ')
-            response = '. '.join(sentences[:2])
-            if not response.endswith('.'):
-                response += '.'
-        
-        return response
+    def generate_coaching_feedback(self, conversation_history: List[Dict], 
+                                 rubric_scores: Dict, user_context: Dict) -> Dict[str, Any]:
+        """Generate CEFR A2 coaching feedback"""
+        try:
+            if not self.is_enabled:
+                return self._basic_coaching(rubric_scores)
+            
+            conversation_text = self._format_conversation(conversation_history)
+            
+            coaching_prompt = f"""Analyze this Roleplay 1.1 session and provide coaching in CEFR A2 English (simple, clear language for Spanish speakers learning English).
 
-    # ===== UTILITY METHODS =====
+CONVERSATION:
+{conversation_text}
 
-    def _format_conversation_history(self, conversation: List[Dict]) -> str:
-        """Format conversation for prompt context"""
-        if not conversation:
+RUBRIC RESULTS:
+{json.dumps(rubric_scores, indent=2)}
+
+Provide EXACTLY this format:
+SALES: [One specific tip about sales performance]
+GRAMMAR: [One grammar tip in simple English] 
+VOCABULARY: [One vocabulary tip about business language]
+PRONUNCIATION: [One pronunciation tip or praise]
+RAPPORT: [One tip about confidence/empathy or praise]
+
+Keep all feedback in CEFR A2 level - short sentences, simple words, clear instructions."""
+
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": coaching_prompt}],
+                temperature=0.5,
+                max_tokens=300,
+                timeout=15
+            )
+            
+            coaching_text = response.choices[0].message.content.strip()
+            coaching = self._parse_coaching_response(coaching_text)
+            
+            # Calculate score
+            score = self._calculate_score(rubric_scores)
+            
+            return {
+                'success': True,
+                'coaching': coaching,
+                'score': score,
+                'source': 'openai'
+            }
+            
+        except Exception as e:
+            logger.error(f"Coaching generation error: {e}")
+            return self._basic_coaching(rubric_scores)
+
+    # ===== HELPER METHODS =====
+
+    def _build_prospect_prompt(self, user_input: str, conversation_history: List[Dict], 
+                             user_context: Dict, current_stage: str) -> str:
+        """Build the prospect system prompt"""
+        job_title = user_context.get('prospect_job_title', 'CTO')
+        industry = user_context.get('prospect_industry', 'Technology')
+        stage_instructions = self.stage_instructions.get(current_stage, "Continue natural conversation")
+        
+        return self.roleplay_1_prompts["prospect_system"].format(
+            job_title=job_title,
+            industry=industry,
+            stage=current_stage,
+            stage_instructions=stage_instructions
+        )
+
+    def _format_conversation(self, conversation_history: List[Dict]) -> str:
+        """Format conversation history for prompts"""
+        if not conversation_history:
             return "No conversation yet."
         
         formatted = []
-        for msg in conversation[-10:]:  # Last 10 messages
+        for msg in conversation_history[-6:]:  # Last 6 messages
             role = "SDR" if msg.get('role') == 'user' else "Prospect"
             content = msg.get('content', '')
             formatted.append(f"{role}: {content}")
-        return "\n".join(formatted)
-
-    def _format_conversation_for_coaching(self, conversation: List[Dict]) -> str:
-        """Format conversation for coaching analysis"""
-        if not conversation:
-            return "No conversation to analyze."
         
-        formatted = []
-        for i, msg in enumerate(conversation, 1):
-            role = "SDR" if msg.get('role') == 'user' else "Prospect"
-            content = msg.get('content', '')
-            formatted.append(f"{i}. {role}: {content}")
         return "\n".join(formatted)
 
-    async def _quick_evaluate_input(self, user_input: str, conversation_history: List[Dict], 
-                                  roleplay_config: Dict) -> Dict[str, Any]:
-        """Quick evaluation for general roleplays"""
+    def _generate_fallback_response(self, current_stage: str, user_input: str = "") -> Dict[str, Any]:
+        """Generate fallback response when OpenAI fails"""
+        try:
+            if current_stage == "phone_pickup":
+                response = random.choice(self.fallbacks["phone_pickup"])
+            elif current_stage in ["opener_evaluation", "early_objection"]:
+                response = random.choice(self.fallbacks["early_objections"])
+            elif current_stage == "objection_handling":
+                response = random.choice(self.fallbacks["objection_responses"])
+            elif current_stage == "mini_pitch":
+                response = random.choice(self.fallbacks["pitch_responses"])
+            elif current_stage == "soft_discovery":
+                # Randomly pick positive or negative ending
+                ending_type = "positive" if random.random() > 0.5 else "negative"
+                response = random.choice(self.fallbacks["discovery_endings"][ending_type])
+            else:
+                response = "I see. Continue."
+            
+            logger.info(f"Using fallback response: {response}")
+            
+            return {
+                'success': True,
+                'response': response,
+                'source': 'fallback'
+            }
+            
+        except Exception as e:
+            logger.error(f"Fallback generation error: {e}")
+            return {
+                'success': True,
+                'response': "Can you repeat that?",
+                'source': 'emergency'
+            }
+
+    def _basic_evaluation(self, user_input: str, current_stage: str) -> Dict[str, Any]:
+        """Basic evaluation when OpenAI fails"""
+        # Simple heuristic scoring
+        score = 2  # Base score
+        criteria_met = []
+        
+        user_input_lower = user_input.lower()
+        
+        # Basic checks based on stage
+        if current_stage == "opener":
+            if any(word in user_input_lower for word in ["i'm", "don't", "can't"]):
+                score += 1
+                criteria_met.append("casual_tone")
+            
+            if any(phrase in user_input_lower for phrase in ["out of the blue", "don't know me"]):
+                score += 1
+                criteria_met.append("shows_empathy")
+            
+            if user_input.strip().endswith('?'):
+                score += 1
+                criteria_met.append("ends_with_question")
+        
+        elif current_stage == "objection_handling":
+            if any(word in user_input_lower for word in ["understand", "fair enough", "get that"]):
+                score += 1
+                criteria_met.append("acknowledges_calmly")
+            
+            if user_input.strip().endswith('?'):
+                score += 1
+                criteria_met.append("forward_question")
+        
+        passed = score >= 3
+        
         return {
-            'quality_score': 5,
+            'score': score,
+            'passed': passed,
+            'criteria_met': criteria_met,
+            'feedback': f'Basic evaluation: {score}/4 criteria met',
             'should_continue': True,
-            'next_stage': 'in_progress',
-            'feedback_notes': []
+            'next_action': 'continue',
+            'source': 'basic'
         }
 
-    def _generate_fallback_response(self, user_input: str, conversation_history: List[Dict], 
-                                  roleplay_config: Dict) -> Dict[str, Any]:
-        """Generate fallback response for any roleplay"""
-        responses = ["I see. Tell me more.", "That's interesting.", "Go on.", "Can you explain that?"]
-        selected_response = random.choice(responses)
+    def _parse_coaching_response(self, coaching_text: str) -> Dict[str, str]:
+        """Parse coaching response into categories"""
+        coaching = {}
+        
+        lines = coaching_text.split('\n')
+        for line in lines:
+            line = line.strip()
+            if line.startswith('SALES:'):
+                coaching['sales_coaching'] = line.replace('SALES:', '').strip()
+            elif line.startswith('GRAMMAR:'):
+                coaching['grammar_coaching'] = line.replace('GRAMMAR:', '').strip()
+            elif line.startswith('VOCABULARY:'):
+                coaching['vocabulary_coaching'] = line.replace('VOCABULARY:', '').strip()
+            elif line.startswith('PRONUNCIATION:'):
+                coaching['pronunciation_coaching'] = line.replace('PRONUNCIATION:', '').strip()
+            elif line.startswith('RAPPORT:'):
+                coaching['rapport_assertiveness'] = line.replace('RAPPORT:', '').strip()
+        
+        # Fill in defaults if missing
+        if 'sales_coaching' not in coaching:
+            coaching['sales_coaching'] = 'Practice your opening and objection handling.'
+        if 'grammar_coaching' not in coaching:
+            coaching['grammar_coaching'] = 'Use contractions like "I\'m" and "don\'t" to sound natural.'
+        if 'vocabulary_coaching' not in coaching:
+            coaching['vocabulary_coaching'] = 'Use simple, clear business words.'
+        if 'pronunciation_coaching' not in coaching:
+            coaching['pronunciation_coaching'] = 'Speak clearly and not too fast.'
+        if 'rapport_assertiveness' not in coaching:
+            coaching['rapport_assertiveness'] = 'Be polite but confident.'
+        
+        return coaching
+
+    def _calculate_score(self, rubric_scores: Dict) -> int:
+        """Calculate overall score from rubric results"""
+        base_score = 40  # Base participation score
+        
+        # Add points for each passed rubric (15 points each)
+        for stage_scores in rubric_scores.values():
+            if stage_scores.get('passed', False):
+                base_score += 15
+        
+        return min(100, max(0, base_score))
+
+    def _basic_coaching(self, rubric_scores: Dict) -> Dict[str, Any]:
+        """Basic coaching when OpenAI fails"""
+        score = self._calculate_score(rubric_scores)
+        
+        coaching = {
+            'sales_coaching': 'Practice your opening with empathy. Use "I know this is out of the blue".',
+            'grammar_coaching': 'Use contractions like "I\'m" and "don\'t" to sound natural.',
+            'vocabulary_coaching': 'Use simple, clear business words. Say "book a meeting".',
+            'pronunciation_coaching': 'Speak clearly and not too fast. Practice key words.',
+            'rapport_assertiveness': 'Be polite but confident. Show empathy first.'
+        }
         
         return {
             'success': True,
-            'response': selected_response,
-            'evaluation': {'quality_score': 5, 'should_continue': True},
-            'should_continue': True,
-            'stage': 'in_progress',
-            'fallback_used': True
+            'coaching': coaching,
+            'score': score,
+            'source': 'basic'
         }
+
+    # ===== STATUS METHODS =====
 
     def is_available(self) -> bool:
         """Check if OpenAI service is available"""
         return self.is_enabled
 
     def get_status(self) -> Dict[str, Any]:
-        """Get service status information"""
-        return {
+        """Get service status"""
+        status = {
             'enabled': self.is_enabled,
             'api_key_configured': bool(self.api_key),
             'model': self.model,
-            'status': 'ready' if self.is_enabled else 'fallback_mode',
-            'roleplay_11_ready': True,
-            'specifications': {
-                'early_objections_count': len(self.roleplay_11_specs['early_objections']),
-                'impatience_phrases_count': len(self.roleplay_11_specs['impatience_phrases'])
-            }
+            'client_available': bool(self.client)
         }
+        
+        if self.is_enabled and self.client:
+            # Test connection
+            try:
+                test_response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[{"role": "user", "content": "test"}],
+                    max_tokens=1
+                )
+                status['connection_test'] = 'success'
+            except Exception as e:
+                status['connection_test'] = f'failed: {str(e)}'
+        else:
+            status['connection_test'] = 'not_tested'
+        
+        return status
+
+    def test_roleplay_flow(self) -> Dict[str, Any]:
+        """Test the complete roleplay flow"""
+        if not self.is_enabled:
+            return {'success': False, 'error': 'OpenAI not enabled'}
+        
+        try:
+            # Test prospect response
+            user_context = {'prospect_job_title': 'CTO', 'prospect_industry': 'Technology'}
+            response_result = self.generate_roleplay_response(
+                "Hi, I know this is out of the blue, but can I tell you why I'm calling?",
+                [],
+                user_context,
+                "opener_evaluation"
+            )
+            
+            # Test evaluation
+            eval_result = self.evaluate_user_input(
+                "Hi, I know this is out of the blue, but can I tell you why I'm calling?",
+                [],
+                "opener"
+            )
+            
+            return {
+                'success': True,
+                'prospect_response': response_result,
+                'evaluation': eval_result
+            }
+            
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
