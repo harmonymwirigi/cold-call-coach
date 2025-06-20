@@ -1,970 +1,659 @@
-// ===== NATURAL CONVERSATION ROLEPLAY MANAGER - roleplay.js =====
+// ===== NATURAL CONVERSATION VOICE HANDLER - voice-handler.js =====
 
-class PhoneRoleplayManager {
-    constructor() {
-        this.selectedMode = null;
-        this.callState = 'idle'; // idle, dialing, ringing, connected, ended
-        this.callStartTime = null;
-        this.durationInterval = null;
-        this.isRecording = false;
-        this.isMuted = false;
-        this.speakerOn = false;
-        this.currentSession = null;
-        this.isActive = false;
-        this.voiceHandler = null;
-        this.aiIsSpeaking = false;
-        this.isProcessing = false;
-        this.conversationHistory = [];
+class VoiceHandler {
+    constructor(roleplayManager) {
+        this.roleplayManager = roleplayManager;
+        this.recognition = null;
+        this.isListening = false;
+        this.isSupported = false;
+        this.micButton = null;
+        this.transcriptElement = null;
+        this.errorElement = null;
         
-        // Natural conversation state
-        this.currentAudio = null;  // Track current AI audio
-        this.naturalMode = true;   // Enable natural conversation features
+        // Natural conversation settings
+        this.settings = {
+            continuous: true,
+            interimResults: true,
+            language: 'en-US',
+            maxAlternatives: 1
+        };
         
-        // Debug flag
-        this.debugMode = true;
+        // State management
+        this.currentTranscript = '';
+        this.finalTranscript = '';
+        this.silenceTimer = null;
+        this.isAutoListening = false;  // NEW: Track if auto-listening is active
+        this.canInterrupt = false;     // NEW: Track if user can interrupt AI
+        
+        // Silence detection for natural conversation
+        this.silenceThreshold = 2000;  // 2 seconds of silence = user finished speaking
+        this.lastSpeechTime = null;
+        this.silenceCheckInterval = null;
+        
+        // Roleplay 1.1 silence specifications (for hang-up detection)
+        this.impatience_threshold = 10000;  // 10 seconds for impatience trigger
+        this.hangup_threshold = 15000;      // 15 seconds for hang-up
+        this.total_silence_start = null;    // Track total silence from start of listening
+        this.impatience_triggered = false;
+        
+        this.shouldRestart = false;
+        this.wasPausedBySystem = false;
+        
+        // Impatience phrases
+        this.impatience_phrases = [
+            "Hello? Are you still with me?",
+            "Can you hear me?",
+            "Just checking you're there…",
+            "Still on the line?",
+            "I don't have much time for this.",
+            "Sounds like you are gone.",
+            "Are you an idiot.",
+            "What is going on.",
+            "Are you okay to continue?",
+            "I am afraid I have to go"
+        ];
         
         this.init();
     }
 
     init() {
-        console.log('🚀 Initializing Natural Conversation Roleplay Manager...');
+        console.log('🎤 Initializing Natural Conversation Voice Handler...');
         
-        this.updateTime();
-        setInterval(() => this.updateTime(), 1000);
-        
-        this.loadRoleplayData();
+        this.checkBrowserSupport();
+        this.initializeUIElements();
         this.setupEventListeners();
-        this.initializeModeSelection();
         
-        // Initialize natural voice handler
-        if (typeof VoiceHandler !== 'undefined') {
-            this.voiceHandler = new VoiceHandler(this);
-            console.log('✅ Natural Voice Handler initialized');
+        if (this.isSupported) {
+            this.initializeSpeechRecognition();
+        }
+        
+        console.log(`✅ Natural Voice Handler initialized. Supported: ${this.isSupported}`);
+    }
+
+    checkBrowserSupport() {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        
+        if (SpeechRecognition) {
+            this.isSupported = true;
+            this.SpeechRecognition = SpeechRecognition;
+            console.log('✅ Web Speech API supported - Natural conversation ready');
         } else {
-            console.warn('⚠️ VoiceHandler not available');
+            this.isSupported = false;
+            console.error('❌ Web Speech API not supported');
         }
-    }
-
-    updateTime() {
-        const now = new Date();
-        const time = now.toLocaleTimeString('en-US', { 
-            hour: 'numeric', 
-            minute: '2-digit',
-            hour12: false 
-        });
-        const timeElement = document.getElementById('current-time');
-        if (timeElement) {
-            timeElement.textContent = time;
-        }
-    }
-
-    loadRoleplayData() {
-        const roleplayData = document.getElementById('roleplay-data');
-        if (roleplayData) {
-            const roleplayId = parseInt(roleplayData.dataset.roleplayId);
-            const isAuthenticated = roleplayData.dataset.userAuthenticated === 'true';
-            
-            console.log('📊 Roleplay data:', { roleplayId, isAuthenticated });
-            
-            if (!isAuthenticated) {
-                this.showError('Please log in to access Roleplay 1.1 training');
-                setTimeout(() => {
-                    window.location.href = '/login';
-                }, 2000);
-                return;
-            }
-            
-            if (roleplayId) {
-                this.loadRoleplayInfo(roleplayId);
-            }
-        }
-    }
-
-    async loadRoleplayInfo(roleplayId) {
-        try {
-            console.log('📡 Loading Roleplay 1.1 info for ID:', roleplayId);
-            const response = await this.apiCall(`/api/roleplay/info/${roleplayId}`);
-            if (response.ok) {
-                const data = await response.json();
-                console.log('✅ Roleplay 1.1 info loaded:', data);
-                this.updateRoleplayUI(data);
-            }
-        } catch (error) {
-            console.error('❌ Error loading Roleplay 1.1 info:', error);
-        }
-    }
-
-    updateRoleplayUI(roleplayData) {
-        const titleElement = document.getElementById('roleplay-title');
-        if (titleElement) {
-            titleElement.textContent = 'Natural Roleplay 1.1: ' + (roleplayData.name || 'Phone Training');
-        }
-
-        this.updateProspectInfo(roleplayData);
-    }
-
-    updateProspectInfo(roleplayData) {
-        const avatarElement = document.getElementById('contact-avatar');
-        const nameElement = document.getElementById('contact-name');
-        const infoElement = document.getElementById('contact-info');
-
-        if (nameElement) {
-            nameElement.textContent = this.generateProspectName(roleplayData.job_title || 'CTO');
-        }
-
-        if (infoElement) {
-            infoElement.textContent = `${roleplayData.job_title || 'CTO'} • ${roleplayData.industry || 'Technology'}`;
-        }
-
-        if (avatarElement) {
-            const avatarUrl = this.getAvatarUrl(roleplayData.job_title || 'CTO');
-            avatarElement.src = avatarUrl;
-            avatarElement.alt = `Natural Roleplay 1.1 prospect`;
-            
-            avatarElement.onerror = function() {
-                this.src = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face';
-                this.onerror = null;
-            };
-        }
-    }
-
-    getAvatarUrl(jobTitle) {
-        const avatarMapping = {
-            'CEO': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face',
-            'CTO': 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
-            'VP of Sales': 'https://images.unsplash.com/photo-1519345182560-3f2917c472ef?w=150&h=150&fit=crop&crop=face'
-        };
         
-        return avatarMapping[jobTitle] || avatarMapping['CTO'];
+        this.updateSupportUI();
     }
 
-    generateProspectName(jobTitle) {
-        const names = {
-            'CEO': ['Alex Morgan', 'Sarah Chen', 'Michael Rodriguez'],
-            'CTO': ['David Kim', 'Jennifer Walsh', 'Robert Singh'],
-            'VP of Sales': ['Lisa Thompson', 'Mark Johnson', 'Amanda Garcia']
-        };
+    updateSupportUI() {
+        const micButton = document.getElementById('mic-button');
+        const errorElement = document.getElementById('voice-error');
         
-        const nameList = names[jobTitle] || ['Jordan Smith', 'Taylor Brown', 'Casey Jones'];
-        return nameList[Math.floor(Math.random() * nameList.length)];
+        if (!this.isSupported) {
+            if (micButton) {
+                micButton.disabled = true;
+                micButton.innerHTML = '<i class="fas fa-microphone-slash"></i>';
+                micButton.title = 'Voice recognition not supported';
+            }
+            
+            if (errorElement) {
+                this.showVoiceError('Voice recognition not supported. Use Chrome, Edge, or Safari.');
+            }
+        } else {
+            if (micButton) {
+                micButton.title = 'Natural conversation mode - Mic auto-activates';
+            }
+        }
+    }
+
+    initializeUIElements() {
+        this.micButton = document.getElementById('mic-button') || document.getElementById('mic-btn');
+        this.transcriptElement = document.getElementById('live-transcript');
+        this.errorElement = document.getElementById('voice-error');
+        
+        if (this.transcriptElement) {
+            this.transcriptElement.textContent = 'Natural conversation ready...';
+        }
     }
 
     setupEventListeners() {
-        console.log('🔧 Setting up event listeners for natural conversation...');
+        // Microphone button - now optional since we have auto-listening
+        if (this.micButton) {
+            this.micButton.addEventListener('click', () => {
+                console.log('🎤 Manual mic button clicked');
+                if (this.isListening) {
+                    this.stopListening();
+                } else {
+                    this.startListening(false); // Manual activation
+                }
+            });
+        }
         
-        // Mode selection
-        document.querySelectorAll('.mode-option').forEach(option => {
-            option.addEventListener('click', (e) => {
+        // Keyboard shortcuts
+        this.handleKeydown = (e) => {
+            // Space bar to manually trigger mic (even during auto-listening)
+            if (e.code === 'Space' && !e.target.matches('input, textarea')) {
                 e.preventDefault();
-                const mode = option.dataset.mode;
-                console.log('📋 Mode selected:', mode);
-                this.selectMode(mode);
-            });
-        });
-
-        // Start call button
-        const startBtn = document.getElementById('start-call-btn');
-        if (startBtn) {
-            startBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                console.log('🚀 Start call button clicked');
-                if (!this.isProcessing) {
-                    this.startCall();
-                }
-            });
-        }
-
-        // Microphone button - now shows natural conversation status
-        const micBtn = document.getElementById('mic-btn');
-        if (micBtn) {
-            micBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                console.log('🎤 Mic button clicked (natural mode)');
-                
-                if (this.voiceHandler) {
-                    if (this.voiceHandler.isListening) {
-                        this.voiceHandler.stopListening();
-                    } else {
-                        this.voiceHandler.startListening(false); // Manual start
-                    }
-                }
-            });
-        }
-
-        // End call button
-        const endCallBtn = document.getElementById('end-call-btn');
-        if (endCallBtn) {
-            endCallBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                console.log('📞 End call button clicked');
-                this.endCall();
-            });
-        }
-
-        // Feedback actions
-        const tryAgainBtn = document.getElementById('try-again-btn');
-        if (tryAgainBtn) {
-            tryAgainBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                console.log('🔄 Try again clicked');
-                this.tryAgain();
-            });
-        }
-
-        const newModeBtn = document.getElementById('new-mode-btn');
-        if (newModeBtn) {
-            newModeBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                console.log('🆕 New mode clicked');
-                this.showModeSelection();
-            });
-        }
-
-        // Keyboard shortcuts for natural conversation
-        document.addEventListener('keydown', (e) => {
-            // Space bar to interrupt or start speaking
-            if (e.code === 'Space' && this.callState === 'connected' && !e.target.matches('input, textarea')) {
-                e.preventDefault();
-                
-                if (this.aiIsSpeaking) {
-                    console.log('⚡ Space pressed - interrupting AI');
-                    this.handleUserInterruption();
-                } else if (this.voiceHandler && !this.voiceHandler.isListening) {
-                    console.log('🎤 Space pressed - manual start listening');
-                    this.voiceHandler.startListening(false);
+                console.log('⌨️ Space pressed - manual mic trigger');
+                if (!this.isListening) {
+                    this.startListening(false);
                 }
             }
             
-            // Escape to end call
-            if (e.code === 'Escape' && this.callState === 'connected') {
-                e.preventDefault();
-                console.log('⌨️ Escape key pressed - end call');
-                this.endCall();
+            // Escape to stop listening
+            if (e.code === 'Escape' && this.isListening) {
+                console.log('⌨️ Escape pressed - stop listening');
+                this.stopListening();
             }
-        });
-
-        console.log('✅ Natural conversation event listeners setup complete');
+        };
+        
+        document.addEventListener('keydown', this.handleKeydown);
+        
+        // Handle page visibility changes
+        this.handleVisibilityChange = () => {
+            if (document.hidden && this.isListening) {
+                console.log('👁️ Page hidden - pausing recognition');
+                this.pauseListening();
+            } else if (!document.hidden && this.recognition) {
+                console.log('👁️ Page visible - resuming recognition');
+                this.resumeListening();
+            }
+        };
+        
+        document.addEventListener('visibilitychange', this.handleVisibilityChange);
     }
 
-    initializeModeSelection() {
-        console.log('🎯 Initializing mode selection...');
+    initializeSpeechRecognition() {
+        if (!this.isSupported) return;
         
-        document.getElementById('mode-selection').style.display = 'flex';
-        document.getElementById('call-interface').style.display = 'none';
-        document.getElementById('feedback-section').style.display = 'none';
-        
-        this.callState = 'idle';
-        this.isActive = false;
-        this.aiIsSpeaking = false;
-        this.isProcessing = false;
-        this.conversationHistory = [];
-        
-        // Stop any active audio or voice recognition
-        this.stopCurrentAudio();
-        if (this.voiceHandler) {
-            this.voiceHandler.stopListening();
-        }
-    }
-
-    selectMode(mode) {
-        if (!mode || this.isProcessing) return;
-        
-        console.log('✅ Natural Roleplay 1.1 mode selected:', mode);
-        this.selectedMode = mode;
-        
-        // Update UI
-        document.querySelectorAll('.mode-option').forEach(option => {
-            option.classList.remove('selected');
-        });
-        
-        const selectedOption = document.querySelector(`[data-mode="${mode}"]`);
-        if (selectedOption) {
-            selectedOption.classList.add('selected');
-        }
-        
-        // Update start button
-        const startBtn = document.getElementById('start-call-btn');
-        if (startBtn) {
-            startBtn.disabled = false;
-            startBtn.textContent = `Start Natural Roleplay 1.1 ${this.capitalizeFirst(mode)}`;
-        }
-    }
-
-    async startCall() {
-        if (!this.selectedMode || this.isProcessing) {
-            console.log('❌ Cannot start call: missing mode or already processing');
-            return;
-        }
-
-        const roleplayId = this.getRoleplayId();
-        if (!roleplayId) {
-            this.showError('Invalid Roleplay 1.1 configuration');
-            return;
-        }
-
-        console.log('🚀 Starting Natural Roleplay 1.1 call:', { roleplayId, mode: this.selectedMode });
-
-        this.isProcessing = true;
-        const startBtn = document.getElementById('start-call-btn');
-        if (startBtn) {
-            startBtn.disabled = true;
-            startBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Connecting to Natural Roleplay 1.1...';
-        }
-
         try {
-            const response = await this.apiCall('/api/roleplay/start', {
-                method: 'POST',
-                body: JSON.stringify({
-                    roleplay_id: roleplayId,
-                    mode: this.selectedMode
-                })
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                console.log('✅ Natural Roleplay 1.1 started successfully:', data);
-                
-                this.currentSession = data;
-                this.isActive = true;
-                
-                await this.startPhoneCallSequence(data.initial_response);
-                
-            } else {
-                const errorData = await response.json();
-                console.error('❌ Failed to start Natural Roleplay 1.1:', errorData);
-                this.showError(errorData.error || 'Failed to start Natural Roleplay 1.1 call');
-            }
+            this.recognition = new this.SpeechRecognition();
+            
+            // Configure for natural conversation
+            this.recognition.continuous = true;
+            this.recognition.interimResults = true;
+            this.recognition.lang = this.settings.language;
+            this.recognition.maxAlternatives = this.settings.maxAlternatives;
+            
+            this.setupRecognitionEventHandlers();
+            
+            console.log('🎤 Speech recognition initialized for natural conversation');
         } catch (error) {
-            console.error('❌ Error starting Natural Roleplay 1.1:', error);
-            this.showError('Network error. Please try again.');
-        } finally {
-            this.isProcessing = false;
+            console.error('❌ Failed to initialize speech recognition:', error);
+            this.showVoiceError('Failed to initialize voice recognition. Check microphone permissions.');
+        }
+    }
+
+    setupRecognitionEventHandlers() {
+        if (!this.recognition) return;
+        
+        // Recognition starts
+        this.recognition.onstart = () => {
+            console.log('🎤 Voice recognition started');
+            this.isListening = true;
+            this.updateMicrophoneUI(true);
+            this.clearVoiceError();
             
-            if (!this.isActive && startBtn) {
-                startBtn.disabled = false;
-                startBtn.textContent = `Start Natural Roleplay 1.1 ${this.capitalizeFirst(this.selectedMode)}`;
+            // Start silence tracking for hang-up detection
+            this.total_silence_start = Date.now();
+            this.impatience_triggered = false;
+            this.startHangupSilenceDetection();
+        };
+        
+        // Recognition ends
+        this.recognition.onend = () => {
+            console.log('🛑 Voice recognition ended');
+            this.isListening = false;
+            this.updateMicrophoneUI(false);
+            this.stopSilenceDetection();
+            
+            // Auto-restart if still supposed to be listening
+            if (this.shouldRestart && this.isSupported) {
+                console.log('🔄 Auto-restarting recognition...');
+                setTimeout(() => {
+                    this.startListening(this.isAutoListening);
+                }, 100);
+            }
+        };
+        
+        // Recognition results - THE MAIN CONVERSATION HANDLER
+        this.recognition.onresult = (event) => {
+            this.handleRecognitionResult(event);
+        };
+        
+        // Recognition errors
+        this.recognition.onerror = (event) => {
+            this.handleRecognitionError(event);
+        };
+        
+        // Speech detection events
+        this.recognition.onspeechstart = () => {
+            console.log('🗣️ Speech detected - user is speaking');
+            this.lastSpeechTime = Date.now();
+            
+            // If user interrupts AI, handle it immediately
+            if (this.canInterrupt && this.roleplayManager?.aiIsSpeaking) {
+                console.log('⚡ User interrupted AI - stopping AI speech');
+                this.handleInterruption();
+            }
+            
+            // Reset hang-up silence timer since user is speaking
+            this.total_silence_start = null;
+            this.impatience_triggered = false;
+        };
+        
+        this.recognition.onspeechend = () => {
+            console.log('🤐 Speech ended - checking for completion');
+            this.lastSpeechTime = Date.now();
+            
+            // Start checking for silence to detect when user finished
+            this.startSilenceDetection();
+            
+            // Also restart hang-up silence tracking
+            this.total_silence_start = Date.now();
+        };
+    }
+
+    handleRecognitionResult(event) {
+        let interimTranscript = '';
+        let finalTranscript = '';
+        
+        // Process all results
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const result = event.results[i];
+            const transcript = result[0].transcript;
+            const confidence = result[0].confidence;
+            
+            if (result.isFinal) {
+                finalTranscript += transcript + ' ';
+                console.log(`✅ Final transcript: "${transcript}" (confidence: ${confidence})`);
+                
+                // Reset silence detection since we got final speech
+                this.lastSpeechTime = Date.now();
+            } else {
+                interimTranscript += transcript;
+                console.log(`💭 Interim: "${transcript}"`);
+                
+                // Reset silence tracking for interim results too
+                this.lastSpeechTime = Date.now();
             }
         }
-    }
-
-    async startPhoneCallSequence(initialResponse) {
-        console.log('📞 Starting Natural Roleplay 1.1 call sequence...');
         
-        // Hide mode selection, show call interface
-        document.getElementById('mode-selection').style.display = 'none';
-        document.getElementById('call-interface').style.display = 'flex';
-
-        await this.dialingState();
-        await this.ringingState();
-        await this.connectedState(initialResponse);
-    }
-
-    async dialingState() {
-        console.log('📱 Dialing state...');
-        this.callState = 'dialing';
-        this.updateCallStatus('Calling...', 'dialing');
+        // Update current transcript
+        this.currentTranscript = finalTranscript + interimTranscript;
+        this.updateTranscript(`🎤 You: "${this.currentTranscript}"`);
         
-        const avatar = document.getElementById('contact-avatar');
-        if (avatar) {
-            avatar.classList.add('calling');
-        }
-        
-        await this.delay(2000);
-    }
-
-    async ringingState() {
-        console.log('📳 Ringing state...');
-        this.callState = 'ringing';
-        this.updateCallStatus('Ringing...', 'ringing');
-        
-        await this.delay(3000);
-    }
-
-    async connectedState(initialResponse) {
-        console.log('✅ Connected - Natural Roleplay 1.1 active!');
-        this.callState = 'connected';
-        this.updateCallStatus('Connected - Natural Conversation Active', 'connected');
-        
-        // Update UI
-        const avatar = document.getElementById('contact-avatar');
-        if (avatar) {
-            avatar.classList.remove('calling');
-            avatar.classList.add('roleplay-11-active');
-        }
-        
-        // Start call timer
-        this.callStartTime = Date.now();
-        this.startCallTimer();
-        
-        // Show live transcript
-        const transcript = document.getElementById('live-transcript');
-        if (transcript) {
-            transcript.classList.add('show');
-            transcript.classList.add('roleplay-11-active');
-        }
-        
-        // Enable natural conversation features
-        this.enableNaturalConversation();
-        
-        // Clear conversation history
-        this.conversationHistory = [];
-        
-        // Play initial AI response
-        if (initialResponse) {
-            console.log('🎯 Playing initial AI response:', initialResponse);
-            await this.playAIResponseAndWaitForUser(initialResponse);
-        } else {
-            console.log('🎤 No initial response, starting auto-listening');
-            this.startUserTurn();
-        }
-    }
-
-    enableNaturalConversation() {
-        console.log('🤖 Enabling natural conversation features...');
-        
-        // Enable interruption capability
-        if (this.voiceHandler) {
-            this.voiceHandler.enableInterruption();
-        }
-        
-        // Update UI to show natural mode
-        const micBtn = document.getElementById('mic-btn');
-        if (micBtn) {
-            micBtn.disabled = false;
-            micBtn.title = 'Natural conversation active - speak anytime or use Space bar';
-            micBtn.classList.add('natural-mode');
-        }
-        
-        // Show natural conversation instructions
-        this.updateTranscript('🤖 Natural conversation ready - speak when you want!');
-    }
-
-    updateCallStatus(text, state) {
-        const callInterface = document.getElementById('call-interface');
-        const statusText = document.getElementById('call-status-text');
-        
-        if (callInterface) {
-            callInterface.className = `call-interface ${state}`;
-        }
-        
-        if (statusText) {
-            statusText.textContent = text;
-        }
-    }
-
-    startCallTimer() {
-        this.durationInterval = setInterval(() => {
-            const elapsed = Date.now() - this.callStartTime;
-            const minutes = Math.floor(elapsed / 60000);
-            const seconds = Math.floor((elapsed % 60000) / 1000);
+        // Process final results
+        if (finalTranscript.trim().length > 0) {
+            this.finalTranscript += finalTranscript;
             
-            const durationElement = document.getElementById('call-duration');
-            if (durationElement) {
-                durationElement.textContent = 
-                    `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            }
-        }, 1000);
+            // For natural conversation, wait a bit to see if user continues speaking
+            // If not, we'll process what we have
+            this.startSilenceDetection();
+        }
+    }
+
+    handleRecognitionError(event) {
+        console.error('❌ Voice recognition error:', event.error);
+        
+        const errorMessages = {
+            'network': 'Network error. Check internet connection.',
+            'not-allowed': 'Microphone access denied. Please allow microphone access.',
+            'no-speech': 'No speech detected. Try speaking louder.',
+            'aborted': 'Voice recognition aborted.',
+            'audio-capture': 'No microphone found. Connect microphone.',
+            'service-not-allowed': 'Voice recognition service not allowed.',
+        };
+        
+        const message = errorMessages[event.error] || `Voice recognition error: ${event.error}`;
+        this.showVoiceError(message);
+        
+        // Handle specific errors
+        if (event.error === 'not-allowed') {
+            this.handlePermissionDenied();
+        } else if (event.error === 'network') {
+            setTimeout(() => {
+                if (this.shouldRestart) {
+                    console.log('🔄 Retrying after network error...');
+                    this.startListening(this.isAutoListening);
+                }
+            }, 2000);
+        }
     }
 
     // ===== NATURAL CONVERSATION METHODS =====
 
-    startUserTurn() {
-        console.log('👤 Starting user turn - auto-listening activated');
-        
-        this.aiIsSpeaking = false;
-        
-        // Start auto-listening for natural conversation
-        if (this.voiceHandler) {
-            this.voiceHandler.startAutoListening();
-        }
-        
-        // Update UI
-        this.updateTranscript('🎤 Your turn - speak naturally...');
-        this.addPulseTomicButton();
+    startAutoListening() {
+        console.log('🤖 Starting auto-listening mode...');
+        this.startListening(true);
     }
 
-    handleUserInterruption() {
-        console.log('⚡ User interrupted AI - switching to user turn');
+    startListening(isAutoMode = false) {
+        if (!this.isSupported || this.isListening) return;
         
-        // Stop AI audio immediately
-        this.stopCurrentAudio();
+        console.log(`🎤 Starting listening - Auto mode: ${isAutoMode}`);
+        this.isAutoListening = isAutoMode;
         
-        // Mark AI as no longer speaking
-        this.aiIsSpeaking = false;
-        
-        // If voice handler not already listening, start it
-        if (this.voiceHandler && !this.voiceHandler.isListening) {
-            this.voiceHandler.startAutoListening();
-        }
-        
-        // Update UI
-        this.updateTranscript('⚡ You interrupted - keep speaking...');
-    }
-
-    stopCurrentAudio() {
-        if (this.currentAudio) {
-            console.log('🔇 Stopping current AI audio');
-            this.currentAudio.pause();
-            this.currentAudio.currentTime = 0;
-            this.currentAudio = null;
-        }
-    }
-
-    addPulseTomicButton() {
-        const micBtn = document.getElementById('mic-btn');
-        if (micBtn) {
-            micBtn.classList.add('pulse-animation');
-            setTimeout(() => {
-                micBtn.classList.remove('pulse-animation');
-            }, 3000);
-        }
-    }
-
-    async processUserInput(transcript) {
-        if (!this.isActive || !this.currentSession || this.isProcessing) {
-            console.log('❌ Cannot process user input - invalid state');
-            return;
-        }
-
-        // Handle silence triggers
-        if (transcript === '[SILENCE_IMPATIENCE]' || transcript === '[SILENCE_HANGUP]') {
-            console.log('⏰ Handling silence trigger:', transcript);
-            await this.handleSilenceTrigger(transcript);
-            return;
-        }
-
-        console.log('💬 Processing natural conversation input:', transcript);
-        this.isProcessing = true;
-
-        this.addToConversationHistory('user', transcript);
-        this.updateTranscript('🤖 Processing your response...');
-
         try {
-            const response = await this.apiCall('/api/roleplay/respond', {
-                method: 'POST',
-                body: JSON.stringify({
-                    user_input: transcript
-                })
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                console.log('✅ AI response received:', data);
-                
-                // Check if call should end
-                if (!data.call_continues) {
-                    console.log('📞 Call ending...');
-                    setTimeout(() => {
-                        this.endCall(data.session_success);
-                    }, 2000);
-                    return;
-                }
-                
-                // Play AI response and automatically start next user turn
-                await this.playAIResponseAndWaitForUser(data.ai_response);
-                
-            } else {
-                const errorData = await response.json();
-                console.error('❌ API error:', errorData);
-                this.showError(errorData.error || 'Failed to process input');
-                this.startUserTurn(); // Resume user turn on error
-            }
-        } catch (error) {
-            console.error('❌ Error processing user input:', error);
-            this.showError('Network error during call');
-            this.startUserTurn(); // Resume user turn on error
-        } finally {
-            this.isProcessing = false;
-        }
-    }
-
-    async handleSilenceTrigger(trigger) {
-        console.log('⏰ Handling silence trigger:', trigger);
-        
-        if (trigger === '[SILENCE_IMPATIENCE]') {
-            this.updateTranscript('⏰ 10 seconds of silence... The prospect is getting impatient...');
-        } else if (trigger === '[SILENCE_HANGUP]') {
-            this.updateTranscript('📞 The prospect hung up due to 15 seconds of silence.');
-            setTimeout(() => {
-                this.endCall(false);
-            }, 2000);
-            return;
-        }
-
-        // Process through API
-        await this.processUserInput(trigger);
-    }
-
-    async playAIResponseAndWaitForUser(text) {
-        try {
-            console.log('🎭 Playing AI response (interruptible):', text.substring(0, 50) + '...');
-            this.aiIsSpeaking = true;
+            this.shouldRestart = true;
+            this.finalTranscript = '';
+            this.currentTranscript = '';
+            this.lastSpeechTime = null;
             
-            this.addToConversationHistory('ai', text);
-            this.updateTranscript(`🤖 Prospect: "${text}"`);
-
-            // Try to play TTS audio (interruptible)
-            try {
-                const response = await this.apiCall('/api/roleplay/tts', {
-                    method: 'POST',
-                    body: JSON.stringify({ text: text })
-                });
-
-                if (response.ok) {
-                    const audioBlob = await response.blob();
-                    
-                    if (audioBlob.size > 100) {
-                        console.log('🔊 Playing interruptible AI audio');
-                        const audioUrl = URL.createObjectURL(audioBlob);
-                        this.currentAudio = new Audio(audioUrl);
-                        
-                        // Setup audio event handlers
-                        this.currentAudio.onended = () => {
-                            console.log('✅ AI audio finished - starting user turn');
-                            URL.revokeObjectURL(audioUrl);
-                            this.currentAudio = null;
-                            
-                            // Only start user turn if AI is still speaking (not interrupted)
-                            if (this.aiIsSpeaking) {
-                                this.startUserTurn();
-                            }
-                        };
-                        
-                        this.currentAudio.onerror = () => {
-                            console.log('❌ AI audio error - starting user turn');
-                            URL.revokeObjectURL(audioUrl);
-                            this.currentAudio = null;
-                            
-                            if (this.aiIsSpeaking) {
-                                this.startUserTurn();
-                            }
-                        };
-                        
-                        // Play the audio
-                        await this.currentAudio.play();
-                        
-                    } else {
-                        console.log('📢 Audio too small, simulating speech time');
-                        await this.simulateSpeakingTime(text);
-                        this.startUserTurn();
-                    }
+            // Request microphone permission if needed
+            this.requestMicrophonePermission().then(() => {
+                this.recognition.start();
+                
+                if (isAutoMode) {
+                    this.updateTranscript('🎤 Auto-listening active - speak naturally...');
                 } else {
-                    console.log('🎵 TTS failed, simulating speech time');
-                    await this.simulateSpeakingTime(text);
-                    this.startUserTurn();
+                    this.updateTranscript('🎤 Listening - speak when ready...');
                 }
-            } catch (ttsError) {
-                console.log('🔊 TTS error:', ttsError);
-                await this.simulateSpeakingTime(text);
-                this.startUserTurn();
-            }
+            }).catch(error => {
+                console.error('❌ Microphone permission failed:', error);
+                this.showVoiceError('Microphone permission required for conversation');
+            });
             
         } catch (error) {
-            console.error('❌ Error playing AI response:', error);
-            this.aiIsSpeaking = false;
-            await this.simulateSpeakingTime(text);
-            this.startUserTurn();
+            console.error('❌ Failed to start listening:', error);
+            this.showVoiceError('Failed to start voice recognition');
         }
     }
 
-    async simulateSpeakingTime(text) {
-        const wordsPerMinute = 150;
-        const words = text.split(' ').length;
-        const speakingTimeMs = (words / wordsPerMinute) * 60 * 1000;
-        const minTime = 1000;
-        const maxTime = 5000;
+    stopListening() {
+        if (!this.isListening) return;
         
-        const delay = Math.max(minTime, Math.min(maxTime, speakingTimeMs));
-        console.log(`⏱️ Simulating speaking time: ${delay}ms for ${words} words`);
+        console.log('🛑 Stopping voice recognition...');
+        this.shouldRestart = false;
+        this.isAutoListening = false;
         
-        return new Promise(resolve => setTimeout(resolve, delay));
+        if (this.recognition) {
+            this.recognition.stop();
+        }
+        
+        this.stopSilenceDetection();
     }
 
-    addToConversationHistory(sender, message) {
-        this.conversationHistory.push({
-            sender: sender,
-            message: message,
-            timestamp: new Date(),
-            roleplay_version: '1.1',
-            natural_conversation: true
-        });
+    // Enable/disable interruption capability
+    enableInterruption() {
+        console.log('⚡ Interruption enabled - user can speak over AI');
+        this.canInterrupt = true;
+    }
+
+    disableInterruption() {
+        console.log('⚡ Interruption disabled');
+        this.canInterrupt = false;
+    }
+
+    handleInterruption() {
+        console.log('⚡ Handling user interruption of AI');
         
-        console.log(`📝 Added to conversation: ${sender} - ${message.substring(0, 50)}...`);
+        // Tell roleplay manager to stop AI speech
+        if (this.roleplayManager) {
+            this.roleplayManager.handleUserInterruption();
+        }
+        
+        // Update UI to show user is taking over
+        this.updateTranscript('⚡ You interrupted - speak now...');
+    }
+
+    // ===== SILENCE DETECTION FOR NATURAL CONVERSATION =====
+
+    startSilenceDetection() {
+        this.stopSilenceDetection();
+        
+        console.log('🤫 Starting silence detection for natural conversation...');
+        
+        this.silenceCheckInterval = setInterval(() => {
+            if (this.lastSpeechTime) {
+                const silenceDuration = Date.now() - this.lastSpeechTime;
+                
+                // If user has been silent for threshold, process their speech
+                if (silenceDuration >= this.silenceThreshold) {
+                    console.log(`🤫 User finished speaking (${silenceDuration}ms silence)`);
+                    this.processFinalUserSpeech();
+                }
+            }
+        }, 200); // Check every 200ms
+    }
+
+    stopSilenceDetection() {
+        if (this.silenceCheckInterval) {
+            clearInterval(this.silenceCheckInterval);
+            this.silenceCheckInterval = null;
+        }
+    }
+
+    processFinalUserSpeech() {
+        const transcript = this.finalTranscript.trim();
+        
+        if (transcript.length > 0) {
+            console.log(`✅ Processing final user speech: "${transcript}"`);
+            
+            // Stop listening since we're processing
+            this.stopListening();
+            
+            // Send to roleplay manager
+            if (this.roleplayManager) {
+                this.roleplayManager.processUserInput(transcript);
+            }
+            
+            // Clear transcript
+            this.finalTranscript = '';
+            this.currentTranscript = '';
+        }
+    }
+
+    // ===== HANG-UP SILENCE DETECTION (Original Roleplay 1.1 specs) =====
+
+    startHangupSilenceDetection() {
+        console.log('⏰ Starting hang-up silence detection (10s impatience, 15s hangup)');
+        
+        this.hangupSilenceTimer = setInterval(() => {
+            if (this.total_silence_start && this.isListening) {
+                const totalSilence = Date.now() - this.total_silence_start;
+                
+                // 10-second impatience trigger
+                if (totalSilence >= this.impatience_threshold && 
+                    !this.impatience_triggered &&
+                    totalSilence < this.hangup_threshold) {
+                    console.log('⏰ 10-second total silence - triggering impatience');
+                    this.handleImpatience();
+                }
+                
+                // 15-second hang-up trigger
+                if (totalSilence >= this.hangup_threshold) {
+                    console.log('📞 15-second total silence - triggering hang-up');
+                    this.handleSilenceHangup();
+                }
+            }
+        }, 1000);
+    }
+
+    handleImpatience() {
+        console.log('⏰ Handling 10-second silence impatience');
+        this.impatience_triggered = true;
+        
+        const phrase = this.impatience_phrases[Math.floor(Math.random() * this.impatience_phrases.length)];
+        this.updateTranscript(`⏰ 10 seconds of silence... Prospect: "${phrase}"`);
+        
+        if (this.roleplayManager && this.roleplayManager.isActive) {
+            this.roleplayManager.processUserInput('[SILENCE_IMPATIENCE]');
+        }
+    }
+
+    handleSilenceHangup() {
+        console.log('📞 Handling 15-second silence hang-up');
+        
+        this.stopListening();
+        this.updateTranscript('📞 15 seconds of silence - The prospect hung up.');
+        
+        if (this.roleplayManager && this.roleplayManager.isActive) {
+            this.roleplayManager.processUserInput('[SILENCE_HANGUP]');
+        }
+    }
+
+    // ===== UI METHODS =====
+
+    updateMicrophoneUI(isListening) {
+        if (!this.micButton) return;
+        
+        if (isListening) {
+            this.micButton.classList.add('listening');
+            this.micButton.classList.remove('btn-primary');
+            this.micButton.classList.add('btn-success');
+            this.micButton.innerHTML = '<i class="fas fa-microphone"></i>';
+            this.micButton.title = this.isAutoListening ? 
+                'Auto-listening active (natural conversation)' : 
+                'Listening - click to stop';
+        } else {
+            this.micButton.classList.remove('listening', 'btn-success');
+            this.micButton.classList.add('btn-primary');
+            this.micButton.innerHTML = '<i class="fas fa-microphone"></i>';
+            this.micButton.title = 'Click to start listening manually';
+        }
     }
 
     updateTranscript(text) {
-        const transcriptElement = document.getElementById('live-transcript');
-        if (transcriptElement) {
-            transcriptElement.textContent = text;
+        if (this.transcriptElement) {
+            this.transcriptElement.textContent = text;
         }
     }
 
-    async endCall(success = false) {
-        if (!this.isActive) {
-            console.log('📞 Call already ended');
-            return;
-        }
-
-        console.log('📞 Ending Natural Roleplay 1.1 call, success:', success);
-
-        this.callState = 'ended';
-        this.updateCallStatus('Natural Roleplay 1.1 Call ended', 'ended');
-        this.isActive = false;
-        this.aiIsSpeaking = false;
+    showVoiceError(message) {
+        console.error('❌ Voice error:', message);
         
-        // Stop all audio and voice recognition
-        this.stopCurrentAudio();
-        if (this.voiceHandler) {
-            this.voiceHandler.stopListening();
-            this.voiceHandler.disableInterruption();
-        }
-        
-        // Clear timers
-        if (this.durationInterval) {
-            clearInterval(this.durationInterval);
-            this.durationInterval = null;
-        }
-        
-        // Hide transcript
-        const transcript = document.getElementById('live-transcript');
-        if (transcript) {
-            transcript.classList.remove('show');
-            transcript.classList.remove('roleplay-11-active');
-        }
-
-        const avatar = document.getElementById('contact-avatar');
-        if (avatar) {
-            avatar.classList.remove('roleplay-11-active');
-        }
-
-        try {
-            const response = await this.apiCall('/api/roleplay/end', {
-                method: 'POST',
-                body: JSON.stringify({ 
-                    success: success,
-                    forced_end: false 
-                })
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                console.log('✅ Call ended successfully:', data);
-                
-                setTimeout(() => {
-                    this.showFeedback(data.coaching, data.overall_score);
-                }, 2000);
-            } else {
-                console.error('❌ Failed to end call properly');
-                setTimeout(() => {
-                    this.showFeedback(null, 50);
-                }, 2000);
+        if (this.errorElement) {
+            const errorText = this.errorElement.querySelector('#voice-error-text');
+            if (errorText) {
+                errorText.textContent = message;
             }
-        } catch (error) {
-            console.error('❌ Error ending call:', error);
-            setTimeout(() => {
-                this.showFeedback(null, 50);
-            }, 2000);
-        }
-    }
-
-    showFeedback(coaching, score = 75) {
-        console.log('📊 Showing Natural Roleplay 1.1 feedback');
-        
-        document.getElementById('call-interface').style.display = 'none';
-        document.getElementById('feedback-section').style.display = 'flex';
-        
-        const feedbackHeader = document.querySelector('.feedback-header h4');
-        if (feedbackHeader) {
-            feedbackHeader.textContent = 'Natural Roleplay 1.1 Complete!';
-        }
-        
-        if (coaching) {
-            this.populateRoleplay11Feedback(coaching);
-        }
-        
-        this.animateScore(score);
-        this.updateScoreCircleColor(score);
-    }
-
-    populateRoleplay11Feedback(coaching) {
-        const content = document.getElementById('feedback-content');
-        if (!content) return;
-        
-        content.innerHTML = '';
-
-        if (coaching) {
-            const feedbackItems = [
-                { key: 'sales_coaching', icon: 'chart-line', title: 'Sales Performance (Natural Conversation)' },
-                { key: 'grammar_coaching', icon: 'spell-check', title: 'Grammar & Structure' },
-                { key: 'vocabulary_coaching', icon: 'book', title: 'Vocabulary' },
-                { key: 'pronunciation_coaching', icon: 'volume-up', title: 'Pronunciation' },
-                { key: 'rapport_assertiveness', icon: 'handshake', title: 'Rapport & Confidence' }
-            ];
-
-            feedbackItems.forEach(item => {
-                if (coaching[item.key]) {
-                    content.innerHTML += `
-                        <div class="feedback-item">
-                            <h6><i class="fas fa-${item.icon} me-2"></i>${item.title}</h6>
-                            <p style="margin: 0; font-size: 14px;">${coaching[item.key]}</p>
-                        </div>
-                    `;
-                }
-            });
-        } else {
-            content.innerHTML = `
-                <div class="feedback-item">
-                    <h6><i class="fas fa-info-circle me-2"></i>Natural Roleplay 1.1 Complete</h6>
-                    <p style="margin: 0; font-size: 14px;">Your natural conversation call is complete. Great job!</p>
-                </div>
-            `;
-        }
-    }
-
-    updateScoreCircleColor(score) {
-        const scoreCircle = document.getElementById('score-circle');
-        if (scoreCircle) {
-            scoreCircle.classList.remove('excellent', 'good', 'needs-improvement');
+            this.errorElement.style.display = 'block';
             
-            if (score >= 85) {
-                scoreCircle.classList.add('excellent');
-            } else if (score >= 70) {
-                scoreCircle.classList.add('good');
-            } else {
-                scoreCircle.classList.add('needs-improvement');
-            }
-        }
-    }
-
-    animateScore(targetScore) {
-        const scoreElement = document.getElementById('score-circle');
-        if (!scoreElement) return;
-        
-        let currentScore = 0;
-        const increment = targetScore / 40;
-        
-        const timer = setInterval(() => {
-            currentScore += increment;
-            if (currentScore >= targetScore) {
-                currentScore = targetScore;
-                clearInterval(timer);
-            }
-            scoreElement.textContent = Math.round(currentScore);
-        }, 50);
-    }
-
-    tryAgain() {
-        console.log('🔄 Trying again with Natural Roleplay 1.1');
-        this.showModeSelection();
-        
-        if (this.selectedMode) {
+            // Auto-hide after 5 seconds
             setTimeout(() => {
-                this.selectMode(this.selectedMode);
-            }, 100);
+                this.errorElement.style.display = 'none';
+            }, 5000);
         }
     }
 
-    showModeSelection() {
-        console.log('🎯 Showing mode selection');
-        
-        document.getElementById('feedback-section').style.display = 'none';
-        this.initializeModeSelection();
-        
-        this.selectedMode = null;
-        this.currentSession = null;
-        
-        document.querySelectorAll('.mode-option').forEach(option => {
-            option.classList.remove('selected');
-        });
-        
-        const startBtn = document.getElementById('start-call-btn');
-        if (startBtn) {
-            startBtn.disabled = true;
-            startBtn.textContent = 'Select a mode for Natural Roleplay 1.1';
+    clearVoiceError() {
+        if (this.errorElement) {
+            this.errorElement.style.display = 'none';
         }
     }
 
-    showError(message) {
-        console.error('❌ Error:', message);
-        this.updateTranscript(`❌ Error: ${message}`);
-        
-        const alertDiv = document.createElement('div');
-        alertDiv.className = 'alert alert-danger position-fixed';
-        alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; max-width: 300px;';
-        alertDiv.innerHTML = `<strong>Natural Roleplay 1.1 Error:</strong> ${message}`;
-        
-        document.body.appendChild(alertDiv);
-        
-        setTimeout(() => {
-            if (alertDiv.parentNode) {
-                alertDiv.remove();
-            }
-        }, 5000);
+    // ===== UTILITY METHODS =====
+
+    async requestMicrophonePermission() {
+        try {
+            console.log('🎤 Requesting microphone permission...');
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream.getTracks().forEach(track => track.stop());
+            console.log('✅ Microphone permission granted');
+            return true;
+        } catch (error) {
+            console.error('❌ Microphone permission denied:', error);
+            throw new Error('Microphone permission denied');
+        }
     }
 
-    getRoleplayId() {
-        const roleplayData = document.getElementById('roleplay-data');
-        return roleplayData ? parseInt(roleplayData.dataset.roleplayId) : 1;
+    handlePermissionDenied() {
+        console.error('❌ Microphone permission permanently denied');
+        this.stopListening();
+        this.shouldRestart = false;
+        
+        if (this.micButton) {
+            this.micButton.disabled = true;
+            this.micButton.innerHTML = '<i class="fas fa-microphone-slash"></i>';
+        }
+        
+        this.showPermissionInstructions();
     }
 
-    async apiCall(endpoint, options = {}) {
-        const defaultOptions = {
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`
-            }
+    showPermissionInstructions() {
+        const instructions = `
+            <div class="permission-instructions">
+                <h6>Microphone Permission Required</h6>
+                <p>For natural conversation:</p>
+                <ol>
+                    <li>Click the microphone icon in your browser's address bar</li>
+                    <li>Select "Allow" for microphone access</li>
+                    <li>Refresh this page and try again</li>
+                </ol>
+                <button class="btn btn-primary btn-sm" onclick="location.reload()">
+                    <i class="fas fa-refresh me-1"></i>Refresh Page
+                </button>
+            </div>
+        `;
+        
+        if (this.transcriptElement) {
+            this.transcriptElement.innerHTML = instructions;
+        }
+    }
+
+    pauseListening() {
+        if (this.isListening) {
+            console.log('⏸️ Pausing voice recognition...');
+            this.wasPausedBySystem = true;
+            this.stopListening();
+        }
+    }
+
+    resumeListening() {
+        if (this.wasPausedBySystem && this.shouldRestart) {
+            console.log('▶️ Resuming voice recognition...');
+            this.wasPausedBySystem = false;
+            this.startListening(this.isAutoListening);
+        }
+    }
+
+    // ===== GETTERS =====
+
+    getListeningStatus() {
+        return {
+            isListening: this.isListening,
+            isAutoListening: this.isAutoListening,
+            canInterrupt: this.canInterrupt,
+            isSupported: this.isSupported
         };
-
-        console.log('🌐 API call:', endpoint, options.method || 'GET');
-
-        const response = await fetch(endpoint, { ...defaultOptions, ...options });
-        
-        if (response.status === 401) {
-            console.error('🔐 Authentication required');
-            window.location.href = '/login';
-            throw new Error('Authentication required');
-        }
-
-        return response;
     }
 
-    capitalizeFirst(str) {
-        return str.charAt(0).toUpperCase() + str.slice(1);
-    }
-
-    delay(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
+    // ===== CLEANUP =====
 
     destroy() {
-        console.log('🧹 Destroying Natural Roleplay Manager');
+        console.log('🧹 Destroying Natural Voice Handler...');
         
-        this.stopCurrentAudio();
+        this.stopListening();
+        this.shouldRestart = false;
         
-        if (this.voiceHandler) {
-            this.voiceHandler.destroy();
+        if (this.recognition) {
+            this.recognition.onstart = null;
+            this.recognition.onend = null;
+            this.recognition.onresult = null;
+            this.recognition.onerror = null;
+            this.recognition = null;
         }
         
-        if (this.durationInterval) {
-            clearInterval(this.durationInterval);
+        this.stopSilenceDetection();
+        
+        // Remove event listeners
+        if (this.handleKeydown) {
+            document.removeEventListener('keydown', this.handleKeydown);
+        }
+        if (this.handleVisibilityChange) {
+            document.removeEventListener('visibilitychange', this.handleVisibilityChange);
         }
         
-        this.isActive = false;
-        this.currentSession = null;
-        this.isProcessing = false;
-        this.aiIsSpeaking = false;
+        console.log('✅ Natural Voice Handler destroyed');
     }
 }
 
-// Initialize when page loads
-document.addEventListener('DOMContentLoaded', () => {
-    if (window.location.pathname.includes('/roleplay/')) {
-        console.log('🚀 Initializing Natural Conversation Roleplay Manager');
-        window.roleplayManager = new PhoneRoleplayManager();
-    }
-});
-
 // Export for global access
-window.PhoneRoleplayManager = PhoneRoleplayManager;
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = VoiceHandler;
+} else {
+    window.VoiceHandler = VoiceHandler;
+}
 
-console.log('✅ Natural Conversation Roleplay Manager loaded successfully');
+console.log('✅ Natural Conversation Voice Handler loaded successfully');
