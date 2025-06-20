@@ -1,4 +1,4 @@
-// ===== FIXED STATIC/JS/ROLEPLAY.JS - FRONTEND WORKING VERSION =====
+// ===== NATURAL CONVERSATION ROLEPLAY MANAGER - roleplay.js =====
 
 class PhoneRoleplayManager {
     constructor() {
@@ -16,6 +16,10 @@ class PhoneRoleplayManager {
         this.isProcessing = false;
         this.conversationHistory = [];
         
+        // Natural conversation state
+        this.currentAudio = null;  // Track current AI audio
+        this.naturalMode = true;   // Enable natural conversation features
+        
         // Debug flag
         this.debugMode = true;
         
@@ -23,7 +27,7 @@ class PhoneRoleplayManager {
     }
 
     init() {
-        console.log('🚀 Initializing Roleplay 1.1 Phone Manager...');
+        console.log('🚀 Initializing Natural Conversation Roleplay Manager...');
         
         this.updateTime();
         setInterval(() => this.updateTime(), 1000);
@@ -32,10 +36,10 @@ class PhoneRoleplayManager {
         this.setupEventListeners();
         this.initializeModeSelection();
         
-        // Initialize voice handler
+        // Initialize natural voice handler
         if (typeof VoiceHandler !== 'undefined') {
             this.voiceHandler = new VoiceHandler(this);
-            console.log('✅ Voice handler initialized for Roleplay 1.1');
+            console.log('✅ Natural Voice Handler initialized');
         } else {
             console.warn('⚠️ VoiceHandler not available');
         }
@@ -93,7 +97,7 @@ class PhoneRoleplayManager {
     updateRoleplayUI(roleplayData) {
         const titleElement = document.getElementById('roleplay-title');
         if (titleElement) {
-            titleElement.textContent = 'Roleplay 1.1: ' + (roleplayData.name || 'Phone Training');
+            titleElement.textContent = 'Natural Roleplay 1.1: ' + (roleplayData.name || 'Phone Training');
         }
 
         this.updateProspectInfo(roleplayData);
@@ -115,7 +119,7 @@ class PhoneRoleplayManager {
         if (avatarElement) {
             const avatarUrl = this.getAvatarUrl(roleplayData.job_title || 'CTO');
             avatarElement.src = avatarUrl;
-            avatarElement.alt = `Roleplay 1.1 prospect`;
+            avatarElement.alt = `Natural Roleplay 1.1 prospect`;
             
             avatarElement.onerror = function() {
                 this.src = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face';
@@ -146,7 +150,7 @@ class PhoneRoleplayManager {
     }
 
     setupEventListeners() {
-        console.log('🔧 Setting up event listeners...');
+        console.log('🔧 Setting up event listeners for natural conversation...');
         
         // Mode selection
         document.querySelectorAll('.mode-option').forEach(option => {
@@ -170,38 +174,20 @@ class PhoneRoleplayManager {
             });
         }
 
-        // Call controls
+        // Microphone button - now shows natural conversation status
         const micBtn = document.getElementById('mic-btn');
         if (micBtn) {
-            // Hold to talk functionality
-            micBtn.addEventListener('mousedown', (e) => {
+            micBtn.addEventListener('click', (e) => {
                 e.preventDefault();
-                console.log('🎤 Mic button pressed');
-                this.startRecording();
-            });
-
-            micBtn.addEventListener('mouseup', (e) => {
-                e.preventDefault();
-                console.log('🎤 Mic button released');
-                this.stopRecording();
-            });
-
-            micBtn.addEventListener('mouseleave', (e) => {
-                console.log('🎤 Mic button left');
-                this.stopRecording();
-            });
-
-            // Touch events for mobile
-            micBtn.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                console.log('📱 Mic touch start');
-                this.startRecording();
-            });
-
-            micBtn.addEventListener('touchend', (e) => {
-                e.preventDefault();
-                console.log('📱 Mic touch end');
-                this.stopRecording();
+                console.log('🎤 Mic button clicked (natural mode)');
+                
+                if (this.voiceHandler) {
+                    if (this.voiceHandler.isListening) {
+                        this.voiceHandler.stopListening();
+                    } else {
+                        this.voiceHandler.startListening(false); // Manual start
+                    }
+                }
             });
         }
 
@@ -234,14 +220,22 @@ class PhoneRoleplayManager {
             });
         }
 
-        // Keyboard shortcuts
+        // Keyboard shortcuts for natural conversation
         document.addEventListener('keydown', (e) => {
-            if (e.code === 'Space' && this.callState === 'connected' && !this.isRecording) {
+            // Space bar to interrupt or start speaking
+            if (e.code === 'Space' && this.callState === 'connected' && !e.target.matches('input, textarea')) {
                 e.preventDefault();
-                console.log('⌨️ Space key pressed - start recording');
-                this.startRecording();
+                
+                if (this.aiIsSpeaking) {
+                    console.log('⚡ Space pressed - interrupting AI');
+                    this.handleUserInterruption();
+                } else if (this.voiceHandler && !this.voiceHandler.isListening) {
+                    console.log('🎤 Space pressed - manual start listening');
+                    this.voiceHandler.startListening(false);
+                }
             }
             
+            // Escape to end call
             if (e.code === 'Escape' && this.callState === 'connected') {
                 e.preventDefault();
                 console.log('⌨️ Escape key pressed - end call');
@@ -249,15 +243,7 @@ class PhoneRoleplayManager {
             }
         });
 
-        document.addEventListener('keyup', (e) => {
-            if (e.code === 'Space' && this.isRecording) {
-                e.preventDefault();
-                console.log('⌨️ Space key released - stop recording');
-                this.stopRecording();
-            }
-        });
-
-        console.log('✅ Event listeners setup complete');
+        console.log('✅ Natural conversation event listeners setup complete');
     }
 
     initializeModeSelection() {
@@ -272,12 +258,18 @@ class PhoneRoleplayManager {
         this.aiIsSpeaking = false;
         this.isProcessing = false;
         this.conversationHistory = [];
+        
+        // Stop any active audio or voice recognition
+        this.stopCurrentAudio();
+        if (this.voiceHandler) {
+            this.voiceHandler.stopListening();
+        }
     }
 
     selectMode(mode) {
         if (!mode || this.isProcessing) return;
         
-        console.log('✅ Roleplay 1.1 mode selected:', mode);
+        console.log('✅ Natural Roleplay 1.1 mode selected:', mode);
         this.selectedMode = mode;
         
         // Update UI
@@ -294,7 +286,7 @@ class PhoneRoleplayManager {
         const startBtn = document.getElementById('start-call-btn');
         if (startBtn) {
             startBtn.disabled = false;
-            startBtn.textContent = `Start Roleplay 1.1 ${this.capitalizeFirst(mode)} Call`;
+            startBtn.textContent = `Start Natural Roleplay 1.1 ${this.capitalizeFirst(mode)}`;
         }
     }
 
@@ -310,13 +302,13 @@ class PhoneRoleplayManager {
             return;
         }
 
-        console.log('🚀 Starting Roleplay 1.1 phone call:', { roleplayId, mode: this.selectedMode });
+        console.log('🚀 Starting Natural Roleplay 1.1 call:', { roleplayId, mode: this.selectedMode });
 
         this.isProcessing = true;
         const startBtn = document.getElementById('start-call-btn');
         if (startBtn) {
             startBtn.disabled = true;
-            startBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Connecting to Roleplay 1.1...';
+            startBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Connecting to Natural Roleplay 1.1...';
         }
 
         try {
@@ -330,7 +322,7 @@ class PhoneRoleplayManager {
 
             if (response.ok) {
                 const data = await response.json();
-                console.log('✅ Roleplay 1.1 started successfully:', data);
+                console.log('✅ Natural Roleplay 1.1 started successfully:', data);
                 
                 this.currentSession = data;
                 this.isActive = true;
@@ -339,24 +331,24 @@ class PhoneRoleplayManager {
                 
             } else {
                 const errorData = await response.json();
-                console.error('❌ Failed to start Roleplay 1.1:', errorData);
-                this.showError(errorData.error || 'Failed to start Roleplay 1.1 call');
+                console.error('❌ Failed to start Natural Roleplay 1.1:', errorData);
+                this.showError(errorData.error || 'Failed to start Natural Roleplay 1.1 call');
             }
         } catch (error) {
-            console.error('❌ Error starting Roleplay 1.1:', error);
+            console.error('❌ Error starting Natural Roleplay 1.1:', error);
             this.showError('Network error. Please try again.');
         } finally {
             this.isProcessing = false;
             
             if (!this.isActive && startBtn) {
                 startBtn.disabled = false;
-                startBtn.textContent = `Start Roleplay 1.1 ${this.capitalizeFirst(this.selectedMode)} Call`;
+                startBtn.textContent = `Start Natural Roleplay 1.1 ${this.capitalizeFirst(this.selectedMode)}`;
             }
         }
     }
 
     async startPhoneCallSequence(initialResponse) {
-        console.log('📞 Starting Roleplay 1.1 phone call sequence...');
+        console.log('📞 Starting Natural Roleplay 1.1 call sequence...');
         
         // Hide mode selection, show call interface
         document.getElementById('mode-selection').style.display = 'none';
@@ -389,9 +381,9 @@ class PhoneRoleplayManager {
     }
 
     async connectedState(initialResponse) {
-        console.log('✅ Connected state - Roleplay 1.1 active!');
+        console.log('✅ Connected - Natural Roleplay 1.1 active!');
         this.callState = 'connected';
-        this.updateCallStatus('Connected - Roleplay 1.1 Active', 'connected');
+        this.updateCallStatus('Connected - Natural Conversation Active', 'connected');
         
         // Update UI
         const avatar = document.getElementById('contact-avatar');
@@ -411,20 +403,40 @@ class PhoneRoleplayManager {
             transcript.classList.add('roleplay-11-active');
         }
         
-        // Enable call controls
-        this.enableCallControls();
+        // Enable natural conversation features
+        this.enableNaturalConversation();
         
         // Clear conversation history
         this.conversationHistory = [];
         
         // Play initial AI response
         if (initialResponse) {
-            console.log('🎯 Playing Roleplay 1.1 initial response:', initialResponse);
+            console.log('🎯 Playing initial AI response:', initialResponse);
             await this.playAIResponseAndWaitForUser(initialResponse);
         } else {
-            console.log('🎤 No initial response, prompting user for Roleplay 1.1');
-            this.promptUserToSpeak('The prospect answered. Start your Roleplay 1.1 opener!');
+            console.log('🎤 No initial response, starting auto-listening');
+            this.startUserTurn();
         }
+    }
+
+    enableNaturalConversation() {
+        console.log('🤖 Enabling natural conversation features...');
+        
+        // Enable interruption capability
+        if (this.voiceHandler) {
+            this.voiceHandler.enableInterruption();
+        }
+        
+        // Update UI to show natural mode
+        const micBtn = document.getElementById('mic-btn');
+        if (micBtn) {
+            micBtn.disabled = false;
+            micBtn.title = 'Natural conversation active - speak anytime or use Space bar';
+            micBtn.classList.add('natural-mode');
+        }
+        
+        // Show natural conversation instructions
+        this.updateTranscript('🤖 Natural conversation ready - speak when you want!');
     }
 
     updateCallStatus(text, state) {
@@ -454,65 +466,62 @@ class PhoneRoleplayManager {
         }, 1000);
     }
 
-    enableCallControls() {
-        const micBtn = document.getElementById('mic-btn');
-        const muteBtn = document.getElementById('mute-btn');
-        const speakerBtn = document.getElementById('speaker-btn');
+    // ===== NATURAL CONVERSATION METHODS =====
+
+    startUserTurn() {
+        console.log('👤 Starting user turn - auto-listening activated');
         
-        if (micBtn) {
-            micBtn.disabled = false;
-            micBtn.title = 'Hold to speak - Roleplay 1.1';
+        this.aiIsSpeaking = false;
+        
+        // Start auto-listening for natural conversation
+        if (this.voiceHandler) {
+            this.voiceHandler.startAutoListening();
         }
-        if (muteBtn) muteBtn.disabled = false;
-        if (speakerBtn) speakerBtn.disabled = false;
+        
+        // Update UI
+        this.updateTranscript('🎤 Your turn - speak naturally...');
+        this.addPulseTomicButton();
     }
 
-    startRecording() {
-        if (this.callState !== 'connected' || this.isMuted || this.aiIsSpeaking || this.isProcessing) {
-            console.log('❌ Cannot start recording:', { 
-                callState: this.callState, 
-                isMuted: this.isMuted, 
-                aiIsSpeaking: this.aiIsSpeaking, 
-                isProcessing: this.isProcessing 
-            });
-            return;
-        }
+    handleUserInterruption() {
+        console.log('⚡ User interrupted AI - switching to user turn');
         
-        console.log('🎤 Starting recording for Roleplay 1.1...');
-        this.isRecording = true;
+        // Stop AI audio immediately
+        this.stopCurrentAudio();
         
-        const micBtn = document.getElementById('mic-btn');
-        if (micBtn) {
-            micBtn.classList.add('recording');
-        }
+        // Mark AI as no longer speaking
+        this.aiIsSpeaking = false;
         
-        this.updateTranscript('🎤 You are speaking... (Roleplay 1.1 active)');
-        
-        // Start voice recognition
+        // If voice handler not already listening, start it
         if (this.voiceHandler && !this.voiceHandler.isListening) {
-            this.voiceHandler.startListening();
+            this.voiceHandler.startAutoListening();
+        }
+        
+        // Update UI
+        this.updateTranscript('⚡ You interrupted - keep speaking...');
+    }
+
+    stopCurrentAudio() {
+        if (this.currentAudio) {
+            console.log('🔇 Stopping current AI audio');
+            this.currentAudio.pause();
+            this.currentAudio.currentTime = 0;
+            this.currentAudio = null;
         }
     }
 
-    stopRecording() {
-        if (!this.isRecording) return;
-        
-        console.log('⏹️ Stopping recording for Roleplay 1.1...');
-        this.isRecording = false;
-        
+    addPulseTomicButton() {
         const micBtn = document.getElementById('mic-btn');
         if (micBtn) {
-            micBtn.classList.remove('recording');
-        }
-        
-        // Stop voice recognition
-        if (this.voiceHandler && this.voiceHandler.isListening) {
-            this.voiceHandler.stopListening();
+            micBtn.classList.add('pulse-animation');
+            setTimeout(() => {
+                micBtn.classList.remove('pulse-animation');
+            }, 3000);
         }
     }
 
     async processUserInput(transcript) {
-        if (!this.isActive || !this.currentSession || this.isProcessing || this.aiIsSpeaking) {
+        if (!this.isActive || !this.currentSession || this.isProcessing) {
             console.log('❌ Cannot process user input - invalid state');
             return;
         }
@@ -524,11 +533,11 @@ class PhoneRoleplayManager {
             return;
         }
 
-        console.log('💬 Processing Roleplay 1.1 user input:', transcript);
+        console.log('💬 Processing natural conversation input:', transcript);
         this.isProcessing = true;
 
         this.addToConversationHistory('user', transcript);
-        this.updateTranscript('Processing your Roleplay 1.1 response...');
+        this.updateTranscript('🤖 Processing your response...');
 
         try {
             const response = await this.apiCall('/api/roleplay/respond', {
@@ -540,30 +549,30 @@ class PhoneRoleplayManager {
 
             if (response.ok) {
                 const data = await response.json();
-                console.log('✅ Roleplay 1.1 AI response received:', data);
+                console.log('✅ AI response received:', data);
                 
                 // Check if call should end
                 if (!data.call_continues) {
-                    console.log('📞 Roleplay 1.1 call ending...');
+                    console.log('📞 Call ending...');
                     setTimeout(() => {
                         this.endCall(data.session_success);
                     }, 2000);
                     return;
                 }
                 
-                // Play AI response and wait for user
+                // Play AI response and automatically start next user turn
                 await this.playAIResponseAndWaitForUser(data.ai_response);
                 
             } else {
                 const errorData = await response.json();
-                console.error('❌ Roleplay 1.1 API error:', errorData);
+                console.error('❌ API error:', errorData);
                 this.showError(errorData.error || 'Failed to process input');
-                this.promptUserToSpeak('Sorry, please try again...');
+                this.startUserTurn(); // Resume user turn on error
             }
         } catch (error) {
-            console.error('❌ Error processing Roleplay 1.1 user input:', error);
+            console.error('❌ Error processing user input:', error);
             this.showError('Network error during call');
-            this.promptUserToSpeak('Network error, please try again...');
+            this.startUserTurn(); // Resume user turn on error
         } finally {
             this.isProcessing = false;
         }
@@ -588,13 +597,13 @@ class PhoneRoleplayManager {
 
     async playAIResponseAndWaitForUser(text) {
         try {
-            console.log('🎭 Playing Roleplay 1.1 AI response:', text.substring(0, 50) + '...');
+            console.log('🎭 Playing AI response (interruptible):', text.substring(0, 50) + '...');
             this.aiIsSpeaking = true;
             
             this.addToConversationHistory('ai', text);
-            this.updateTranscript(`🎯 Prospect: "${text}" (Roleplay 1.1)`);
+            this.updateTranscript(`🤖 Prospect: "${text}"`);
 
-            // Try to play TTS audio
+            // Try to play TTS audio (interruptible)
             try {
                 const response = await this.apiCall('/api/roleplay/tts', {
                     method: 'POST',
@@ -605,50 +614,56 @@ class PhoneRoleplayManager {
                     const audioBlob = await response.blob();
                     
                     if (audioBlob.size > 100) {
-                        console.log('🔊 Playing Roleplay 1.1 audio, size:', audioBlob.size);
+                        console.log('🔊 Playing interruptible AI audio');
                         const audioUrl = URL.createObjectURL(audioBlob);
-                        const audio = new Audio(audioUrl);
+                        this.currentAudio = new Audio(audioUrl);
                         
-                        await new Promise((resolve) => {
-                            audio.onended = () => {
-                                console.log('✅ Roleplay 1.1 audio playback finished');
-                                URL.revokeObjectURL(audioUrl);
-                                resolve();
-                            };
+                        // Setup audio event handlers
+                        this.currentAudio.onended = () => {
+                            console.log('✅ AI audio finished - starting user turn');
+                            URL.revokeObjectURL(audioUrl);
+                            this.currentAudio = null;
                             
-                            audio.onerror = () => {
-                                console.log('❌ Roleplay 1.1 audio playback failed');
-                                URL.revokeObjectURL(audioUrl);
-                                resolve();
-                            };
+                            // Only start user turn if AI is still speaking (not interrupted)
+                            if (this.aiIsSpeaking) {
+                                this.startUserTurn();
+                            }
+                        };
+                        
+                        this.currentAudio.onerror = () => {
+                            console.log('❌ AI audio error - starting user turn');
+                            URL.revokeObjectURL(audioUrl);
+                            this.currentAudio = null;
                             
-                            audio.play().catch((error) => {
-                                console.log('❌ Roleplay 1.1 audio play failed:', error);
-                                resolve();
-                            });
-                        });
+                            if (this.aiIsSpeaking) {
+                                this.startUserTurn();
+                            }
+                        };
+                        
+                        // Play the audio
+                        await this.currentAudio.play();
+                        
                     } else {
-                        console.log('📢 Audio blob too small, simulating speaking time');
+                        console.log('📢 Audio too small, simulating speech time');
                         await this.simulateSpeakingTime(text);
+                        this.startUserTurn();
                     }
                 } else {
-                    console.log('🎵 TTS request failed, simulating speaking time');
+                    console.log('🎵 TTS failed, simulating speech time');
                     await this.simulateSpeakingTime(text);
+                    this.startUserTurn();
                 }
             } catch (ttsError) {
-                console.log('🔊 Roleplay 1.1 TTS error:', ttsError);
+                console.log('🔊 TTS error:', ttsError);
                 await this.simulateSpeakingTime(text);
+                this.startUserTurn();
             }
-
-            this.aiIsSpeaking = false;
-            console.log('✅ Roleplay 1.1 AI finished speaking, prompting user');
-            this.promptUserToSpeak('Your turn! Hold the microphone to respond... (Roleplay 1.1)');
             
         } catch (error) {
-            console.error('❌ Error playing Roleplay 1.1 AI response:', error);
+            console.error('❌ Error playing AI response:', error);
             this.aiIsSpeaking = false;
             await this.simulateSpeakingTime(text);
-            this.promptUserToSpeak('Your turn! Hold the microphone to respond... (Roleplay 1.1)');
+            this.startUserTurn();
         }
     }
 
@@ -660,22 +675,9 @@ class PhoneRoleplayManager {
         const maxTime = 5000;
         
         const delay = Math.max(minTime, Math.min(maxTime, speakingTimeMs));
-        console.log(`⏱️ Simulating Roleplay 1.1 speaking time: ${delay}ms for ${words} words`);
+        console.log(`⏱️ Simulating speaking time: ${delay}ms for ${words} words`);
         
         return new Promise(resolve => setTimeout(resolve, delay));
-    }
-
-    promptUserToSpeak(message) {
-        console.log('🎤 Prompting user to speak for Roleplay 1.1:', message);
-        this.updateTranscript(message);
-        
-        const micBtn = document.getElementById('mic-btn');
-        if (micBtn) {
-            micBtn.classList.add('pulse-animation');
-            setTimeout(() => {
-                micBtn.classList.remove('pulse-animation');
-            }, 3000);
-        }
     }
 
     addToConversationHistory(sender, message) {
@@ -683,10 +685,11 @@ class PhoneRoleplayManager {
             sender: sender,
             message: message,
             timestamp: new Date(),
-            roleplay_version: '1.1'
+            roleplay_version: '1.1',
+            natural_conversation: true
         });
         
-        console.log(`📝 Added to Roleplay 1.1 conversation: ${sender} - ${message.substring(0, 50)}...`);
+        console.log(`📝 Added to conversation: ${sender} - ${message.substring(0, 50)}...`);
     }
 
     updateTranscript(text) {
@@ -698,29 +701,29 @@ class PhoneRoleplayManager {
 
     async endCall(success = false) {
         if (!this.isActive) {
-            console.log('📞 Roleplay 1.1 call already ended or not active');
+            console.log('📞 Call already ended');
             return;
         }
 
-        console.log('📞 Ending Roleplay 1.1 call, success:', success);
+        console.log('📞 Ending Natural Roleplay 1.1 call, success:', success);
 
         this.callState = 'ended';
-        this.updateCallStatus('Roleplay 1.1 Call ended', 'ended');
+        this.updateCallStatus('Natural Roleplay 1.1 Call ended', 'ended');
         this.isActive = false;
         this.aiIsSpeaking = false;
+        
+        // Stop all audio and voice recognition
+        this.stopCurrentAudio();
+        if (this.voiceHandler) {
+            this.voiceHandler.stopListening();
+            this.voiceHandler.disableInterruption();
+        }
         
         // Clear timers
         if (this.durationInterval) {
             clearInterval(this.durationInterval);
             this.durationInterval = null;
         }
-        
-        // Stop voice recognition
-        if (this.voiceHandler) {
-            this.voiceHandler.stopListening();
-        }
-        
-        this.stopRecording();
         
         // Hide transcript
         const transcript = document.getElementById('live-transcript');
@@ -745,19 +748,19 @@ class PhoneRoleplayManager {
 
             if (response.ok) {
                 const data = await response.json();
-                console.log('✅ Roleplay 1.1 call ended successfully:', data);
+                console.log('✅ Call ended successfully:', data);
                 
                 setTimeout(() => {
                     this.showFeedback(data.coaching, data.overall_score);
                 }, 2000);
             } else {
-                console.error('❌ Failed to end Roleplay 1.1 call properly');
+                console.error('❌ Failed to end call properly');
                 setTimeout(() => {
                     this.showFeedback(null, 50);
                 }, 2000);
             }
         } catch (error) {
-            console.error('❌ Error ending Roleplay 1.1 call:', error);
+            console.error('❌ Error ending call:', error);
             setTimeout(() => {
                 this.showFeedback(null, 50);
             }, 2000);
@@ -765,14 +768,14 @@ class PhoneRoleplayManager {
     }
 
     showFeedback(coaching, score = 75) {
-        console.log('📊 Showing Roleplay 1.1 feedback screen');
+        console.log('📊 Showing Natural Roleplay 1.1 feedback');
         
         document.getElementById('call-interface').style.display = 'none';
         document.getElementById('feedback-section').style.display = 'flex';
         
         const feedbackHeader = document.querySelector('.feedback-header h4');
         if (feedbackHeader) {
-            feedbackHeader.textContent = 'Roleplay 1.1 Complete!';
+            feedbackHeader.textContent = 'Natural Roleplay 1.1 Complete!';
         }
         
         if (coaching) {
@@ -791,7 +794,7 @@ class PhoneRoleplayManager {
 
         if (coaching) {
             const feedbackItems = [
-                { key: 'sales_coaching', icon: 'chart-line', title: 'Sales Performance (Roleplay 1.1)' },
+                { key: 'sales_coaching', icon: 'chart-line', title: 'Sales Performance (Natural Conversation)' },
                 { key: 'grammar_coaching', icon: 'spell-check', title: 'Grammar & Structure' },
                 { key: 'vocabulary_coaching', icon: 'book', title: 'Vocabulary' },
                 { key: 'pronunciation_coaching', icon: 'volume-up', title: 'Pronunciation' },
@@ -811,8 +814,8 @@ class PhoneRoleplayManager {
         } else {
             content.innerHTML = `
                 <div class="feedback-item">
-                    <h6><i class="fas fa-info-circle me-2"></i>Roleplay 1.1 Session Complete</h6>
-                    <p style="margin: 0; font-size: 14px;">Your Roleplay 1.1 call has been completed. Keep practicing!</p>
+                    <h6><i class="fas fa-info-circle me-2"></i>Natural Roleplay 1.1 Complete</h6>
+                    <p style="margin: 0; font-size: 14px;">Your natural conversation call is complete. Great job!</p>
                 </div>
             `;
         }
@@ -851,7 +854,7 @@ class PhoneRoleplayManager {
     }
 
     tryAgain() {
-        console.log('🔄 Trying again with same Roleplay 1.1 mode');
+        console.log('🔄 Trying again with Natural Roleplay 1.1');
         this.showModeSelection();
         
         if (this.selectedMode) {
@@ -862,7 +865,7 @@ class PhoneRoleplayManager {
     }
 
     showModeSelection() {
-        console.log('🎯 Showing Roleplay 1.1 mode selection screen');
+        console.log('🎯 Showing mode selection');
         
         document.getElementById('feedback-section').style.display = 'none';
         this.initializeModeSelection();
@@ -877,18 +880,18 @@ class PhoneRoleplayManager {
         const startBtn = document.getElementById('start-call-btn');
         if (startBtn) {
             startBtn.disabled = true;
-            startBtn.textContent = 'Select a mode to start Roleplay 1.1 call';
+            startBtn.textContent = 'Select a mode for Natural Roleplay 1.1';
         }
     }
 
     showError(message) {
-        console.error('❌ Roleplay 1.1 Error:', message);
+        console.error('❌ Error:', message);
         this.updateTranscript(`❌ Error: ${message}`);
         
         const alertDiv = document.createElement('div');
         alertDiv.className = 'alert alert-danger position-fixed';
         alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; max-width: 300px;';
-        alertDiv.innerHTML = `<strong>Roleplay 1.1 Error:</strong> ${message}`;
+        alertDiv.innerHTML = `<strong>Natural Roleplay 1.1 Error:</strong> ${message}`;
         
         document.body.appendChild(alertDiv);
         
@@ -912,12 +915,12 @@ class PhoneRoleplayManager {
             }
         };
 
-        console.log('🌐 Making Roleplay 1.1 API call to:', endpoint, options.method || 'GET');
+        console.log('🌐 API call:', endpoint, options.method || 'GET');
 
         const response = await fetch(endpoint, { ...defaultOptions, ...options });
         
         if (response.status === 401) {
-            console.error('🔐 Authentication required for Roleplay 1.1, redirecting to login');
+            console.error('🔐 Authentication required');
             window.location.href = '/login';
             throw new Error('Authentication required');
         }
@@ -934,7 +937,9 @@ class PhoneRoleplayManager {
     }
 
     destroy() {
-        console.log('🧹 Destroying Roleplay 1.1 Phone Manager');
+        console.log('🧹 Destroying Natural Roleplay Manager');
+        
+        this.stopCurrentAudio();
         
         if (this.voiceHandler) {
             this.voiceHandler.destroy();
@@ -954,7 +959,7 @@ class PhoneRoleplayManager {
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', () => {
     if (window.location.pathname.includes('/roleplay/')) {
-        console.log('🚀 Initializing Roleplay 1.1 phone manager on page load');
+        console.log('🚀 Initializing Natural Conversation Roleplay Manager');
         window.roleplayManager = new PhoneRoleplayManager();
     }
 });
@@ -962,4 +967,4 @@ document.addEventListener('DOMContentLoaded', () => {
 // Export for global access
 window.PhoneRoleplayManager = PhoneRoleplayManager;
 
-console.log('✅ Roleplay 1.1 Phone Manager loaded successfully');
+console.log('✅ Natural Conversation Roleplay Manager loaded successfully');
