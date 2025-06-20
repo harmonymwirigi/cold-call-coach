@@ -56,6 +56,17 @@ def create_app():
         def api_error(path):
             return {'error': 'API not properly configured'}, 500
     
+    @app.template_global()
+    def get_file_version(filename):
+        """Get file modification time for cache busting"""
+        try:
+            file_path = os.path.join(app.static_folder, filename)
+            if os.path.exists(file_path):
+                mtime = os.path.getmtime(file_path)
+                return str(int(mtime))
+            return str(int(datetime.now().timestamp()))
+        except:
+            return str(int(datetime.now().timestamp()))
     # Main routes
     @app.route('/')
     def home():

@@ -244,6 +244,17 @@ def internal_error(error):
         return {'error': 'Internal server error', 'details': str(error)}, 500
     return '<h1>500 - Internal Server Error</h1><a href="/">Go Home</a>', 500
 
+@app.template_global()
+def get_file_version(filename):
+    """Get file modification time for cache busting"""
+    try:
+        file_path = os.path.join(app.static_folder, filename)
+        if os.path.exists(file_path):
+            mtime = os.path.getmtime(file_path)
+            return str(int(mtime))
+        return str(int(datetime.now().timestamp()))
+    except:
+        return str(int(datetime.now().timestamp()))
 # Template globals
 @app.template_global()
 def current_year():

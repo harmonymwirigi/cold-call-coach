@@ -832,9 +832,8 @@ body {
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='js/voice-handler.js?v=2') }}"></script>
-<script src="{{ url_for('static', filename='js/roleplay.js?v=2') }}"></script>
-
+<script src="{{ url_for('static', filename='js/voice-handler.js') }}?v={{ get_file_version('js/voice-handler.js') }}"></script>
+<script src="{{ url_for('static', filename='js/roleplay.js') }}?v={{ get_file_version('js/roleplay.js') }}"></script>
 <script>
 // Additional Roleplay 1.1 specific JavaScript
 document.addEventListener('DOMContentLoaded', () => {
