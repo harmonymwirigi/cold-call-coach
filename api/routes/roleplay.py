@@ -1,8 +1,4 @@
 
-paste-7.txt
-24.32 KB •631 lines
-•
-Formatting may be inconsistent from source
 # ===== FIXED API/ROUTES/ROLEPLAY.PY - SIMPLE & WORKING =====
 
 from flask import Blueprint, request, jsonify, session, Response
