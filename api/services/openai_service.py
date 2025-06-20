@@ -1,4 +1,4 @@
-# ===== ENHANCED OPENAI SERVICE - MARATHON MODE SUPPORT =====
+# ===== FIXED API/SERVICES/OPENAI_SERVICE.PY - JSON PARSING FIXED =====
 
 import os
 import json
@@ -55,7 +55,7 @@ class OpenAIService:
         return self.is_enabled and self.client is not None
     
     def evaluate_user_input(self, user_input: str, conversation_history: List[Dict], evaluation_stage: str) -> Dict[str, Any]:
-        """Evaluate user input using OpenAI for all roleplay modes"""
+        """Evaluate user input using OpenAI for Roleplay 1.1"""
         if not self.is_available():
             logger.warning("OpenAI not available for evaluation")
             return self._fallback_evaluation(user_input, evaluation_stage)
@@ -100,504 +100,11 @@ class OpenAIService:
             logger.error(f"OpenAI evaluation failed: {e}")
             return self._fallback_evaluation(user_input, evaluation_stage)
     
-    def generate_marathon_coaching(self, conversation_history: List[Dict], coaching_data: List[Dict], 
-                                 user_context: Dict, mode: str, stats: Dict) -> Dict[str, Any]:
-        """Generate end-of-run coaching for Marathon/Legend modes"""
-        if not self.is_available():
-            logger.warning("OpenAI not available for Marathon coaching")
-            return self._fallback_marathon_coaching(coaching_data, mode, stats)
-        
-        try:
-            logger.info(f"Generating {mode} coaching with OpenAI")
-            
-            # Build comprehensive coaching prompt
-            coaching_prompt = self._create_marathon_coaching_prompt(
-                conversation_history, coaching_data, user_context, mode, stats
-            )
-            
-            # Call OpenAI for coaching generation
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system", 
-                        "content": "You are an expert cold calling coach specializing in Marathon and Legend training modes. Provide CEFR A2 level English coaching. Respond ONLY with valid JSON."
-                    },
-                    {
-                        "role": "user", 
-                        "content": coaching_prompt
-                    }
-                ],
-                temperature=0.3,
-                max_tokens=1200,
-                timeout=25
-            )
-            
-            coaching_text = response.choices[0].message.content.strip()
-            coaching_data = self._parse_marathon_coaching_response(coaching_text, mode, stats)
-            
-            logger.info(f"Marathon coaching generated successfully for {mode} mode")
-            
-            return {
-                'success': True,
-                'coaching': coaching_data['coaching'],
-                'score': coaching_data['score'],
-                'source': 'openai_marathon'
-            }
-            
-        except Exception as e:
-            logger.error(f"Marathon coaching generation failed: {e}")
-            return self._fallback_marathon_coaching(coaching_data, mode, stats)
-    
-    def _create_marathon_coaching_prompt(self, conversation_history: List[Dict], 
-                                       coaching_data: List[Dict], user_context: Dict, 
-                                       mode: str, stats: Dict) -> str:
-        """Create coaching prompt for Marathon/Legend modes"""
-        
-        # Analyze performance patterns across all calls
-        performance_summary = self._analyze_marathon_performance(coaching_data, stats)
-        
-        # Build conversation context (last few calls)
-        recent_conversations = self._build_recent_conversations(conversation_history, max_calls=3)
-        
-        # Mode-specific context
-        mode_context = f"{mode.upper()} MODE COMPLETED"
-        if mode == 'marathon':
-            mode_context += f" - {stats.get('calls_passed', 0)}/10 calls passed (need 6 to pass)"
-        elif mode == 'legend':
-            mode_context += f" - {stats.get('calls_passed', 0)}/6 calls passed (need 6 perfect calls)"
-        
-        base_prompt = f"""
-COLD CALLING COACH - {mode_context}
-
-PERFORMANCE SUMMARY:
-{performance_summary}
-
-RECENT CONVERSATIONS:
-{recent_conversations}
-
-USER PROFILE:
-- Job targeting: {user_context.get('prospect_job_title', 'CTO')} in {user_context.get('prospect_industry', 'Technology')}
-- Access level: {user_context.get('access_level', 'limited_trial')}
-
-COACHING REQUIREMENTS:
-1. Provide EXACTLY 2 coaching points per category (no more, no less)
-2. Use CEFR A2 level English (simple, clear, everyday words)
-3. Focus on patterns across all calls, not individual mistakes
-4. Be encouraging but specific about improvements needed
-
-Categories (exactly 2 points each):
-1. SALES COACHING: Overall performance, stage-specific improvements
-2. GRAMMAR COACHING: Simple grammar patterns, verb tenses, articles  
-3. VOCABULARY COACHING: Word choice, business terms, natural phrases
-4. PRONUNCIATION COACHING: Speech clarity, common mispronunciations
-5. RAPPORT & ASSERTIVENESS: Tone, confidence, empathy building
-
-Special {mode} considerations:
-- Marathon: Focus on consistency across multiple calls
-- Legend: Emphasize perfection and attention to detail
-
-Respond with ONLY this JSON format:
-{{
-"sales_coaching": "Point 1 about overall performance. Point 2 about specific improvements.",
-"grammar_coaching": "Point 1 about grammar. Point 2 about sentence structure.",  
-"vocabulary_coaching": "Point 1 about word choice. Point 2 about business terms.",
-"pronunciation_coaching": "Point 1 about clarity. Point 2 about specific sounds.",
-"rapport_assertiveness": "Point 1 about building trust. Point 2 about confidence.",
-"overall_score": [number 30-100]
-}}
-
-No other text, no markdown, just JSON.
-"""
-        
-        return base_prompt
-    
-    def _analyze_marathon_performance(self, coaching_data: List[Dict], stats: Dict) -> str:
-        """Analyze performance patterns across Marathon/Legend run"""
-        if not coaching_data:
-            return "No detailed performance data available."
-        
-        # Count performance by stage and call
-        stage_performance = {}
-        call_results = {}
-        
-        for data in coaching_data:
-            stage = data.get('stage', 'unknown')
-            call_num = data.get('call_number', 1)
-            evaluation = data.get('evaluation', {})
-            passed = evaluation.get('passed', False)
-            score = evaluation.get('score', 0)
-            
-            # Track stage performance
-            if stage not in stage_performance:
-                stage_performance[stage] = {'passed': 0, 'failed': 0, 'total_score': 0, 'count': 0}
-            
-            stage_performance[stage]['count'] += 1
-            stage_performance[stage]['total_score'] += score
-            
-            if passed:
-                stage_performance[stage]['passed'] += 1
-            else:
-                stage_performance[stage]['failed'] += 1
-            
-            # Track call results
-            if call_num not in call_results:
-                call_results[call_num] = {'stages': [], 'overall_success': False}
-            
-            call_results[call_num]['stages'].append({
-                'stage': stage,
-                'passed': passed,
-                'score': score
-            })
-        
-        # Build summary
-        summary_lines = []
-        summary_lines.append(f"Total calls: {stats.get('total_calls', len(call_results))}")
-        summary_lines.append(f"Calls passed: {stats.get('calls_passed', 0)}")
-        summary_lines.append(f"Pass rate: {stats.get('pass_rate', 0):.1f}%")
-        
-        # Stage-by-stage analysis
-        for stage, perf in stage_performance.items():
-            if perf['count'] > 0:
-                avg_score = perf['total_score'] / perf['count']
-                pass_rate = (perf['passed'] / perf['count']) * 100
-                summary_lines.append(f"{stage}: {perf['passed']}/{perf['count']} passed ({pass_rate:.0f}%), avg score {avg_score:.1f}")
-        
-        return "\n".join(summary_lines)
-    
-    def _build_recent_conversations(self, conversation_history: List[Dict], max_calls: int = 3) -> str:
-        """Build recent conversation context for coaching"""
-        if not conversation_history:
-            return "No conversation data available."
-        
-        # Group by call number
-        calls = {}
-        for msg in conversation_history:
-            call_num = msg.get('call_number', 1)
-            if call_num not in calls:
-                calls[call_num] = []
-            calls[call_num].append(msg)
-        
-        # Get most recent calls
-        recent_call_nums = sorted(calls.keys())[-max_calls:]
-        
-        conversation_lines = []
-        for call_num in recent_call_nums:
-            conversation_lines.append(f"\n--- CALL {call_num} ---")
-            
-            for msg in calls[call_num][-10:]:  # Last 10 messages per call
-                role = "User" if msg.get('role') == 'user' else "Prospect"
-                content = msg.get('content', '')
-                stage = msg.get('stage', '')
-                
-                if len(content) > 100:
-                    content = content[:100] + "..."
-                
-                conversation_lines.append(f"{role} ({stage}): {content}")
-        
-        return "\n".join(conversation_lines) if conversation_lines else "No recent conversation data."
-    
-    def _parse_marathon_coaching_response(self, response_text: str, mode: str, stats: Dict) -> Dict[str, Any]:
-        """Parse Marathon coaching response with robust error handling"""
-        try:
-            # Try direct JSON parse
-            try:
-                coaching_data = json.loads(response_text)
-                return self._validate_marathon_coaching(coaching_data, mode, stats)
-            except json.JSONDecodeError:
-                pass
-            
-            # Try finding JSON in text
-            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-            if json_match:
-                try:
-                    coaching_data = json.loads(json_match.group(0))
-                    return self._validate_marathon_coaching(coaching_data, mode, stats)
-                except json.JSONDecodeError:
-                    pass
-            
-            # Manual extraction for Marathon coaching
-            logger.warning("Using manual Marathon coaching extraction")
-            return self._manual_extract_marathon_coaching(response_text, mode, stats)
-                
-        except Exception as e:
-            logger.error(f"Marathon coaching parsing failed: {e}")
-            return self._fallback_marathon_coaching([], mode, stats)
-    
-    def _validate_marathon_coaching(self, coaching_data: Dict, mode: str, stats: Dict) -> Dict[str, Any]:
-        """Validate Marathon coaching data"""
-        try:
-            categories = [
-                'sales_coaching',
-                'grammar_coaching',
-                'vocabulary_coaching',
-                'pronunciation_coaching',
-                'rapport_assertiveness'
-            ]
-            
-            coaching = {}
-            for category in categories:
-                coaching[category] = str(coaching_data.get(category, f"Continue practicing {category.replace('_', ' ')}."))
-            
-            # Calculate score based on performance
-            base_score = max(30, min(100, int(coaching_data.get('overall_score', 50))))
-            
-            # Adjust score based on mode and performance
-            if mode == 'legend' and stats.get('calls_passed', 0) == stats.get('total_calls', 0):
-                base_score = max(90, base_score)  # Perfect Legend run
-            elif mode == 'marathon' and stats.get('calls_passed', 0) >= 6:
-                base_score = max(75, base_score)  # Marathon pass
-            
-            return {
-                'coaching': coaching,
-                'score': base_score
-            }
-            
-        except Exception as e:
-            logger.error(f"Marathon coaching validation failed: {e}")
-            return self._fallback_marathon_coaching([], mode, stats)
-    
-    def _manual_extract_marathon_coaching(self, text: str, mode: str, stats: Dict) -> Dict[str, Any]:
-        """Manually extract Marathon coaching from text"""
-        try:
-            coaching = {}
-            
-            # Extract each coaching category
-            categories = [
-                'sales_coaching',
-                'grammar_coaching', 
-                'vocabulary_coaching',
-                'pronunciation_coaching',
-                'rapport_assertiveness'
-            ]
-            
-            for category in categories:
-                pattern = f'"{category}":\\s*"([^"]*)"'
-                match = re.search(pattern, text)
-                if match:
-                    coaching[category] = match.group(1)
-                else:
-                    coaching[category] = f"Keep practicing your {category.replace('_', ' ')} skills in {mode} mode."
-            
-            # Extract overall score
-            score_match = re.search(r'"overall_score":\s*(\d+)', text)
-            if score_match:
-                score = int(score_match.group(1))
-            else:
-                # Calculate score based on stats
-                pass_rate = stats.get('pass_rate', 0)
-                score = max(30, min(100, int(pass_rate * 0.8 + 20)))
-            
-            return {
-                'coaching': coaching,
-                'score': score
-            }
-            
-        except Exception as e:
-            logger.error(f"Manual Marathon coaching extraction failed: {e}")
-            return self._fallback_marathon_coaching([], mode, stats)
-    
-    def _fallback_marathon_coaching(self, coaching_data: List[Dict], mode: str, stats: Dict) -> Dict[str, Any]:
-        """Enhanced fallback coaching for Marathon/Legend modes"""
-        logger.info(f"Using fallback Marathon coaching for {mode} mode")
-        
-        calls_passed = stats.get('calls_passed', 0)
-        total_calls = stats.get('total_calls', 1)
-        pass_rate = stats.get('pass_rate', 0)
-        
-        # Calculate score
-        if mode == 'legend' and calls_passed == total_calls:
-            score = 100  # Perfect Legend run
-        elif mode == 'marathon' and calls_passed >= 6:
-            score = max(75, int(pass_rate * 0.8 + 20))  # Marathon pass
-        else:
-            score = max(30, int(pass_rate * 0.7 + 30))  # Failed run
-        
-        # Generate contextual coaching
-        coaching = {}
-        
-        # Sales coaching based on performance
-        if calls_passed >= 6:
-            coaching['sales_coaching'] = f"Great work in {mode} mode! You passed {calls_passed}/{total_calls} calls. Your cold calling skills are getting stronger with each call."
-        elif calls_passed >= 4:
-            coaching['sales_coaching'] = f"Good progress in {mode} mode! You passed {calls_passed}/{total_calls} calls. Focus on being more consistent in your opener and objection handling."
-        else:
-            coaching['sales_coaching'] = f"Keep practicing {mode} mode! You passed {calls_passed}/{total_calls} calls. Remember: opener + empathy + question works best."
-        
-        # Grammar coaching (CEFR A2 level)
-        coaching['grammar_coaching'] = "Use simple present tense: 'I call companies' not 'I am calling companies'. Try contractions like 'I'm' and 'don't' to sound natural."
-        
-        # Vocabulary coaching  
-        coaching['vocabulary_coaching'] = "Use simple words: say 'help save time' instead of 'optimize efficiency'. Use 'book a meeting' not 'schedule an appointment'."
-        
-        # Pronunciation coaching
-        coaching['pronunciation_coaching'] = "Speak slowly and clearly. Practice saying 'Can I tell you why I'm calling?' Break it into small parts: Can-I-tell-you-why-I'm-call-ing?"
-        
-        # Rapport & assertiveness
-        if mode == 'legend':
-            coaching['rapport_assertiveness'] = "Legend mode needs perfect empathy. Always start with 'I know this is out of the blue' to show you understand the interruption."
-        else:
-            coaching['rapport_assertiveness'] = "Show empathy first, then be confident. Say 'I know this is random' or 'You don't know me' to build trust quickly."
-        
-        return {
-            'success': True,
-            'coaching': coaching,
-            'score': score,
-            'source': f'fallback_{mode}'
-        }
-    
-    # ===== EXISTING METHODS (Practice Mode) =====
-    
-    def generate_roleplay_response(self, user_input: str, conversation_history: List[Dict], 
-                                 user_context: Dict, current_stage: str) -> Dict[str, Any]:
-        """Generate AI prospect response (works for all modes)"""
-        if not self.is_available():
-            logger.warning("OpenAI not available for response generation")
-            return {
-                'success': False,
-                'response': self._get_fallback_response(current_stage),
-                'source': 'fallback'
-            }
-        
-        try:
-            logger.info(f"Generating response for stage: {current_stage}")
-            
-            # Build context
-            context = self._build_conversation_context(conversation_history)
-            prospect_info = self._get_prospect_info(user_context)
-            
-            # Create response prompt
-            response_prompt = f"""
-You are a {prospect_info['job_title']} at a {prospect_info['industry']} company receiving a cold call.
-
-STAGE: {current_stage}
-CONVERSATION: {context}
-CALLER JUST SAID: "{user_input}"
-
-Be realistic and natural. Keep responses 1-2 sentences.
-
-Stage behavior:
-- opener_evaluation: Show mild skepticism, ask "What's this about?"
-- early_objection: Give common objection like "Not interested" or "No time"  
-- objection_handling: If they handle well, show slight interest
-- mini_pitch: If pitch is good, ask follow-up question
-- soft_discovery: Answer briefly then wrap up
-
-Respond as the prospect (no quotes, just what you'd say):
-"""
-            
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "You are a realistic business prospect in a cold call. Be natural and brief."},
-                    {"role": "user", "content": response_prompt}
-                ],
-                temperature=0.7,
-                max_tokens=100,
-                timeout=15
-            )
-            
-            ai_response = response.choices[0].message.content.strip()
-            
-            # Clean up response
-            ai_response = ai_response.replace('"', '').strip()
-            if ai_response.startswith("Prospect:"):
-                ai_response = ai_response.replace("Prospect:", "").strip()
-            
-            logger.info(f"OpenAI response: {ai_response[:50]}...")
-            
-            return {
-                'success': True,
-                'response': ai_response,
-                'source': 'openai'
-            }
-            
-        except Exception as e:
-            logger.error(f"Response generation failed: {e}")
-            return {
-                'success': False,
-                'response': self._get_fallback_response(current_stage),
-                'source': 'fallback'
-            }
-    
-    def generate_coaching_feedback(self, conversation_history: List[Dict], 
-                                 rubric_scores: Dict, user_context: Dict) -> Dict[str, Any]:
-        """Generate coaching feedback for Practice mode"""
-        if not self.is_available():
-            logger.warning("OpenAI not available for coaching")
-            return self._fallback_coaching(rubric_scores)
-        
-        try:
-            logger.info("Generating Practice mode coaching with OpenAI")
-            
-            # Build conversation summary
-            conversation_text = self._build_full_conversation(conversation_history)
-            scores_summary = self._build_scores_summary(rubric_scores)
-            
-            coaching_prompt = f"""
-COACHING FEEDBACK - PRACTICE MODE
-
-CONVERSATION:
-{conversation_text}
-
-SCORES:
-{scores_summary}
-
-USER: {user_context.get('prospect_job_title', 'Executive')} in {user_context.get('prospect_industry', 'Technology')}
-
-Provide specific coaching in these 5 areas (2-3 sentences each):
-
-1. SALES COACHING: Opener, objection handling, pitch effectiveness
-2. GRAMMAR COACHING: Sentence structure, verb tenses, articles  
-3. VOCABULARY COACHING: Word choice, business terms
-4. PRONUNCIATION COACHING: Speech clarity tips
-5. RAPPORT & ASSERTIVENESS: Tone, confidence, empathy
-
-Respond with ONLY this JSON:
-{{
-"sales_coaching": "Specific sales advice...",
-"grammar_coaching": "Grammar tips...",
-"vocabulary_coaching": "Vocabulary suggestions...",
-"pronunciation_coaching": "Pronunciation advice...",
-"rapport_assertiveness": "Tone and confidence tips...",
-"overall_score": [0-100 number]
-}}
-"""
-            
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "You are a cold calling coach. Respond only with JSON."},
-                    {"role": "user", "content": coaching_prompt}
-                ],
-                temperature=0.3,
-                max_tokens=1000,
-                timeout=20
-            )
-            
-            coaching_text = response.choices[0].message.content.strip()
-            coaching_data = self._parse_coaching_response_robust(coaching_text, rubric_scores)
-            
-            logger.info(f"Practice coaching generated successfully")
-            
-            return {
-                'success': True,
-                'coaching': coaching_data['coaching'],
-                'score': coaching_data['score'],
-                'source': 'openai'
-            }
-            
-        except Exception as e:
-            logger.error(f"Practice coaching generation failed: {e}")
-            return self._fallback_coaching(rubric_scores)
-    
-    # ===== HELPER METHODS =====
-    
     def _create_evaluation_prompt(self, user_input: str, stage: str, context: str) -> str:
         """Create evaluation prompt for specific stage"""
         
         base_prompt = f"""
-EVALUATE ROLEPLAY - {stage.upper()} STAGE
+EVALUATE ROLEPLAY 1.1 - {stage.upper()} STAGE
 
 Context: {context}
 
@@ -689,8 +196,10 @@ No other text, no markdown, just JSON.
             
             # Strategy 3: Clean and try again
             cleaned_text = response_text.strip()
+            # Remove markdown code blocks
             cleaned_text = re.sub(r'```json\s*', '', cleaned_text)
             cleaned_text = re.sub(r'```\s*', '', cleaned_text)
+            # Remove extra whitespace and newlines
             cleaned_text = re.sub(r'\s+', ' ', cleaned_text)
             
             try:
@@ -785,8 +294,252 @@ No other text, no markdown, just JSON.
             logger.error(f"Validation failed: {e}")
             return self._fallback_evaluation("", stage)
     
-    # Include all other helper methods from the original implementation...
-    # (Keeping all existing _build_conversation_context, _get_prospect_info, etc.)
+    def generate_roleplay_response(self, user_input: str, conversation_history: List[Dict], 
+                                 user_context: Dict, current_stage: str) -> Dict[str, Any]:
+        """Generate AI prospect response"""
+        if not self.is_available():
+            logger.warning("OpenAI not available for response generation")
+            return {
+                'success': False,
+                'response': self._get_fallback_response(current_stage),
+                'source': 'fallback'
+            }
+        
+        try:
+            logger.info(f"Generating response for stage: {current_stage}")
+            
+            # Build context
+            context = self._build_conversation_context(conversation_history)
+            prospect_info = self._get_prospect_info(user_context)
+            
+            # Create response prompt
+            response_prompt = f"""
+You are a {prospect_info['job_title']} at a {prospect_info['industry']} company receiving a cold call.
+
+STAGE: {current_stage}
+CONVERSATION: {context}
+CALLER JUST SAID: "{user_input}"
+
+Be realistic and natural. Keep responses 1-2 sentences.
+
+Stage behavior:
+- opener_evaluation: Show mild skepticism, ask "What's this about?"
+- early_objection: Give common objection like "Not interested" or "No time"  
+- objection_handling: If they handle well, show slight interest
+- mini_pitch: If pitch is good, ask follow-up question
+- soft_discovery: Answer briefly then wrap up
+
+Respond as the prospect (no quotes, just what you'd say):
+"""
+            
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are a realistic business prospect in a cold call. Be natural and brief."},
+                    {"role": "user", "content": response_prompt}
+                ],
+                temperature=0.7,
+                max_tokens=100,
+                timeout=15
+            )
+            
+            ai_response = response.choices[0].message.content.strip()
+            
+            # Clean up response
+            ai_response = ai_response.replace('"', '').strip()
+            if ai_response.startswith("Prospect:"):
+                ai_response = ai_response.replace("Prospect:", "").strip()
+            
+            logger.info(f"OpenAI response: {ai_response[:50]}...")
+            
+            return {
+                'success': True,
+                'response': ai_response,
+                'source': 'openai'
+            }
+            
+        except Exception as e:
+            logger.error(f"Response generation failed: {e}")
+            return {
+                'success': False,
+                'response': self._get_fallback_response(current_stage),
+                'source': 'fallback'
+            }
+    
+    def generate_coaching_feedback(self, conversation_history: List[Dict], 
+                                 rubric_scores: Dict, user_context: Dict) -> Dict[str, Any]:
+        """Generate coaching feedback using OpenAI"""
+        if not self.is_available():
+            logger.warning("OpenAI not available for coaching")
+            return self._fallback_coaching(rubric_scores)
+        
+        try:
+            logger.info("Generating coaching feedback with OpenAI")
+            
+            # Build conversation summary
+            conversation_text = self._build_full_conversation(conversation_history)
+            scores_summary = self._build_scores_summary(rubric_scores)
+            
+            coaching_prompt = f"""
+COACHING FEEDBACK - ROLEPLAY 1.1
+
+CONVERSATION:
+{conversation_text}
+
+SCORES:
+{scores_summary}
+
+USER: {user_context.get('prospect_job_title', 'Executive')} in {user_context.get('prospect_industry', 'Technology')}
+
+Provide specific coaching in these 5 areas (2-3 sentences each):
+
+1. SALES COACHING: Opener, objection handling, pitch effectiveness
+2. GRAMMAR COACHING: Sentence structure, verb tenses, articles  
+3. VOCABULARY COACHING: Word choice, business terms
+4. PRONUNCIATION COACHING: Speech clarity tips
+5. RAPPORT & ASSERTIVENESS: Tone, confidence, empathy
+
+Respond with ONLY this JSON:
+{{
+"sales_coaching": "Specific sales advice...",
+"grammar_coaching": "Grammar tips...",
+"vocabulary_coaching": "Vocabulary suggestions...",
+"pronunciation_coaching": "Pronunciation advice...",
+"rapport_assertiveness": "Tone and confidence tips...",
+"overall_score": [0-100 number]
+}}
+"""
+            
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are a cold calling coach. Respond only with JSON."},
+                    {"role": "user", "content": coaching_prompt}
+                ],
+                temperature=0.3,
+                max_tokens=1000,
+                timeout=20
+            )
+            
+            coaching_text = response.choices[0].message.content.strip()
+            coaching_data = self._parse_coaching_response_robust(coaching_text, rubric_scores)
+            
+            logger.info(f"Coaching generated successfully")
+            
+            return {
+                'success': True,
+                'coaching': coaching_data['coaching'],
+                'score': coaching_data['score'],
+                'source': 'openai'
+            }
+            
+        except Exception as e:
+            logger.error(f"Coaching generation failed: {e}")
+            return self._fallback_coaching(rubric_scores)
+    
+    def _parse_coaching_response_robust(self, response_text: str, rubric_scores: Dict) -> Dict[str, Any]:
+        """Robust coaching response parsing"""
+        try:
+            # Try direct JSON parse
+            try:
+                coaching_data = json.loads(response_text)
+                return self._validate_coaching_data(coaching_data, rubric_scores)
+            except json.JSONDecodeError:
+                pass
+            
+            # Try finding JSON in text
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                try:
+                    coaching_data = json.loads(json_match.group(0))
+                    return self._validate_coaching_data(coaching_data, rubric_scores)
+                except json.JSONDecodeError:
+                    pass
+            
+            # Manual extraction
+            logger.warning("Using manual coaching extraction")
+            return self._manual_extract_coaching(response_text, rubric_scores)
+                
+        except Exception as e:
+            logger.error(f"Coaching parsing failed: {e}")
+            return self._fallback_coaching(rubric_scores)
+    
+    def _manual_extract_coaching(self, text: str, rubric_scores: Dict) -> Dict[str, Any]:
+        """Manually extract coaching from text"""
+        try:
+            coaching = {}
+            
+            # Extract each coaching category
+            categories = [
+                'sales_coaching',
+                'grammar_coaching', 
+                'vocabulary_coaching',
+                'pronunciation_coaching',
+                'rapport_assertiveness'
+            ]
+            
+            for category in categories:
+                pattern = f'"{category}":\\s*"([^"]*)"'
+                match = re.search(pattern, text)
+                if match:
+                    coaching[category] = match.group(1)
+                else:
+                    coaching[category] = f"Practice your {category.replace('_', ' ')} skills."
+            
+            # Extract overall score
+            score_match = re.search(r'"overall_score":\s*(\d+)', text)
+            score = int(score_match.group(1)) if score_match else self._calculate_score_from_rubrics(rubric_scores)
+            
+            return {
+                'coaching': coaching,
+                'score': score
+            }
+            
+        except Exception as e:
+            logger.error(f"Manual coaching extraction failed: {e}")
+            return self._fallback_coaching(rubric_scores)
+    
+    def _validate_coaching_data(self, coaching_data: Dict, rubric_scores: Dict) -> Dict[str, Any]:
+        """Validate coaching data"""
+        try:
+            categories = [
+                'sales_coaching',
+                'grammar_coaching',
+                'vocabulary_coaching', 
+                'pronunciation_coaching',
+                'rapport_assertiveness'
+            ]
+            
+            coaching = {}
+            for category in categories:
+                coaching[category] = str(coaching_data.get(category, f"Practice {category.replace('_', ' ')}."))
+            
+            score = max(0, min(100, int(coaching_data.get('overall_score', 50))))
+            
+            return {
+                'coaching': coaching,
+                'score': score
+            }
+            
+        except Exception as e:
+            logger.error(f"Coaching validation failed: {e}")
+            return self._fallback_coaching(rubric_scores)
+    
+    def _calculate_score_from_rubrics(self, rubric_scores: Dict) -> int:
+        """Calculate score from rubric scores"""
+        if not rubric_scores:
+            return 50
+        
+        total_score = sum(scores.get('score', 0) for scores in rubric_scores.values())
+        max_possible = len(rubric_scores) * 4
+        
+        if max_possible > 0:
+            percentage = int((total_score / max_possible) * 100)
+            return max(30, min(100, percentage))
+        
+        return 50
+    
+    # Helper methods
     
     def _build_conversation_context(self, conversation_history: List[Dict]) -> str:
         """Build conversation context string"""
@@ -800,6 +553,29 @@ No other text, no markdown, just JSON.
             context_lines.append(f"{role}: {content}")
         
         return " | ".join(context_lines)
+    
+    def _build_full_conversation(self, conversation_history: List[Dict]) -> str:
+        """Build full conversation text"""
+        conversation_lines = []
+        for msg in conversation_history:
+            role = "Prospect" if msg.get('role') == 'assistant' else "Caller"
+            content = msg.get('content', '')
+            conversation_lines.append(f"{role}: {content}")
+        
+        return "\n".join(conversation_lines) if conversation_lines else "No conversation"
+    
+    def _build_scores_summary(self, rubric_scores: Dict) -> str:
+        """Build scores summary"""
+        if not rubric_scores:
+            return "No scores"
+        
+        summary_lines = []
+        for stage, scores in rubric_scores.items():
+            score = scores.get('score', 0)
+            passed = "PASSED" if scores.get('passed', False) else "FAILED"
+            summary_lines.append(f"{stage}: {score}/4 {passed}")
+        
+        return " | ".join(summary_lines)
     
     def _get_prospect_info(self, user_context: Dict) -> Dict[str, str]:
         """Extract prospect information"""
@@ -830,7 +606,7 @@ No other text, no markdown, just JSON.
         criteria_met = []
         user_input_lower = user_input.lower().strip()
         
-        # Basic analysis (same as original implementation)
+        # Basic analysis
         if len(user_input.strip()) > 15:
             score += 1
             criteria_met.append('substantial_input')
@@ -861,8 +637,56 @@ No other text, no markdown, just JSON.
             'stage': stage
         }
     
-    # Additional helper methods...
-    # (Include all other necessary methods from original implementation)
+    def _fallback_coaching(self, rubric_scores: Dict) -> Dict[str, Any]:
+        """Enhanced fallback coaching"""
+        logger.info("Using fallback coaching")
+        
+        score = self._calculate_score_from_rubrics(rubric_scores)
+        
+        coaching = {
+            'sales_coaching': 'Practice your opener with empathy. Use "I know this is out of the blue" to show understanding.',
+            'grammar_coaching': 'Use contractions like "I\'m calling" instead of "I am calling" to sound natural.',
+            'vocabulary_coaching': 'Use simple words like "book a meeting" instead of complex business terms.',
+            'pronunciation_coaching': 'Speak clearly and at a moderate pace. Practice key phrases.',
+            'rapport_assertiveness': 'Show empathy first, then be confident. Acknowledge you\'re interrupting their day.'
+        }
+        
+        return {
+            'success': True,
+            'coaching': coaching,
+            'score': score,
+            'source': 'fallback'
+        }
+    
+    def test_roleplay_flow(self) -> Dict[str, Any]:
+        """Test the complete roleplay flow"""
+        try:
+            if not self.is_available():
+                return {'success': False, 'error': 'OpenAI not available'}
+            
+            # Test prospect response
+            response_result = self.generate_roleplay_response(
+                "Hi, I know this is out of the blue, but can I tell you why I'm calling?",
+                [],
+                {'prospect_job_title': 'CTO', 'prospect_industry': 'Technology'},
+                'opener_evaluation'
+            )
+            
+            # Test evaluation
+            evaluation = self.evaluate_user_input(
+                "Hi, I know this is out of the blue, but can I tell you why I'm calling?",
+                [],
+                'opener'
+            )
+            
+            return {
+                'success': True,
+                'prospect_response': response_result,
+                'evaluation': evaluation
+            }
+            
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
     
     def get_status(self) -> Dict[str, Any]:
         """Get detailed service status"""
@@ -870,9 +694,7 @@ No other text, no markdown, just JSON.
             'enabled': self.is_enabled,
             'api_key_configured': bool(self.api_key),
             'model': self.model,
-            'client_available': bool(self.client),
-            'marathon_support': True,
-            'legend_support': True
+            'client_available': bool(self.client)
         }
         
         if self.is_available():
