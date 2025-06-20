@@ -1,4 +1,4 @@
-// ===== NATURAL CONVERSATION ROLEPLAY MANAGER - roleplay.js =====
+// ===== MARATHON MODE ROLEPLAY MANAGER - roleplay.js =====
 
 class PhoneRoleplayManager {
     constructor() {
@@ -17,8 +17,23 @@ class PhoneRoleplayManager {
         this.conversationHistory = [];
         
         // Natural conversation state
-        this.currentAudio = null;  // Track current AI audio
-        this.naturalMode = true;   // Enable natural conversation features
+        this.currentAudio = null;
+        this.naturalMode = true;
+        
+        // Marathon Mode state
+        this.marathonState = {
+            currentCall: 1,
+            maxCalls: 1,
+            callsPassed: 0,
+            callsFailed: 0,
+            passThreshold: 1,
+            isMarathonMode: false,
+            isLegendMode: false,
+            betweenCalls: false,
+            runComplete: false,
+            runSuccess: false,
+            finalStats: null
+        };
         
         // Debug flag
         this.debugMode = true;
@@ -27,7 +42,7 @@ class PhoneRoleplayManager {
     }
 
     init() {
-        console.log('🚀 Initializing Natural Conversation Roleplay Manager...');
+        console.log('🚀 Initializing Marathon Mode Roleplay Manager...');
         
         this.updateTime();
         setInterval(() => this.updateTime(), 1000);
@@ -39,7 +54,7 @@ class PhoneRoleplayManager {
         // Initialize natural voice handler
         if (typeof VoiceHandler !== 'undefined') {
             this.voiceHandler = new VoiceHandler(this);
-            console.log('✅ Natural Voice Handler initialized');
+            console.log('✅ Voice Handler initialized');
         } else {
             console.warn('⚠️ VoiceHandler not available');
         }
@@ -67,7 +82,7 @@ class PhoneRoleplayManager {
             console.log('📊 Roleplay data:', { roleplayId, isAuthenticated });
             
             if (!isAuthenticated) {
-                this.showError('Please log in to access Roleplay 1.1 training');
+                this.showError('Please log in to access roleplay training');
                 setTimeout(() => {
                     window.location.href = '/login';
                 }, 2000);
@@ -82,22 +97,23 @@ class PhoneRoleplayManager {
 
     async loadRoleplayInfo(roleplayId) {
         try {
-            console.log('📡 Loading Roleplay 1.1 info for ID:', roleplayId);
+            console.log('📡 Loading roleplay info for ID:', roleplayId);
             const response = await this.apiCall(`/api/roleplay/info/${roleplayId}`);
             if (response.ok) {
                 const data = await response.json();
-                console.log('✅ Roleplay 1.1 info loaded:', data);
+                console.log('✅ Roleplay info loaded:', data);
                 this.updateRoleplayUI(data);
             }
         } catch (error) {
-            console.error('❌ Error loading Roleplay 1.1 info:', error);
+            console.error('❌ Error loading roleplay info:', error);
         }
     }
 
     updateRoleplayUI(roleplayData) {
         const titleElement = document.getElementById('roleplay-title');
         if (titleElement) {
-            titleElement.textContent = 'Natural Roleplay 1.1: ' + (roleplayData.name || 'Phone Training');
+            const baseTitle = roleplayData.name || 'Phone Training';
+            titleElement.textContent = baseTitle;
         }
 
         this.updateProspectInfo(roleplayData);
@@ -119,7 +135,7 @@ class PhoneRoleplayManager {
         if (avatarElement) {
             const avatarUrl = this.getAvatarUrl(roleplayData.job_title || 'CTO');
             avatarElement.src = avatarUrl;
-            avatarElement.alt = `Natural Roleplay 1.1 prospect`;
+            avatarElement.alt = `Roleplay prospect`;
             
             avatarElement.onerror = function() {
                 this.src = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face';
@@ -150,7 +166,7 @@ class PhoneRoleplayManager {
     }
 
     setupEventListeners() {
-        console.log('🔧 Setting up event listeners for natural conversation...');
+        console.log('🔧 Setting up event listeners...');
         
         // Mode selection
         document.querySelectorAll('.mode-option').forEach(option => {
@@ -174,18 +190,18 @@ class PhoneRoleplayManager {
             });
         }
 
-        // Microphone button - now shows natural conversation status
+        // Microphone button
         const micBtn = document.getElementById('mic-btn');
         if (micBtn) {
             micBtn.addEventListener('click', (e) => {
                 e.preventDefault();
-                console.log('🎤 Mic button clicked (natural mode)');
+                console.log('🎤 Mic button clicked');
                 
                 if (this.voiceHandler) {
                     if (this.voiceHandler.isListening) {
                         this.voiceHandler.stopListening();
                     } else {
-                        this.voiceHandler.startListening(false); // Manual start
+                        this.voiceHandler.startListening(false);
                     }
                 }
             });
@@ -220,7 +236,7 @@ class PhoneRoleplayManager {
             });
         }
 
-        // Keyboard shortcuts for natural conversation
+        // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
             // Space bar to interrupt or start speaking
             if (e.code === 'Space' && this.callState === 'connected' && !e.target.matches('input, textarea')) {
@@ -243,7 +259,7 @@ class PhoneRoleplayManager {
             }
         });
 
-        console.log('✅ Natural conversation event listeners setup complete');
+        console.log('✅ Event listeners setup complete');
     }
 
     initializeModeSelection() {
@@ -259,6 +275,21 @@ class PhoneRoleplayManager {
         this.isProcessing = false;
         this.conversationHistory = [];
         
+        // Reset Marathon state
+        this.marathonState = {
+            currentCall: 1,
+            maxCalls: 1,
+            callsPassed: 0,
+            callsFailed: 0,
+            passThreshold: 1,
+            isMarathonMode: false,
+            isLegendMode: false,
+            betweenCalls: false,
+            runComplete: false,
+            runSuccess: false,
+            finalStats: null
+        };
+        
         // Stop any active audio or voice recognition
         this.stopCurrentAudio();
         if (this.voiceHandler) {
@@ -269,8 +300,24 @@ class PhoneRoleplayManager {
     selectMode(mode) {
         if (!mode || this.isProcessing) return;
         
-        console.log('✅ Natural Roleplay 1.1 mode selected:', mode);
+        console.log('✅ Mode selected:', mode);
         this.selectedMode = mode;
+        
+        // Set Marathon/Legend flags
+        this.marathonState.isMarathonMode = (mode === 'marathon');
+        this.marathonState.isLegendMode = (mode === 'legend');
+        
+        // Update mode-specific settings
+        if (mode === 'marathon') {
+            this.marathonState.maxCalls = 10;
+            this.marathonState.passThreshold = 6;
+        } else if (mode === 'legend') {
+            this.marathonState.maxCalls = 6;
+            this.marathonState.passThreshold = 6;
+        } else {
+            this.marathonState.maxCalls = 1;
+            this.marathonState.passThreshold = 1;
+        }
         
         // Update UI
         document.querySelectorAll('.mode-option').forEach(option => {
@@ -286,7 +333,15 @@ class PhoneRoleplayManager {
         const startBtn = document.getElementById('start-call-btn');
         if (startBtn) {
             startBtn.disabled = false;
-            startBtn.textContent = `Start Natural Roleplay 1.1 ${this.capitalizeFirst(mode)}`;
+            
+            let buttonText = `Start ${this.capitalizeFirst(mode)}`;
+            if (mode === 'marathon') {
+                buttonText += ' (10 calls, need 6 to pass)';
+            } else if (mode === 'legend') {
+                buttonText += ' (6 perfect calls)';
+            }
+            
+            startBtn.textContent = buttonText;
         }
     }
 
@@ -298,17 +353,17 @@ class PhoneRoleplayManager {
 
         const roleplayId = this.getRoleplayId();
         if (!roleplayId) {
-            this.showError('Invalid Roleplay 1.1 configuration');
+            this.showError('Invalid roleplay configuration');
             return;
         }
 
-        console.log('🚀 Starting Natural Roleplay 1.1 call:', { roleplayId, mode: this.selectedMode });
+        console.log('🚀 Starting call:', { roleplayId, mode: this.selectedMode });
 
         this.isProcessing = true;
         const startBtn = document.getElementById('start-call-btn');
         if (startBtn) {
             startBtn.disabled = true;
-            startBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Connecting to Natural Roleplay 1.1...';
+            startBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Starting session...';
         }
 
         try {
@@ -322,41 +377,93 @@ class PhoneRoleplayManager {
 
             if (response.ok) {
                 const data = await response.json();
-                console.log('✅ Natural Roleplay 1.1 started successfully:', data);
+                console.log('✅ Session started successfully:', data);
                 
                 this.currentSession = data;
                 this.isActive = true;
+                
+                // Update Marathon state from response
+                if (data.call_info) {
+                    this.marathonState.currentCall = data.call_info.current_call || 1;
+                    this.marathonState.maxCalls = data.call_info.max_calls || 1;
+                    this.marathonState.passThreshold = data.call_info.pass_threshold || 1;
+                }
                 
                 await this.startPhoneCallSequence(data.initial_response);
                 
             } else {
                 const errorData = await response.json();
-                console.error('❌ Failed to start Natural Roleplay 1.1:', errorData);
-                this.showError(errorData.error || 'Failed to start Natural Roleplay 1.1 call');
+                console.error('❌ Failed to start session:', errorData);
+                this.showError(errorData.error || 'Failed to start call');
             }
         } catch (error) {
-            console.error('❌ Error starting Natural Roleplay 1.1:', error);
+            console.error('❌ Error starting call:', error);
             this.showError('Network error. Please try again.');
         } finally {
             this.isProcessing = false;
             
             if (!this.isActive && startBtn) {
                 startBtn.disabled = false;
-                startBtn.textContent = `Start Natural Roleplay 1.1 ${this.capitalizeFirst(this.selectedMode)}`;
+                startBtn.textContent = `Start ${this.capitalizeFirst(this.selectedMode)}`;
             }
         }
     }
 
     async startPhoneCallSequence(initialResponse) {
-        console.log('📞 Starting Natural Roleplay 1.1 call sequence...');
+        console.log('📞 Starting phone call sequence...');
         
         // Hide mode selection, show call interface
         document.getElementById('mode-selection').style.display = 'none';
         document.getElementById('call-interface').style.display = 'flex';
 
+        // Update UI for Marathon mode
+        this.updateMarathonUI();
+
         await this.dialingState();
         await this.ringingState();
         await this.connectedState(initialResponse);
+    }
+
+    updateMarathonUI() {
+        // Update call counter for Marathon/Legend modes
+        if (this.marathonState.isMarathonMode || this.marathonState.isLegendMode) {
+            const statusText = document.getElementById('call-status-text');
+            if (statusText) {
+                const mode = this.marathonState.isLegendMode ? 'Legend' : 'Marathon';
+                statusText.textContent = `${mode} Mode - Call ${this.marathonState.currentCall}/${this.marathonState.maxCalls}`;
+            }
+            
+            // Add progress indicators
+            this.updateCallProgress();
+        }
+    }
+
+    updateCallProgress() {
+        // Create or update progress display
+        let progressElement = document.getElementById('marathon-progress');
+        if (!progressElement) {
+            progressElement = document.createElement('div');
+            progressElement.id = 'marathon-progress';
+            progressElement.className = 'marathon-progress';
+            
+            const callInterface = document.getElementById('call-interface');
+            if (callInterface) {
+                callInterface.insertBefore(progressElement, callInterface.firstChild);
+            }
+        }
+        
+        const mode = this.marathonState.isLegendMode ? 'Legend' : 'Marathon';
+        progressElement.innerHTML = `
+            <div class="progress-header">
+                <span class="mode-badge">${mode}</span>
+                <span class="call-counter">Call ${this.marathonState.currentCall}/${this.marathonState.maxCalls}</span>
+            </div>
+            <div class="progress-stats">
+                <span class="stat passed">✓ ${this.marathonState.callsPassed}</span>
+                <span class="stat failed">✗ ${this.marathonState.callsFailed}</span>
+                <span class="stat target">Target: ${this.marathonState.passThreshold}/${this.marathonState.maxCalls}</span>
+            </div>
+        `;
     }
 
     async dialingState() {
@@ -369,7 +476,7 @@ class PhoneRoleplayManager {
             avatar.classList.add('calling');
         }
         
-        await this.delay(2000);
+        await this.delay(1500); // Shorter for Marathon mode
     }
 
     async ringingState() {
@@ -377,19 +484,22 @@ class PhoneRoleplayManager {
         this.callState = 'ringing';
         this.updateCallStatus('Ringing...', 'ringing');
         
-        await this.delay(3000);
+        await this.delay(2000); // Shorter for Marathon mode
     }
 
     async connectedState(initialResponse) {
-        console.log('✅ Connected - Natural Roleplay 1.1 active!');
+        console.log('✅ Connected!');
         this.callState = 'connected';
-        this.updateCallStatus('Connected - Natural Conversation Active', 'connected');
+        
+        const mode = this.marathonState.isMarathonMode ? 'Marathon' : 
+                    this.marathonState.isLegendMode ? 'Legend' : 'Practice';
+        this.updateCallStatus(`${mode} Mode - Connected`, 'connected');
         
         // Update UI
         const avatar = document.getElementById('contact-avatar');
         if (avatar) {
             avatar.classList.remove('calling');
-            avatar.classList.add('roleplay-11-active');
+            avatar.classList.add('connected');
         }
         
         // Start call timer
@@ -400,13 +510,12 @@ class PhoneRoleplayManager {
         const transcript = document.getElementById('live-transcript');
         if (transcript) {
             transcript.classList.add('show');
-            transcript.classList.add('roleplay-11-active');
         }
         
         // Enable natural conversation features
         this.enableNaturalConversation();
         
-        // Clear conversation history
+        // Clear conversation history for this call
         this.conversationHistory = [];
         
         // Play initial AI response
@@ -431,12 +540,20 @@ class PhoneRoleplayManager {
         const micBtn = document.getElementById('mic-btn');
         if (micBtn) {
             micBtn.disabled = false;
-            micBtn.title = 'Natural conversation active - speak anytime or use Space bar';
+            
+            if (this.marathonState.isMarathonMode || this.marathonState.isLegendMode) {
+                micBtn.title = 'Marathon/Legend Mode - No feedback until end of run';
+            } else {
+                micBtn.title = 'Practice Mode - Real-time feedback available';
+            }
+            
             micBtn.classList.add('natural-mode');
         }
         
-        // Show natural conversation instructions
-        this.updateTranscript('🤖 Natural conversation ready - speak when you want!');
+        // Show mode-specific instructions
+        const modeText = this.marathonState.isMarathonMode ? 'Marathon' : 
+                        this.marathonState.isLegendMode ? 'Legend' : 'Practice';
+        this.updateTranscript(`🤖 ${modeText} mode ready - speak when you want!`);
     }
 
     updateCallStatus(text, state) {
@@ -533,7 +650,7 @@ class PhoneRoleplayManager {
             return;
         }
 
-        console.log('💬 Processing natural conversation input:', transcript);
+        console.log('💬 Processing user input:', transcript);
         this.isProcessing = true;
 
         this.addToConversationHistory('user', transcript);
@@ -551,7 +668,29 @@ class PhoneRoleplayManager {
                 const data = await response.json();
                 console.log('✅ AI response received:', data);
                 
-                // Check if call should end
+                // Update Marathon state if provided
+                if (data.call_info) {
+                    this.marathonState.currentCall = data.call_info.current_call || this.marathonState.currentCall;
+                    this.marathonState.callsPassed = data.call_info.calls_passed || this.marathonState.callsPassed;
+                    this.marathonState.callsFailed = data.call_info.calls_failed || this.marathonState.callsFailed;
+                    this.updateCallProgress();
+                }
+                
+                // Handle next call in Marathon/Legend mode
+                if (data.next_call) {
+                    console.log('🔄 Starting next call in sequence...');
+                    await this.handleNextCall(data);
+                    return;
+                }
+                
+                // Handle run completion (Marathon/Legend)
+                if (data.run_complete) {
+                    console.log('🏁 Run completed!');
+                    await this.handleRunCompletion(data);
+                    return;
+                }
+                
+                // Handle single call end (Practice mode)
                 if (!data.call_continues) {
                     console.log('📞 Call ending...');
                     setTimeout(() => {
@@ -560,7 +699,7 @@ class PhoneRoleplayManager {
                     return;
                 }
                 
-                // Play AI response and automatically start next user turn
+                // Continue current call
                 await this.playAIResponseAndWaitForUser(data.ai_response);
                 
             } else {
@@ -576,6 +715,54 @@ class PhoneRoleplayManager {
         } finally {
             this.isProcessing = false;
         }
+    }
+
+    async handleNextCall(data) {
+        console.log('🔄 Handling next call in Marathon/Legend sequence');
+        
+        // Show transition message
+        const lastCallResponse = data.call_info?.last_call_response || 'Call completed.';
+        this.updateTranscript(`📞 ${lastCallResponse}`);
+        
+        // Update call counter
+        this.marathonState.currentCall = data.call_info.current_call;
+        this.updateCallProgress();
+        
+        // Brief pause between calls
+        await this.delay(2000);
+        
+        // Start next call sequence
+        this.updateTranscript('📞 Dialing next prospect...');
+        await this.delay(1000);
+        
+        // Generate new prospect info for variety
+        this.updateProspectInfo({ job_title: 'CTO', industry: 'Technology' });
+        
+        // Play new pickup response
+        await this.playAIResponseAndWaitForUser(data.ai_response);
+    }
+
+    async handleRunCompletion(data) {
+        console.log('🏁 Handling run completion');
+        
+        this.marathonState.runComplete = true;
+        this.marathonState.runSuccess = data.run_success;
+        this.marathonState.finalStats = data.final_stats;
+        
+        // Show final message
+        let finalMessage = data.ai_response || 'Run completed!';
+        if (data.sudden_death) {
+            finalMessage = 'Legend attempt failed - one mistake and you\'re out!';
+        } else if (data.perfect_run) {
+            finalMessage = 'Perfect Legend run - six for six! Legendary performance!';
+        }
+        
+        this.updateTranscript(`🏁 ${finalMessage}`);
+        
+        // Wait a moment then show final results
+        setTimeout(() => {
+            this.showMarathonResults(data);
+        }, 3000);
     }
 
     async handleSilenceTrigger(trigger) {
@@ -597,7 +784,7 @@ class PhoneRoleplayManager {
 
     async playAIResponseAndWaitForUser(text) {
         try {
-            console.log('🎭 Playing AI response (interruptible):', text.substring(0, 50) + '...');
+            console.log('🎭 Playing AI response:', text.substring(0, 50) + '...');
             this.aiIsSpeaking = true;
             
             this.addToConversationHistory('ai', text);
@@ -614,17 +801,15 @@ class PhoneRoleplayManager {
                     const audioBlob = await response.blob();
                     
                     if (audioBlob.size > 100) {
-                        console.log('🔊 Playing interruptible AI audio');
+                        console.log('🔊 Playing AI audio');
                         const audioUrl = URL.createObjectURL(audioBlob);
                         this.currentAudio = new Audio(audioUrl);
                         
-                        // Setup audio event handlers
                         this.currentAudio.onended = () => {
                             console.log('✅ AI audio finished - starting user turn');
                             URL.revokeObjectURL(audioUrl);
                             this.currentAudio = null;
                             
-                            // Only start user turn if AI is still speaking (not interrupted)
                             if (this.aiIsSpeaking) {
                                 this.startUserTurn();
                             }
@@ -640,7 +825,6 @@ class PhoneRoleplayManager {
                             }
                         };
                         
-                        // Play the audio
                         await this.currentAudio.play();
                         
                     } else {
@@ -672,7 +856,7 @@ class PhoneRoleplayManager {
         const words = text.split(' ').length;
         const speakingTimeMs = (words / wordsPerMinute) * 60 * 1000;
         const minTime = 1000;
-        const maxTime = 5000;
+        const maxTime = 4000;
         
         const delay = Math.max(minTime, Math.min(maxTime, speakingTimeMs));
         console.log(`⏱️ Simulating speaking time: ${delay}ms for ${words} words`);
@@ -685,8 +869,8 @@ class PhoneRoleplayManager {
             sender: sender,
             message: message,
             timestamp: new Date(),
-            roleplay_version: '1.1',
-            natural_conversation: true
+            mode: this.selectedMode,
+            call_number: this.marathonState.currentCall
         });
         
         console.log(`📝 Added to conversation: ${sender} - ${message.substring(0, 50)}...`);
@@ -699,16 +883,109 @@ class PhoneRoleplayManager {
         }
     }
 
+    showMarathonResults(data) {
+        console.log('📊 Showing Marathon/Legend results');
+        
+        document.getElementById('call-interface').style.display = 'none';
+        document.getElementById('feedback-section').style.display = 'flex';
+        
+        const feedbackHeader = document.querySelector('.feedback-header h4');
+        if (feedbackHeader) {
+            const mode = this.marathonState.isLegendMode ? 'Legend' : 'Marathon';
+            const success = data.run_success ? 'Complete!' : 'Complete';
+            feedbackHeader.textContent = `${mode} Mode ${success}`;
+        }
+        
+        // Populate Marathon-specific feedback
+        this.populateMarathonFeedback(data);
+        
+        this.animateScore(data.overall_score || 50);
+        this.updateScoreCircleColor(data.overall_score || 50);
+    }
+
+    populateMarathonFeedback(data) {
+        const content = document.getElementById('feedback-content');
+        if (!content) return;
+        
+        const stats = data.final_stats || this.marathonState.finalStats;
+        const coaching = data.coaching || {};
+        const mode = this.marathonState.isLegendMode ? 'Legend' : 'Marathon';
+        const success = data.run_success;
+        
+        content.innerHTML = '';
+
+        // Show run results
+        const resultClass = success ? 'success' : 'needs-improvement';
+        content.innerHTML += `
+            <div class="feedback-item marathon-results ${resultClass}">
+                <h6><i class="fas fa-chart-bar me-2"></i>${mode} Results</h6>
+                <div class="marathon-stats">
+                    <div class="stat-row">
+                        <span>Calls Passed:</span>
+                        <span class="stat-value">${stats?.calls_passed || 0}/${stats?.total_calls || 0}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span>Pass Rate:</span>
+                        <span class="stat-value">${Math.round(stats?.pass_rate || 0)}%</span>
+                    </div>
+                    <div class="stat-row ${success ? 'success' : 'failed'}">
+                        <span>Result:</span>
+                        <span class="stat-value">${success ? 'PASSED' : 'FAILED'}</span>
+                    </div>
+                </div>
+                ${this.getMarathonMessage(mode, success, stats)}
+            </div>
+        `;
+
+        // Show coaching if available (only 2 items per category as per spec)
+        if (coaching && Object.keys(coaching).length > 0) {
+            const feedbackItems = [
+                { key: 'sales_coaching', icon: 'chart-line', title: 'Sales Performance' },
+                { key: 'grammar_coaching', icon: 'spell-check', title: 'Grammar (CEFR A2)' },
+                { key: 'vocabulary_coaching', icon: 'book', title: 'Vocabulary' },
+                { key: 'pronunciation_coaching', icon: 'volume-up', title: 'Pronunciation' },
+                { key: 'rapport_assertiveness', icon: 'handshake', title: 'Rapport & Confidence' }
+            ];
+
+            feedbackItems.forEach(item => {
+                if (coaching[item.key]) {
+                    content.innerHTML += `
+                        <div class="feedback-item">
+                            <h6><i class="fas fa-${item.icon} me-2"></i>${item.title}</h6>
+                            <p style="margin: 0; font-size: 14px;">${coaching[item.key]}</p>
+                        </div>
+                    `;
+                }
+            });
+        }
+    }
+
+    getMarathonMessage(mode, success, stats) {
+        if (mode === 'Legend') {
+            if (success) {
+                return '<p class="result-message success">🏆 Legendary! Six perfect calls - very few reps pull this off!</p>';
+            } else {
+                return '<p class="result-message failed">💪 Legend attempt failed this time. Pass Marathon again to earn another shot!</p>';
+            }
+        } else {
+            if (success) {
+                return '<p class="result-message success">🎯 Marathon passed! You\'ve unlocked Legend Mode and modules 2.1 & 2.2 for 24 hours.</p>';
+            } else {
+                return '<p class="result-message">📈 Keep practicing! The more reps you get, the easier it becomes.</p>';
+            }
+        }
+    }
+
     async endCall(success = false) {
         if (!this.isActive) {
             console.log('📞 Call already ended');
             return;
         }
 
-        console.log('📞 Ending Natural Roleplay 1.1 call, success:', success);
+        console.log('📞 Ending call, success:', success);
 
         this.callState = 'ended';
-        this.updateCallStatus('Natural Roleplay 1.1 Call ended', 'ended');
+        this.updateCallStatus('Call ended', 'ended');
         this.isActive = false;
         this.aiIsSpeaking = false;
         
@@ -729,12 +1006,11 @@ class PhoneRoleplayManager {
         const transcript = document.getElementById('live-transcript');
         if (transcript) {
             transcript.classList.remove('show');
-            transcript.classList.remove('roleplay-11-active');
         }
 
         const avatar = document.getElementById('contact-avatar');
         if (avatar) {
-            avatar.classList.remove('roleplay-11-active');
+            avatar.classList.remove('connected');
         }
 
         try {
@@ -751,7 +1027,11 @@ class PhoneRoleplayManager {
                 console.log('✅ Call ended successfully:', data);
                 
                 setTimeout(() => {
-                    this.showFeedback(data.coaching, data.overall_score);
+                    if (data.mode === 'practice') {
+                        this.showFeedback(data.coaching, data.overall_score);
+                    } else {
+                        this.showMarathonResults(data);
+                    }
                 }, 2000);
             } else {
                 console.error('❌ Failed to end call properly');
@@ -768,25 +1048,25 @@ class PhoneRoleplayManager {
     }
 
     showFeedback(coaching, score = 75) {
-        console.log('📊 Showing Natural Roleplay 1.1 feedback');
+        console.log('📊 Showing Practice mode feedback');
         
         document.getElementById('call-interface').style.display = 'none';
         document.getElementById('feedback-section').style.display = 'flex';
         
         const feedbackHeader = document.querySelector('.feedback-header h4');
         if (feedbackHeader) {
-            feedbackHeader.textContent = 'Natural Roleplay 1.1 Complete!';
+            feedbackHeader.textContent = 'Practice Mode Complete!';
         }
         
         if (coaching) {
-            this.populateRoleplay11Feedback(coaching);
+            this.populatePracticeFeedback(coaching);
         }
         
         this.animateScore(score);
         this.updateScoreCircleColor(score);
     }
 
-    populateRoleplay11Feedback(coaching) {
+    populatePracticeFeedback(coaching) {
         const content = document.getElementById('feedback-content');
         if (!content) return;
         
@@ -794,7 +1074,7 @@ class PhoneRoleplayManager {
 
         if (coaching) {
             const feedbackItems = [
-                { key: 'sales_coaching', icon: 'chart-line', title: 'Sales Performance (Natural Conversation)' },
+                { key: 'sales_coaching', icon: 'chart-line', title: 'Sales Performance' },
                 { key: 'grammar_coaching', icon: 'spell-check', title: 'Grammar & Structure' },
                 { key: 'vocabulary_coaching', icon: 'book', title: 'Vocabulary' },
                 { key: 'pronunciation_coaching', icon: 'volume-up', title: 'Pronunciation' },
@@ -814,8 +1094,8 @@ class PhoneRoleplayManager {
         } else {
             content.innerHTML = `
                 <div class="feedback-item">
-                    <h6><i class="fas fa-info-circle me-2"></i>Natural Roleplay 1.1 Complete</h6>
-                    <p style="margin: 0; font-size: 14px;">Your natural conversation call is complete. Great job!</p>
+                    <h6><i class="fas fa-info-circle me-2"></i>Practice Complete</h6>
+                    <p style="margin: 0; font-size: 14px;">Your practice call is complete. Great job!</p>
                 </div>
             `;
         }
@@ -854,7 +1134,7 @@ class PhoneRoleplayManager {
     }
 
     tryAgain() {
-        console.log('🔄 Trying again with Natural Roleplay 1.1');
+        console.log('🔄 Trying again');
         this.showModeSelection();
         
         if (this.selectedMode) {
@@ -880,7 +1160,7 @@ class PhoneRoleplayManager {
         const startBtn = document.getElementById('start-call-btn');
         if (startBtn) {
             startBtn.disabled = true;
-            startBtn.textContent = 'Select a mode for Natural Roleplay 1.1';
+            startBtn.textContent = 'Select a mode to start';
         }
     }
 
@@ -891,7 +1171,7 @@ class PhoneRoleplayManager {
         const alertDiv = document.createElement('div');
         alertDiv.className = 'alert alert-danger position-fixed';
         alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; max-width: 300px;';
-        alertDiv.innerHTML = `<strong>Natural Roleplay 1.1 Error:</strong> ${message}`;
+        alertDiv.innerHTML = `<strong>Error:</strong> ${message}`;
         
         document.body.appendChild(alertDiv);
         
@@ -937,7 +1217,7 @@ class PhoneRoleplayManager {
     }
 
     destroy() {
-        console.log('🧹 Destroying Natural Roleplay Manager');
+        console.log('🧹 Destroying Roleplay Manager');
         
         this.stopCurrentAudio();
         
@@ -959,7 +1239,7 @@ class PhoneRoleplayManager {
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', () => {
     if (window.location.pathname.includes('/roleplay/')) {
-        console.log('🚀 Initializing Natural Conversation Roleplay Manager');
+        console.log('🚀 Initializing Marathon Mode Roleplay Manager');
         window.roleplayManager = new PhoneRoleplayManager();
     }
 });
@@ -967,4 +1247,4 @@ document.addEventListener('DOMContentLoaded', () => {
 // Export for global access
 window.PhoneRoleplayManager = PhoneRoleplayManager;
 
-console.log('✅ Natural Conversation Roleplay Manager loaded successfully');
+console.log('✅ Marathon Mode Roleplay Manager loaded successfully');

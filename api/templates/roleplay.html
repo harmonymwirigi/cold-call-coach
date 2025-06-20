@@ -1,917 +1,134 @@
-<!-- ===== UPDATED ROLEPLAY.HTML TEMPLATE - ROLEPLAY 1.1 COMPLIANT ===== -->
+<!-- ===== ENHANCED ROLEPLAY.HTML TEMPLATE - MARATHON MODE SUPPORT ===== -->
 
 {% extends "base.html" %}
 
-{% block title %}{{ roleplay_config.name if roleplay_config else 'Roleplay 1.1 - Phone Training' }} - Cold Calling Coach{% endblock %}
+{% block title %}{{ roleplay_config.name if roleplay_config else 'Roleplay Training - Marathon & Legend Modes' }} - Cold Calling Coach{% endblock %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/roleplay.css') }}">
 <style>
-body {
-    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-    min-height: 100vh;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    margin: 0;
-}
-
-.training-container {
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-}
-
-/* Phone Container with Roleplay 1.1 enhancements */
-.phone-container {
-    width: 380px;
-    height: 680px;
-    background: #000;
-    border-radius: 40px;
-    padding: 20px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
-    position: relative;
-    overflow: hidden;
-    transition: all 0.3s ease;
-}
-
-.phone-container.roleplay-11-active {
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 30px rgba(34, 197, 94, 0.3);
-    border: 2px solid rgba(34, 197, 94, 0.5);
-}
-
-.phone-screen {
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-    border-radius: 25px;
-    position: relative;
-    overflow: hidden;
-}
-
-/* Status Bar with Roleplay 1.1 indicator */
-.status-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 20px;
-    color: white;
-    font-size: 14px;
+/* Additional inline styles for Marathon mode features */
+.marathon-badge {
+    background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+    color: #1f2937;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 11px;
     font-weight: 600;
+    margin-left: 8px;
 }
 
-.status-bar.roleplay-11-active::after {
-    content: "R1.1";
-    background: rgba(34, 197, 94, 0.9);
+.legend-badge {
+    background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
     color: white;
-    padding: 2px 6px;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 8px;
+}
+
+.version-indicator {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    background: rgba(96, 165, 250, 0.9);
+    color: white;
+    padding: 4px 8px;
     border-radius: 8px;
     font-size: 10px;
-    font-weight: bold;
-}
-
-.time {
-    font-size: 16px;
-}
-
-.status-icons {
-    display: flex;
-    gap: 5px;
-}
-
-/* Call Interface */
-.call-interface {
-    height: calc(100% - 50px);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: space-between;
-    padding: 20px;
-    color: white;
-    text-align: center;
-}
-
-/* Call Status */
-.call-status {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.3s ease;
-}
-
-.contact-avatar {
-    width: 150px;
-    height: 150px;
-    border-radius: 50%;
-    border: 4px solid rgba(255, 255, 255, 0.3);
-    object-fit: cover;
-    margin-bottom: 20px;
-    transition: all 0.3s ease;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-}
-
-.contact-avatar.calling {
-    animation: pulse-avatar 2s infinite;
-}
-
-/* Roleplay 1.1 specific avatar styling */
-.contact-avatar.roleplay-11-active {
-    border: 4px solid rgba(34, 197, 94, 0.8);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 0 20px rgba(34, 197, 94, 0.3);
-    animation: roleplay-11-glow 3s ease-in-out infinite alternate;
-}
-
-@keyframes pulse-avatar {
-    0%, 100% { 
-        transform: scale(1);
-        border-color: rgba(255, 255, 255, 0.3);
-    }
-    50% { 
-        transform: scale(1.05);
-        border-color: rgba(34, 197, 94, 0.8);
-    }
-}
-
-@keyframes roleplay-11-glow {
-    from { 
-        border-color: rgba(34, 197, 94, 0.5);
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 0 15px rgba(34, 197, 94, 0.3);
-    }
-    to { 
-        border-color: rgba(34, 197, 94, 0.9);
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 0 25px rgba(34, 197, 94, 0.6);
-    }
-}
-
-.contact-name {
-    font-size: 28px;
-    font-weight: 300;
-    margin-bottom: 10px;
-    letter-spacing: 0.5px;
-}
-
-.contact-info {
-    font-size: 16px;
-    color: rgba(255, 255, 255, 0.7);
-    margin-bottom: 20px;
-}
-
-.call-status-text {
-    font-size: 18px;
-    color: rgba(255, 255, 255, 0.9);
-    margin-bottom: 10px;
-    min-height: 25px;
-}
-
-.call-duration {
-    font-size: 16px;
-    color: rgba(34, 197, 94, 1);
-    font-weight: 500;
-    font-variant-numeric: tabular-nums;
-}
-
-/* Call Controls with Roleplay 1.1 enhancements */
-.call-controls {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 40px;
-    margin-bottom: 30px;
-}
-
-.control-btn {
-    width: 65px;
-    height: 65px;
-    border-radius: 50%;
-    border: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 24px;
-    color: white;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    position: relative;
-    overflow: hidden;
-}
-
-.control-btn:hover {
-    transform: scale(1.1);
-}
-
-.control-btn:active {
-    transform: scale(0.95);
-}
-
-.control-btn.mute {
-    background: rgba(255, 255, 255, 0.2);
-}
-
-.control-btn.mute.active {
-    background: rgba(239, 68, 68, 0.9);
-}
-
-.control-btn.speaker {
-    background: rgba(255, 255, 255, 0.2);
-}
-
-.control-btn.speaker.active {
-    background: rgba(59, 130, 246, 0.9);
-}
-
-.control-btn.mic {
-    background: rgba(34, 197, 94, 0.9);
-    box-shadow: 0 4px 20px rgba(34, 197, 94, 0.4);
-}
-
-.control-btn.mic.recording {
-    background: rgba(239, 68, 68, 0.9);
-    animation: pulse-record 1.5s infinite;
-}
-
-/* Enhanced recording animation for Roleplay 1.1 */
-@keyframes pulse-record {
-    0%, 100% { 
-        box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4);
-        transform: scale(1);
-    }
-    50% { 
-        box-shadow: 0 4px 30px rgba(239, 68, 68, 0.8), 0 0 0 10px rgba(239, 68, 68, 0.2);
-        transform: scale(1.05);
-    }
-}
-
-/* End Call Button */
-.end-call-container {
-    display: flex;
-    justify-content: center;
-}
-
-.end-call-btn {
-    width: 65px;
-    height: 65px;
-    border-radius: 50%;
-    border: none;
-    background: rgba(239, 68, 68, 0.9);
-    color: white;
-    font-size: 28px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4);
-}
-
-.end-call-btn:hover {
-    transform: scale(1.1);
-    background: rgba(220, 38, 38, 1);
-}
-
-.end-call-btn:active {
-    transform: scale(0.95);
-}
-
-/* Call States */
-.call-interface.dialing .call-status-text {
-    color: rgba(59, 130, 246, 1);
-}
-
-.call-interface.ringing .call-status-text {
-    color: rgba(251, 191, 36, 1);
-    animation: blink 1s infinite;
-}
-
-.call-interface.connected .call-status-text {
-    color: rgba(34, 197, 94, 1);
-}
-
-.call-interface.ended .call-status-text {
-    color: rgba(239, 68, 68, 1);
-}
-
-@keyframes blink {
-    0%, 50% { opacity: 1; }
-    51%, 100% { opacity: 0.5; }
-}
-
-/* Mode Selection enhanced for Roleplay 1.1 */
-.mode-selection {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-    border-radius: 25px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
+    font-weight: 600;
     z-index: 10;
-}
-
-.mode-selection h3 {
-    color: white;
-    margin-bottom: 10px;
-    text-align: center;
-    font-weight: 300;
-}
-
-.mode-selection .roleplay-version {
-    color: rgba(34, 197, 94, 1);
-    font-size: 14px;
-    margin-bottom: 20px;
-    font-weight: 500;
 }
 
 .mode-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 15px;
-    width: 100%;
-    max-width: 280px;
+    gap: 16px;
+    margin: 20px 0;
 }
 
-.mode-option {
-    background: rgba(255, 255, 255, 0.1);
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    border-radius: 15px;
-    padding: 20px;
-    color: white;
+@media (min-width: 768px) {
+    .mode-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+.roleplay-version {
     text-align: center;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    position: relative;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 14px;
+    margin-bottom: 20px;
+    font-weight: 500;
 }
 
-.mode-option:hover {
-    background: rgba(255, 255, 255, 0.2);
-    border-color: rgba(255, 255, 255, 0.4);
-    transform: translateY(-2px);
-}
-
-.mode-option.selected {
-    background: rgba(34, 197, 94, 0.3);
-    border-color: rgba(34, 197, 94, 0.8);
-}
-
-/* Roleplay 1.1 specific mode option styling */
-.mode-option.roleplay-11::after {
-    content: "New!";
-    position: absolute;
-    top: -5px;
-    right: -5px;
-    background: rgba(34, 197, 94, 0.9);
-    color: white;
-    padding: 2px 6px;
+.call-info-display {
+    background: rgba(0, 0, 0, 0.3);
     border-radius: 8px;
-    font-size: 10px;
-    font-weight: bold;
-}
-
-.mode-option h5 {
-    margin: 10px 0 5px 0;
-    font-weight: 500;
-}
-
-.mode-option small {
-    opacity: 0.8;
-}
-
-.start-call-btn {
-    margin-top: 20px;
-    background: rgba(34, 197, 94, 0.9);
-    border: none;
-    border-radius: 25px;
-    padding: 15px 40px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    text-align: center;
     color: white;
-    font-size: 16px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    width: 100%;
+    font-size: 12px;
 }
 
-.start-call-btn:hover:not(:disabled) {
-    background: rgba(34, 197, 94, 1);
-    transform: translateY(-2px);
-}
-
-.start-call-btn:disabled {
-    background: rgba(255, 255, 255, 0.2);
-    cursor: not-allowed;
-    opacity: 0.6;
-}
-
-/* Feedback Section enhanced for Roleplay 1.1 */
-.feedback-section {
+.between-calls-transition {
     position: absolute;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-    border-radius: 25px;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.9);
     display: none;
     flex-direction: column;
-    padding: 20px;
-    z-index: 10;
-    overflow-y: auto;
-}
-
-.feedback-header {
-    text-align: center;
-    color: white;
-    margin-bottom: 20px;
-}
-
-.feedback-header .roleplay-badge {
-    background: rgba(34, 197, 94, 0.9);
-    color: white;
-    padding: 4px 8px;
-    border-radius: 10px;
-    font-size: 12px;
-    font-weight: bold;
-    margin-bottom: 10px;
-}
-
-.score-circle {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    background: rgba(34, 197, 94, 0.9);
-    display: flex;
     align-items: center;
     justify-content: center;
-    margin: 0 auto 10px;
-    font-size: 24px;
-    font-weight: bold;
+    z-index: 20;
     color: white;
-    transition: all 0.3s ease;
+    text-align: center;
 }
 
-.score-circle.excellent {
-    background: rgba(34, 197, 94, 0.9);
+.transition-content h3 {
+    color: #60a5fa;
+    margin-bottom: 16px;
 }
 
-.score-circle.good {
-    background: rgba(59, 130, 246, 0.9);
-}
-
-.score-circle.needs-improvement {
-    background: rgba(251, 191, 36, 0.9);
-}
-
-.feedback-item {
+.transition-stats {
     background: rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-    padding: 15px;
-    margin-bottom: 10px;
-    color: white;
-    transition: all 0.3s ease;
+    border-radius: 8px;
+    padding: 16px;
+    margin: 16px 0;
+    min-width: 200px;
 }
 
-.feedback-item:hover {
-    background: rgba(255, 255, 255, 0.15);
-}
-
-.feedback-item h6 {
-    margin-bottom: 8px;
-    color: rgba(34, 197, 94, 1);
+.stat-line {
     display: flex;
-    align-items: center;
+    justify-content: space-between;
+    margin: 4px 0;
 }
 
-/* Special styling for consecutive passes message */
-.feedback-item.consecutive-passes {
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.1));
-    border: 2px solid #22c55e;
-    animation: celebrate 2s ease-in-out;
-}
-
-@keyframes celebrate {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.02); }
-}
-
-.feedback-actions {
-    margin-top: auto;
-    display: flex;
-    gap: 10px;
-}
-
-.feedback-btn {
-    flex: 1;
-    background: rgba(255, 255, 255, 0.2);
-    border: none;
-    border-radius: 10px;
-    padding: 12px;
-    color: white;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.feedback-btn:hover {
-    background: rgba(255, 255, 255, 0.3);
-}
-
-.feedback-btn.primary {
-    background: rgba(34, 197, 94, 0.9);
-}
-
-.feedback-btn.primary:hover {
-    background: rgba(34, 197, 94, 1);
-}
-
-/* Live Transcript enhanced for Roleplay 1.1 */
-.live-transcript {
-    position: absolute;
-    bottom: 150px;
-    left: 20px;
-    right: 20px;
-    background: rgba(0, 0, 0, 0.8);
-    border-radius: 15px;
-    padding: 15px;
-    color: white;
-    font-size: 14px;
-    max-height: 100px;
-    overflow-y: auto;
-    opacity: 0;
-    transform: translateY(20px);
-    transition: all 0.3s ease;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.live-transcript.show {
-    opacity: 1;
-    transform: translateY(0);
-}
-
-/* Roleplay 1.1 active transcript styling */
-.live-transcript.roleplay-11-active {
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(0, 0, 0, 0.8));
-    border: 1px solid rgba(34, 197, 94, 0.3);
-    box-shadow: 0 0 15px rgba(34, 197, 94, 0.2);
-}
-
-/* Silence indicators for Roleplay 1.1 */
-.silence-indicator {
-    color: #ffc107;
+.next-call-countdown {
+    font-size: 32px;
     font-weight: bold;
-    animation: warning-pulse 1s infinite;
-}
-
-@keyframes warning-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
-}
-
-.impatience-warning {
-    color: #f59e0b !important;
-    font-weight: bold;
-    animation: warning-pulse 1s infinite;
-}
-
-.hangup-warning {
-    color: #ef4444 !important;
-    font-weight: bold;
-    animation: critical-pulse 0.5s infinite;
-}
-
-@keyframes critical-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-}
-
-/* Back Button */
-.back-to-dashboard {
-    position: absolute;
-    top: 20px;
-    left: 20px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: white;
-    border-radius: 25px;
-    padding: 10px 20px;
-    text-decoration: none;
-    font-size: 14px;
-    transition: all 0.3s ease;
-    z-index: 100;
-}
-
-.back-to-dashboard:hover {
-    background: rgba(255, 255, 255, 0.2);
-    color: white;
-    text-decoration: none;
-    transform: translateY(-2px);
-}
-
-/* Roleplay 1.1 progress indicators */
-.progress-indicator {
-    position: absolute;
-    top: 60px;
-    right: 20px;
-    background: rgba(0, 0, 0, 0.7);
-    border-radius: 15px;
-    padding: 10px;
-    color: white;
-    font-size: 12px;
-    z-index: 100;
-    display: none;
-}
-
-.progress-indicator.show {
-    display: block;
-}
-
-.progress-step {
-    display: flex;
-    align-items: center;
-    margin-bottom: 5px;
-}
-
-.progress-step.completed {
-    color: #22c55e;
-}
-
-.progress-step.current {
     color: #fbbf24;
-}
-
-.progress-step.pending {
-    color: #6b7280;
-}
-
-/* Responsive Design */
-@media (max-width: 480px) {
-    .training-container {
-        padding: 10px;
-    }
-    
-    .phone-container {
-        width: 100%;
-        max-width: 380px;
-        height: 90vh;
-        max-height: 680px;
-    }
-    
-    .control-btn {
-        width: 60px;
-        height: 60px;
-        font-size: 20px;
-    }
-    
-    .end-call-btn {
-        width: 60px;
-        height: 60px;
-        font-size: 24px;
-    }
-}
-
-/* Loading animations */
-.spinner-border {
-    width: 1rem;
-    height: 1rem;
-    vertical-align: text-bottom;
-    border: 0.125em solid currentColor;
-    border-right-color: transparent;
-    border-radius: 50%;
-    animation: spinner-border 0.75s linear infinite;
-}
-
-@keyframes spinner-border {
-    to { transform: rotate(360deg); }
-}
-
-.spinner-border-sm {
-    width: 0.875rem;
-    height: 0.875rem;
-    border-width: 0.125em;
-}
-
-/* Natural conversation mode indicator for mic button */
-.control-btn.mic.natural-mode {
-    background: linear-gradient(45deg, rgba(34, 197, 94, 0.9), rgba(16, 185, 129, 0.9));
-    box-shadow: 0 4px 20px rgba(34, 197, 94, 0.4), 0 0 15px rgba(34, 197, 94, 0.3);
-}
-
-.control-btn.mic.natural-mode::after {
-    content: "AUTO";
-    position: absolute;
-    bottom: -20px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 10px;
-    font-weight: bold;
-    color: rgba(34, 197, 94, 1);
-    background: rgba(0, 0, 0, 0.8);
-    padding: 2px 6px;
-    border-radius: 8px;
-    white-space: nowrap;
-}
-
-/* Enhanced listening animation for natural mode */
-.control-btn.mic.listening.natural-mode {
-    background: linear-gradient(45deg, rgba(34, 197, 94, 1), rgba(16, 185, 129, 1));
-    animation: natural-listening-pulse 2s ease-in-out infinite;
-}
-
-@keyframes natural-listening-pulse {
-    0%, 100% { 
-        box-shadow: 0 4px 20px rgba(34, 197, 94, 0.4), 0 0 15px rgba(34, 197, 94, 0.3);
-        transform: scale(1);
-    }
-    50% { 
-        box-shadow: 0 4px 30px rgba(34, 197, 94, 0.8), 0 0 25px rgba(34, 197, 94, 0.6), 0 0 0 10px rgba(34, 197, 94, 0.2);
-        transform: scale(1.05);
-    }
-}
-
-/* Interruption indicator */
-.interruption-indicator {
-    position: absolute;
-    top: 10px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(251, 191, 36, 0.9);
-    color: white;
-    padding: 4px 8px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: bold;
-    animation: interruption-flash 0.5s ease-in-out 3;
-    z-index: 1000;
-}
-
-@keyframes interruption-flash {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-}
-
-/* Natural conversation transcript styling */
-.live-transcript.natural-mode {
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(0, 0, 0, 0.85));
-    border: 1px solid rgba(34, 197, 94, 0.4);
-    box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
-}
-
-.live-transcript.natural-mode::before {
-    content: "🤖 Natural Conversation";
-    position: absolute;
-    top: -25px;
-    left: 0;
-    font-size: 10px;
-    color: rgba(34, 197, 94, 1);
-    font-weight: bold;
-    background: rgba(0, 0, 0, 0.8);
-    padding: 2px 6px;
-    border-radius: 8px;
-}
-
-/* Auto-listening indicator */
-.auto-listening-badge {
-    position: absolute;
-    top: 5px;
-    right: 5px;
-    background: rgba(34, 197, 94, 0.9);
-    color: white;
-    padding: 2px 6px;
-    border-radius: 8px;
-    font-size: 10px;
-    font-weight: bold;
-    animation: auto-listening-glow 2s ease-in-out infinite alternate;
-}
-
-@keyframes auto-listening-glow {
-    from { 
-        background: rgba(34, 197, 94, 0.7);
-        box-shadow: 0 0 5px rgba(34, 197, 94, 0.3);
-    }
-    to { 
-        background: rgba(34, 197, 94, 1);
-        box-shadow: 0 0 15px rgba(34, 197, 94, 0.6);
-    }
-}
-
-/* Enhanced pulse animation for natural conversation */
-.pulse-animation.natural-mode {
-    animation: natural-pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes natural-pulse {
-    0% { 
-        transform: scale(1);
-        box-shadow: 0 4px 20px rgba(34, 197, 94, 0.4);
-    }
-    50% { 
-        transform: scale(1.1);
-        box-shadow: 0 4px 30px rgba(34, 197, 94, 0.8), 0 0 0 15px rgba(34, 197, 94, 0.2);
-    }
-    100% { 
-        transform: scale(1);
-        box-shadow: 0 4px 20px rgba(34, 197, 94, 0.4);
-    }
-}
-
-/* AI speaking indicator */
-.ai-speaking-indicator {
-    position: absolute;
-    bottom: 200px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(59, 130, 246, 0.9);
-    color: white;
-    padding: 8px 16px;
-    border-radius: 20px;
-    font-size: 14px;
-    font-weight: bold;
-    animation: ai-speaking-pulse 1s ease-in-out infinite;
-    z-index: 1001;
-}
-
-@keyframes ai-speaking-pulse {
-    0%, 100% { 
-        opacity: 1;
-        transform: translateX(-50%) scale(1);
-    }
-    50% { 
-        opacity: 0.8;
-        transform: translateX(-50%) scale(1.05);
-    }
-}
-
-/* User turn indicator */
-.user-turn-indicator {
-    position: absolute;
-    bottom: 200px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(34, 197, 94, 0.9);
-    color: white;
-    padding: 8px 16px;
-    border-radius: 20px;
-    font-size: 14px;
-    font-weight: bold;
-    animation: user-turn-pulse 1s ease-in-out infinite;
-    z-index: 1001;
-}
-
-@keyframes user-turn-pulse {
-    0%, 100% { 
-        opacity: 1;
-        transform: translateX(-50%) scale(1);
-    }
-    50% { 
-        opacity: 0.8;
-        transform: translateX(-50%) scale(1.05);
-    }
-}
-
-/* Natural conversation status bar enhancement */
-.status-bar.natural-conversation::after {
-    content: "🤖 Natural";
-    position: absolute;
-    right: 80px;
-    background: rgba(34, 197, 94, 0.9);
-    color: white;
-    padding: 2px 6px;
-    border-radius: 8px;
-    font-size: 10px;
-    font-weight: bold;
-}
-
-/* Responsive adjustments for natural conversation */
-@media (max-width: 480px) {
-    .control-btn.mic.natural-mode::after {
-        bottom: -15px;
-        font-size: 8px;
-    }
-    
-    .auto-listening-badge {
-        top: 3px;
-        right: 3px;
-        font-size: 8px;
-        padding: 1px 4px;
-    }
-    
-    .ai-speaking-indicator,
-    .user-turn-indicator {
-        bottom: 180px;
-        padding: 6px 12px;
-        font-size: 12px;
-    }
+    margin: 20px 0;
 }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="training-container">
+    <!-- Version Indicator -->
+    <div class="version-indicator">
+        v1.2 Marathon
+    </div>
+    
     <!-- Back to Dashboard -->
     <a href="/dashboard" class="back-to-dashboard">
         <i class="fas fa-arrow-left me-2"></i>Dashboard
     </a>
 
-    <!-- Roleplay 1.1 Progress Indicator -->
+    <!-- Enhanced Progress Indicator for Marathon/Legend -->
     <div class="progress-indicator" id="progress-indicator">
         <div class="progress-step" id="step-opener">
             <i class="fas fa-phone me-2"></i>Opener
@@ -942,31 +159,54 @@ body {
             <!-- Mode Selection Screen -->
             <div class="mode-selection" id="mode-selection">
                 <h3 id="roleplay-title">Choose Training Mode</h3>
-                <div class="roleplay-version">Roleplay 1.1 - Opener + Objection + Mini-Pitch</div>
+                <div class="roleplay-version">Roleplay 1.1 + 1.2 - Enhanced AI Training</div>
+                
                 <div class="mode-grid">
-                    <div class="mode-option roleplay-11" data-mode="practice">
+                    <!-- Practice Mode (Roleplay 1.1) -->
+                    <div class="mode-option" data-mode="practice">
                         <i class="fas fa-user-graduate fa-2x" style="color: #60a5fa;"></i>
                         <h5>Practice Mode</h5>
-                        <small>Single call with detailed CEFR A2 coaching</small>
+                        <span class="marathon-badge" style="background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%); color: white;">v1.1</span>
+                        <small>Single call with real-time CEFR A2 coaching</small>
                     </div>
+                    
+                    <!-- Marathon Mode (Roleplay 1.2) -->
                     <div class="mode-option" data-mode="marathon">
                         <i class="fas fa-running fa-2x" style="color: #fbbf24;"></i>
                         <h5>Marathon Mode</h5>
-                        <small>10 calls, need 6 to pass</small>
+                        <span class="marathon-badge">v1.2</span>
+                        <small>10 calls, need 6 to pass. Unlocks Legend Mode!</small>
                     </div>
+                    
+                    <!-- Legend Mode (Roleplay 1.2) -->
                     <div class="mode-option" data-mode="legend">
                         <i class="fas fa-trophy fa-2x" style="color: #f87171;"></i>
                         <h5>Legend Mode</h5>
-                        <small>6 perfect calls (sudden death)</small>
+                        <span class="legend-badge">v1.2</span>
+                        <small>6 perfect calls (sudden death). Requires Marathon pass.</small>
                     </div>
                 </div>
+                
                 <button class="start-call-btn" id="start-call-btn" disabled>
-                    Select a mode to start Roleplay 1.1 call
+                    Select a mode to start training
                 </button>
             </div>
 
             <!-- Call Interface -->
             <div class="call-interface" id="call-interface" style="display: none;">
+                <!-- Marathon Progress Display (only visible in Marathon/Legend) -->
+                <div class="marathon-progress" id="marathon-progress" style="display: none;">
+                    <div class="progress-header">
+                        <span class="mode-badge" id="mode-badge">Marathon</span>
+                        <span class="call-counter" id="call-counter">Call 1/10</span>
+                    </div>
+                    <div class="progress-stats">
+                        <span class="stat passed" id="stat-passed">✓ 0</span>
+                        <span class="stat failed" id="stat-failed">✗ 0</span>
+                        <span class="stat target" id="stat-target">Target: 6/10</span>
+                    </div>
+                </div>
+                
                 <!-- Call Status -->
                 <div class="call-status">
                     <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face" 
@@ -979,7 +219,7 @@ body {
 
                 <!-- Live Transcript -->
                 <div class="live-transcript" id="live-transcript">
-                    Waiting for Roleplay 1.1 conversation...
+                    Waiting for conversation...
                 </div>
 
                 <!-- Call Controls -->
@@ -988,7 +228,7 @@ body {
                         <button class="control-btn mute" id="mute-btn" title="Mute">
                             <i class="fas fa-microphone"></i>
                         </button>
-                        <button class="control-btn mic" id="mic-btn" title="Hold to speak (10s=impatience, 15s=hangup)">
+                        <button class="control-btn mic" id="mic-btn" title="Speak naturally - AI is listening">
                             <i class="fas fa-microphone"></i>
                         </button>
                         <button class="control-btn speaker" id="speaker-btn" title="Speaker">
@@ -997,33 +237,83 @@ body {
                     </div>
                     
                     <div class="end-call-container">
-                        <button class="end-call-btn" id="end-call-btn" title="End Roleplay 1.1 call">
+                        <button class="end-call-btn" id="end-call-btn" title="End training session">
                             <i class="fas fa-phone"></i>
                         </button>
                     </div>
                 </div>
+                
+                <!-- Between Calls Transition (Marathon/Legend only) -->
+                <div class="between-calls-transition" id="between-calls-transition">
+                    <div class="transition-content">
+                        <h3 id="transition-title">Call Complete!</h3>
+                        <div class="transition-stats" id="transition-stats">
+                            <div class="stat-line">
+                                <span>Result:</span>
+                                <span id="last-call-result">PASSED</span>
+                            </div>
+                            <div class="stat-line">
+                                <span>Total Passed:</span>
+                                <span id="total-passed">1/10</span>
+                            </div>
+                            <div class="stat-line">
+                                <span>Remaining:</span>
+                                <span id="calls-remaining">9</span>
+                            </div>
+                        </div>
+                        <div class="next-call-countdown" id="next-call-countdown">3</div>
+                        <p>Starting next call...</p>
+                    </div>
+                </div>
             </div>
 
-            <!-- Feedback Section -->
+            <!-- Enhanced Feedback Section -->
             <div class="feedback-section" id="feedback-section">
                 <div class="feedback-header">
-                    <div class="roleplay-badge">Roleplay 1.1</div>
+                    <div class="roleplay-badge" id="feedback-mode-badge">Practice v1.1</div>
                     <div class="score-circle" id="score-circle">85</div>
-                    <h4 style="color: white; margin: 0;">Call Complete!</h4>
-                    <p style="color: rgba(255,255,255,0.7); margin: 10px 0;">Here's your CEFR A2 coaching feedback</p>
+                    <h4 style="color: white; margin: 0;" id="feedback-title">Training Complete!</h4>
+                    <p style="color: rgba(255,255,255,0.7); margin: 10px 0;" id="feedback-subtitle">Here's your coaching feedback</p>
                 </div>
                 
                 <div id="feedback-content">
                     <!-- Feedback will be populated here -->
                 </div>
                 
+                <!-- Enhanced Feedback Actions -->
                 <div class="feedback-actions">
                     <button class="feedback-btn" id="try-again-btn">
                         <i class="fas fa-redo me-2"></i>Try Again
                     </button>
-                    <button class="feedback-btn primary" id="new-mode-btn">
-                        <i class="fas fa-phone me-2"></i>New Call
+                    <button class="feedback-btn" id="new-mode-btn">
+                        <i class="fas fa-phone me-2"></i>New Mode
                     </button>
+                    <button class="feedback-btn primary" id="stats-btn" style="display: none;">
+                        <i class="fas fa-chart-bar me-2"></i>View Stats
+                    </button>
+                </div>
+                
+                <!-- Marathon/Legend Stats Display -->
+                <div class="marathon-stats-display" id="marathon-stats-display" style="display: none;">
+                    <h6><i class="fas fa-trophy me-2"></i>Your Progress</h6>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <span class="stat-label">Marathon Attempts:</span>
+                            <span class="stat-value" id="marathon-attempts">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Marathon Passes:</span>
+                            <span class="stat-value" id="marathon-passes">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Legend Attempts:</span>
+                            <span class="stat-value" id="legend-attempts">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Legend Completions:</span>
+                            <span class="stat-value" id="legend-completions">0</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1042,27 +332,115 @@ body {
      style="top: 20px; right: 20px; z-index: 9999; max-width: 300px; display: none;">
     <span id="voice-error-text"></span>
 </div>
+
+<!-- Marathon Mode Instructions Modal -->
+<div class="modal fade" id="marathonInstructionsModal" tabindex="-1" aria-labelledby="marathonInstructionsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content" style="background: #1f2937; color: white; border: 1px solid rgba(255,255,255,0.1);">
+            <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                <h5 class="modal-title" id="marathonInstructionsModalLabel">
+                    <i class="fas fa-running me-2" style="color: #fbbf24;"></i>Marathon Mode Instructions
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="instruction-section">
+                    <h6><i class="fas fa-target me-2"></i>Objective</h6>
+                    <p>Complete 10 cold calls and pass at least 6 to unlock Legend Mode and advanced modules.</p>
+                </div>
+                
+                <div class="instruction-section">
+                    <h6><i class="fas fa-list-check me-2"></i>Rules</h6>
+                    <ul class="instruction-list">
+                        <li>No real-time feedback during calls</li>
+                        <li>Each call has same stages: Opener → Objection → Pitch → Discovery</li>
+                        <li>Random hang-ups possible in Marathon (20-30% chance after good opener)</li>
+                        <li>10 seconds silence = impatience, 15 seconds = hang-up</li>
+                        <li>Comprehensive coaching provided at the end</li>
+                    </ul>
+                </div>
+                
+                <div class="instruction-section">
+                    <h6><i class="fas fa-trophy me-2"></i>Success Rewards</h6>
+                    <ul class="instruction-list">
+                        <li>🏆 Legend Mode access (one attempt)</li>
+                        <li>📚 Modules 2.1 & 2.2 unlocked for 24 hours</li>
+                        <li>📊 Detailed performance analytics</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top: 1px solid rgba(255,255,255,0.1);">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Start Marathon</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Legend Mode Instructions Modal -->
+<div class="modal fade" id="legendInstructionsModal" tabindex="-1" aria-labelledby="legendInstructionsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content" style="background: #1f2937; color: white; border: 1px solid rgba(255,255,255,0.1);">
+            <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                <h5 class="modal-title" id="legendInstructionsModalLabel">
+                    <i class="fas fa-trophy me-2" style="color: #f87171;"></i>Legend Mode Instructions
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning" style="background: rgba(245, 158, 11, 0.1); border: 1px solid #f59e0b; color: #fbbf24;">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Warning:</strong> Legend Mode is sudden death - one failure ends the attempt!
+                </div>
+                
+                <div class="instruction-section">
+                    <h6><i class="fas fa-target me-2"></i>Challenge</h6>
+                    <p>Complete 6 perfect cold calls in a row. Any failure immediately ends the attempt.</p>
+                </div>
+                
+                <div class="instruction-section">
+                    <h6><i class="fas fa-list-check me-2"></i>Rules</h6>
+                    <ul class="instruction-list">
+                        <li>Must pass ALL stages in ALL 6 calls</li>
+                        <li>No random hang-ups (but evaluation failures still count)</li>
+                        <li>No real-time feedback during calls</li>
+                        <li>One mistake = immediate failure</li>
+                        <li>Requires Marathon pass to unlock each attempt</li>
+                    </ul>
+                </div>
+                
+                <div class="instruction-section">
+                    <h6><i class="fas fa-crown me-2"></i>Legend Status</h6>
+                    <p>Very few achieve Legend status. Perfect execution across all 6 calls demonstrates mastery of cold calling fundamentals.</p>
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top: 1px solid rgba(255,255,255,0.1);">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Accept Challenge</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/voice-handler.js') }}?v={{ get_file_version('js/voice-handler.js') }}"></script>
 <script src="{{ url_for('static', filename='js/roleplay.js') }}?v={{ get_file_version('js/roleplay.js') }}"></script>
 <script>
-// Additional Roleplay 1.1 specific JavaScript
+// Enhanced Roleplay Manager JavaScript for Marathon Mode
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('Roleplay 1.1 page loaded');
+    console.log('Enhanced Roleplay page loaded - Marathon Mode support active');
     
-    // Add Roleplay 1.1 indicators to the page
+    // Add Marathon/Legend mode indicators
     const phoneContainer = document.getElementById('phone-container');
     const statusBar = document.getElementById('status-bar');
     
-    // Mark as Roleplay 1.1 active
     if (phoneContainer) {
-        phoneContainer.classList.add('roleplay-11-active');
+        phoneContainer.classList.add('marathon-enhanced');
     }
     
     if (statusBar) {
-        statusBar.classList.add('roleplay-11-active');
+        statusBar.classList.add('marathon-enhanced');
     }
     
     // Show progress indicator if call is active
@@ -1088,7 +466,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Update progress steps based on roleplay manager state
-    window.updateRoleplay11Progress = (stage) => {
+    window.updateRoleplayProgress = (stage) => {
         const steps = ['opener', 'objection', 'pitch', 'discovery'];
         const currentIndex = steps.indexOf(stage);
         
@@ -1109,34 +487,176 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     
     // Initialize progress with opener as current
-    window.updateRoleplay11Progress('opener');
+    window.updateRoleplayProgress('opener');
     
-    // Handle window beforeunload for Roleplay 1.1
+    // Enhanced mode selection handlers
+    document.querySelectorAll('.mode-option').forEach(option => {
+        option.addEventListener('click', (e) => {
+            const mode = option.dataset.mode;
+            
+            // Show instructions for Marathon/Legend modes
+            if (mode === 'marathon' && !option.classList.contains('selected')) {
+                e.preventDefault();
+                const modal = new bootstrap.Modal(document.getElementById('marathonInstructionsModal'));
+                modal.show();
+                
+                // Select mode after modal closes
+                document.getElementById('marathonInstructionsModal').addEventListener('hidden.bs.modal', () => {
+                    if (window.roleplayManager) {
+                        window.roleplayManager.selectMode('marathon');
+                    }
+                }, { once: true });
+                
+                return;
+            }
+            
+            if (mode === 'legend' && !option.classList.contains('selected')) {
+                e.preventDefault();
+                const modal = new bootstrap.Modal(document.getElementById('legendInstructionsModal'));
+                modal.show();
+                
+                // Select mode after modal closes
+                document.getElementById('legendInstructionsModal').addEventListener('hidden.bs.modal', () => {
+                    if (window.roleplayManager) {
+                        window.roleplayManager.selectMode('legend');
+                    }
+                }, { once: true });
+                
+                return;
+            }
+        });
+    });
+    
+    // Marathon stats button handler
+    const statsBtn = document.getElementById('stats-btn');
+    if (statsBtn) {
+        statsBtn.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/roleplay/marathon/stats', {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    displayMarathonStats(data.stats);
+                }
+            } catch (error) {
+                console.error('Failed to load Marathon stats:', error);
+            }
+        });
+    }
+    
+    // Function to display Marathon stats
+    window.displayMarathonStats = (stats) => {
+        const statsDisplay = document.getElementById('marathon-stats-display');
+        if (statsDisplay) {
+            document.getElementById('marathon-attempts').textContent = stats.marathon.attempts;
+            document.getElementById('marathon-passes').textContent = stats.marathon.passes;
+            document.getElementById('legend-attempts').textContent = stats.legend.attempts;
+            document.getElementById('legend-completions').textContent = stats.legend.completions;
+            
+            statsDisplay.style.display = 'block';
+        }
+    };
+    
+    // Function to show between-calls transition
+    window.showBetweenCallsTransition = (data) => {
+        const transition = document.getElementById('between-calls-transition');
+        const result = document.getElementById('last-call-result');
+        const totalPassed = document.getElementById('total-passed');
+        const remaining = document.getElementById('calls-remaining');
+        const countdown = document.getElementById('next-call-countdown');
+        
+        if (transition && result && totalPassed && remaining && countdown) {
+            result.textContent = data.result || 'UNKNOWN';
+            result.className = data.result === 'PASSED' ? 'text-success' : 'text-danger';
+            
+            totalPassed.textContent = `${data.callsPassed}/${data.maxCalls}`;
+            remaining.textContent = data.maxCalls - data.currentCall;
+            
+            transition.style.display = 'flex';
+            
+            // Countdown timer
+            let count = 3;
+            countdown.textContent = count;
+            
+            const countdownInterval = setInterval(() => {
+                count--;
+                countdown.textContent = count;
+                
+                if (count <= 0) {
+                    clearInterval(countdownInterval);
+                    transition.style.display = 'none';
+                }
+            }, 1000);
+        }
+    };
+    
+    // Handle window beforeunload for all modes
     window.addEventListener('beforeunload', (e) => {
         if (window.roleplayManager && window.roleplayManager.isActive) {
+            const mode = window.roleplayManager.selectedMode || 'training';
             e.preventDefault();
-            e.returnValue = 'Are you sure you want to leave? Your Roleplay 1.1 session will be lost.';
+            e.returnValue = `Are you sure you want to leave? Your ${mode} session will be lost.`;
             return e.returnValue;
         }
     });
     
-    console.log('Roleplay 1.1 enhancements loaded successfully');
-});
-
-// Global function to update score circle color based on score
-window.updateScoreCircleColor = (score) => {
-    const scoreCircle = document.getElementById('score-circle');
-    if (scoreCircle) {
-        scoreCircle.classList.remove('excellent', 'good', 'needs-improvement');
-        
-        if (score >= 85) {
-            scoreCircle.classList.add('excellent');
-        } else if (score >= 70) {
-            scoreCircle.classList.add('good');
-        } else {
-            scoreCircle.classList.add('needs-improvement');
+    // Global function to update score circle color based on score
+    window.updateScoreCircleColor = (score) => {
+        const scoreCircle = document.getElementById('score-circle');
+        if (scoreCircle) {
+            scoreCircle.classList.remove('excellent', 'good', 'needs-improvement');
+            
+            if (score >= 85) {
+                scoreCircle.classList.add('excellent');
+            } else if (score >= 70) {
+                scoreCircle.classList.add('good');
+            } else {
+                scoreCircle.classList.add('needs-improvement');
+            }
         }
-    }
-};
+    };
+    
+    // Global function to update Marathon progress display
+    window.updateMarathonProgress = (callInfo) => {
+        const progressDisplay = document.getElementById('marathon-progress');
+        const callCounter = document.getElementById('call-counter');
+        const statPassed = document.getElementById('stat-passed');
+        const statFailed = document.getElementById('stat-failed');
+        const statTarget = document.getElementById('stat-target');
+        
+        if (progressDisplay && callInfo) {
+            const isMarathonOrLegend = callInfo.maxCalls > 1;
+            
+            if (isMarathonOrLegend) {
+                progressDisplay.style.display = 'block';
+                
+                if (callCounter) {
+                    callCounter.textContent = `Call ${callInfo.currentCall}/${callInfo.maxCalls}`;
+                }
+                
+                if (statPassed) {
+                    statPassed.textContent = `✓ ${callInfo.callsPassed || 0}`;
+                }
+                
+                if (statFailed) {
+                    statFailed.textContent = `✗ ${callInfo.callsFailed || 0}`;
+                }
+                
+                if (statTarget) {
+                    const threshold = callInfo.passThreshold || callInfo.maxCalls;
+                    statTarget.textContent = `Target: ${threshold}/${callInfo.maxCalls}`;
+                }
+            } else {
+                progressDisplay.style.display = 'none';
+            }
+        }
+    };
+    
+    console.log('Enhanced Roleplay with Marathon Mode support loaded successfully');
+});
 </script>
 {% endblock %}
