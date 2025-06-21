@@ -8,12 +8,40 @@ class SimpleRoleplayManager {
         this.mode = 'practice';
         this.callTimer = null;
         this.callStartTime = null;
+        this.voiceHandler = null; // Add this
         
         console.log(`🚀 Simple Roleplay Manager initialized for: ${this.currentRoleplayId}`);
         
         this.initializeElements();
         this.bindEvents();
         this.setupInterface();
+        this.initializeVoiceHandler(); // Add this
+    }
+
+    // NEW METHOD: Initialize voice handler properly
+    initializeVoiceHandler() {
+        try {
+            if (typeof VoiceHandler !== 'undefined') {
+                this.voiceHandler = new VoiceHandler(this);
+                console.log('🎤 Voice handler initialized successfully');
+                
+                // Set up callbacks
+                this.voiceHandler.onTranscript = (transcript) => this.handleVoiceInput(transcript);
+                this.voiceHandler.onError = (error) => this.showError(error);
+                
+                // Check if supported
+                if (this.voiceHandler.isSupported) {
+                    console.log('✅ Voice recognition supported and ready');
+                } else {
+                    console.warn('⚠️ Voice recognition not supported in this browser');
+                }
+            } else {
+                console.warn('⚠️ VoiceHandler class not available');
+                setTimeout(() => this.initializeVoiceHandler(), 1000); // Retry after 1 second
+            }
+        } catch (error) {
+            console.error('❌ Failed to initialize voice handler:', error);
+        }
     }
     
     extractRoleplayId() {
@@ -303,10 +331,11 @@ class SimpleRoleplayManager {
                 this.addToTranscript('AI', data.initial_response);
                 this.playAudio(data.initial_response);
                 
-                // Start user turn after AI speaks
+                // FIXED: Start auto-listening after AI speaks (with delay for audio)
                 setTimeout(() => {
                     this.addToTranscript('System', '🎤 Your turn - speak now...');
-                }, 2000);
+                    this.startAutoListening(); // NEW: Start auto-listening
+                }, 3000); // Wait 3 seconds for AI audio to finish
             }, 500);
             
             console.log('✅ Call started successfully:', this.sessionId);
@@ -320,13 +349,29 @@ class SimpleRoleplayManager {
                 this.elements.startCallBtn.textContent = 'Start Practice Call';
                 this.elements.startCallBtn.disabled = false;
             }
+        }
+    }
+
+    // NEW METHOD: Start auto-listening for natural conversation
+    startAutoListening() {
+        if (this.voiceHandler && this.voiceHandler.isSupported) {
+            console.log('🎤 Starting auto-listening for natural conversation...');
+            this.voiceHandler.startAutoListening();
             
-            // Show retry option
-            setTimeout(() => {
-                if (confirm('Call failed to start. Would you like to try again?')) {
-                    this.startCall();
-                }
-            }, 2000);
+            // Update UI to show listening state
+            this.updateMicrophoneUI(true);
+        } else {
+            console.warn('⚠️ Voice handler not available for auto-listening');
+            this.showError('Voice recognition not available. Please check browser compatibility.');
+        }
+    }
+
+    // NEW METHOD: Stop auto-listening
+    stopAutoListening() {
+        if (this.voiceHandler) {
+            console.log('🛑 Stopping auto-listening...');
+            this.voiceHandler.stopListening();
+            this.updateMicrophoneUI(false);
         }
     }
     addSystemMessage(message) {
@@ -419,6 +464,9 @@ class SimpleRoleplayManager {
         try {
             console.log(`🎤 Processing voice input: "${transcript}"`);
             
+            // Stop listening while processing
+            this.stopAutoListening();
+            
             this.addToTranscript('You', transcript);
             
             const response = await fetch('/api/roleplay/respond', {
@@ -442,10 +490,16 @@ class SimpleRoleplayManager {
             this.addToTranscript('AI', data.ai_response);
             
             // Play audio response
-            this.playAudio(data.ai_response);
+            await this.playAudio(data.ai_response);
             
             // Check if call should continue
-            if (!data.call_continues) {
+            if (data.call_continues) {
+                // FIXED: Restart auto-listening after AI responds
+                setTimeout(() => {
+                    this.addToTranscript('System', '🎤 Your turn - speak now...');
+                    this.startAutoListening();
+                }, 2000); // Wait 2 seconds for AI audio
+            } else {
                 console.log('📞 Call ending...');
                 setTimeout(() => this.handleCallEnd(data), 2000);
             }
@@ -453,6 +507,30 @@ class SimpleRoleplayManager {
         } catch (error) {
             console.error('❌ Failed to process voice input:', error);
             this.showError('Failed to process your response');
+            
+            // Restart listening on error
+            setTimeout(() => {
+                if (this.isActive) {
+                    this.startAutoListening();
+                }
+            }, 3000);
+        }
+    }
+
+    // NEW METHOD: Update microphone UI
+    updateMicrophoneUI(isListening) {
+        if (this.elements.micBtn) {
+            if (isListening) {
+                this.elements.micBtn.classList.add('listening');
+                this.elements.micBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+                this.elements.micBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+                this.elements.micBtn.title = 'Listening - speak naturally';
+            } else {
+                this.elements.micBtn.classList.remove('listening');
+                this.elements.micBtn.style.background = 'rgba(255, 255, 255, 0.1)';
+                this.elements.micBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+                this.elements.micBtn.title = 'Voice recognition ready';
+            }
         }
     }
     
@@ -514,6 +592,9 @@ class SimpleRoleplayManager {
         
         try {
             console.log('📞 Ending call...');
+            
+            // Stop voice recognition
+            this.stopAutoListening();
             
             const response = await fetch('/api/roleplay/end', {
                 method: 'POST',
@@ -627,6 +708,9 @@ class SimpleRoleplayManager {
     resetInterface() {
         console.log('🔄 Resetting interface');
         
+        // Stop voice recognition
+        this.stopAutoListening();
+        
         // Reset state
         this.isActive = false;
         this.sessionId = null;
@@ -665,7 +749,17 @@ class SimpleRoleplayManager {
             this.elements.startCallBtn.textContent = 'Start Practice Call';
         }
         
+        // Reset microphone UI
+        this.updateMicrophoneUI(false);
+        
         console.log('✅ Interface reset complete');
+    }
+
+    destroy() {
+        this.stopAutoListening();
+        if (this.voiceHandler) {
+            this.voiceHandler.destroy();
+        }
     }
     
     updateTime() {

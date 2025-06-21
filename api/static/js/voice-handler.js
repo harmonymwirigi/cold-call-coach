@@ -1,4 +1,4 @@
-// ===== NATURAL CONVERSATION VOICE HANDLER - voice-handler.js =====
+// ===== FIXED: voice-handler.js - Callback Interface =====
 
 class VoiceHandler {
     constructor(roleplayManager) {
@@ -9,6 +9,10 @@ class VoiceHandler {
         this.micButton = null;
         this.transcriptElement = null;
         this.errorElement = null;
+        
+        // FIXED: Proper callback interface
+        this.onTranscript = null; // Will be set by roleplay manager
+        this.onError = null; // Will be set by roleplay manager
         
         // Natural conversation settings
         this.settings = {
@@ -22,42 +26,30 @@ class VoiceHandler {
         this.currentTranscript = '';
         this.finalTranscript = '';
         this.silenceTimer = null;
-        this.isAutoListening = false;  // NEW: Track if auto-listening is active
-        this.canInterrupt = false;     // NEW: Track if user can interrupt AI
+        this.isAutoListening = false;
+        this.canInterrupt = false;
         
         // Silence detection for natural conversation
         this.silenceThreshold = 2000;  // 2 seconds of silence = user finished speaking
         this.lastSpeechTime = null;
         this.silenceCheckInterval = null;
         
-        // Roleplay 1.1 silence specifications (for hang-up detection)
+        // Roleplay 1.1 silence specifications
         this.impatience_threshold = 10000;  // 10 seconds for impatience trigger
         this.hangup_threshold = 15000;      // 15 seconds for hang-up
-        this.total_silence_start = null;    // Track total silence from start of listening
+        this.total_silence_start = null;
         this.impatience_triggered = false;
+        this.hangupSilenceTimer = null;
         
         this.shouldRestart = false;
         this.wasPausedBySystem = false;
         
-        // Impatience phrases
-        this.impatience_phrases = [
-            "Hello? Are you still with me?",
-            "Can you hear me?",
-            "Just checking you're there…",
-            "Still on the line?",
-            "I don't have much time for this.",
-            "Sounds like you are gone.",
-            "Are you an idiot.",
-            "What is going on.",
-            "Are you okay to continue?",
-            "I am afraid I have to go"
-        ];
-        
+        console.log('🎤 VoiceHandler constructor called');
         this.init();
     }
 
     init() {
-        console.log('🎤 Initializing Natural Conversation Voice Handler...');
+        console.log('🎤 Initializing Voice Handler...');
         
         this.checkBrowserSupport();
         this.initializeUIElements();
@@ -67,7 +59,7 @@ class VoiceHandler {
             this.initializeSpeechRecognition();
         }
         
-        console.log(`✅ Natural Voice Handler initialized. Supported: ${this.isSupported}`);
+        console.log(`✅ Voice Handler initialized. Supported: ${this.isSupported}`);
     }
 
     checkBrowserSupport() {
@@ -76,7 +68,7 @@ class VoiceHandler {
         if (SpeechRecognition) {
             this.isSupported = true;
             this.SpeechRecognition = SpeechRecognition;
-            console.log('✅ Web Speech API supported - Natural conversation ready');
+            console.log('✅ Web Speech API supported');
         } else {
             this.isSupported = false;
             console.error('❌ Web Speech API not supported');
@@ -86,8 +78,7 @@ class VoiceHandler {
     }
 
     updateSupportUI() {
-        const micButton = document.getElementById('mic-button');
-        const errorElement = document.getElementById('voice-error');
+        const micButton = document.getElementById('mic-button') || document.getElementById('mic-btn');
         
         if (!this.isSupported) {
             if (micButton) {
@@ -96,12 +87,10 @@ class VoiceHandler {
                 micButton.title = 'Voice recognition not supported';
             }
             
-            if (errorElement) {
-                this.showVoiceError('Voice recognition not supported. Use Chrome, Edge, or Safari.');
-            }
+            this.triggerError('Voice recognition not supported. Use Chrome, Edge, or Safari.');
         } else {
             if (micButton) {
-                micButton.title = 'Natural conversation mode - Mic auto-activates';
+                micButton.title = 'Voice recognition ready';
             }
         }
     }
@@ -112,12 +101,12 @@ class VoiceHandler {
         this.errorElement = document.getElementById('voice-error');
         
         if (this.transcriptElement) {
-            this.transcriptElement.textContent = 'Natural conversation ready...';
+            this.transcriptElement.textContent = 'Voice recognition ready...';
         }
     }
 
     setupEventListeners() {
-        // Microphone button - now optional since we have auto-listening
+        // Microphone button click
         if (this.micButton) {
             this.micButton.addEventListener('click', () => {
                 console.log('🎤 Manual mic button clicked');
@@ -131,18 +120,14 @@ class VoiceHandler {
         
         // Keyboard shortcuts
         this.handleKeydown = (e) => {
-            // Space bar to manually trigger mic (even during auto-listening)
             if (e.code === 'Space' && !e.target.matches('input, textarea')) {
                 e.preventDefault();
-                console.log('⌨️ Space pressed - manual mic trigger');
                 if (!this.isListening) {
                     this.startListening(false);
                 }
             }
             
-            // Escape to stop listening
             if (e.code === 'Escape' && this.isListening) {
-                console.log('⌨️ Escape pressed - stop listening');
                 this.stopListening();
             }
         };
@@ -177,10 +162,10 @@ class VoiceHandler {
             
             this.setupRecognitionEventHandlers();
             
-            console.log('🎤 Speech recognition initialized for natural conversation');
+            console.log('🎤 Speech recognition initialized');
         } catch (error) {
             console.error('❌ Failed to initialize speech recognition:', error);
-            this.showVoiceError('Failed to initialize voice recognition. Check microphone permissions.');
+            this.triggerError('Failed to initialize voice recognition');
         }
     }
 
@@ -192,9 +177,9 @@ class VoiceHandler {
             console.log('🎤 Voice recognition started');
             this.isListening = true;
             this.updateMicrophoneUI(true);
-            this.clearVoiceError();
+            this.clearError();
             
-            // Start silence tracking for hang-up detection
+            // Start silence tracking
             this.total_silence_start = Date.now();
             this.impatience_triggered = false;
             this.startHangupSilenceDetection();
@@ -206,6 +191,7 @@ class VoiceHandler {
             this.isListening = false;
             this.updateMicrophoneUI(false);
             this.stopSilenceDetection();
+            this.stopHangupSilenceDetection();
             
             // Auto-restart if still supposed to be listening
             if (this.shouldRestart && this.isSupported) {
@@ -216,7 +202,7 @@ class VoiceHandler {
             }
         };
         
-        // Recognition results - THE MAIN CONVERSATION HANDLER
+        // Recognition results - MAIN CONVERSATION HANDLER
         this.recognition.onresult = (event) => {
             this.handleRecognitionResult(event);
         };
@@ -228,28 +214,22 @@ class VoiceHandler {
         
         // Speech detection events
         this.recognition.onspeechstart = () => {
-            console.log('🗣️ Speech detected - user is speaking');
+            console.log('🗣️ Speech detected');
             this.lastSpeechTime = Date.now();
             
-            // If user interrupts AI, handle it immediately
-            if (this.canInterrupt && this.roleplayManager?.aiIsSpeaking) {
-                console.log('⚡ User interrupted AI - stopping AI speech');
-                this.handleInterruption();
-            }
-            
-            // Reset hang-up silence timer since user is speaking
+            // Reset hang-up silence timer
             this.total_silence_start = null;
             this.impatience_triggered = false;
         };
         
         this.recognition.onspeechend = () => {
-            console.log('🤐 Speech ended - checking for completion');
+            console.log('🤐 Speech ended');
             this.lastSpeechTime = Date.now();
             
             // Start checking for silence to detect when user finished
             this.startSilenceDetection();
             
-            // Also restart hang-up silence tracking
+            // Restart hang-up silence tracking
             this.total_silence_start = Date.now();
         };
     }
@@ -262,19 +242,13 @@ class VoiceHandler {
         for (let i = event.resultIndex; i < event.results.length; i++) {
             const result = event.results[i];
             const transcript = result[0].transcript;
-            const confidence = result[0].confidence;
             
             if (result.isFinal) {
                 finalTranscript += transcript + ' ';
-                console.log(`✅ Final transcript: "${transcript}" (confidence: ${confidence})`);
-                
-                // Reset silence detection since we got final speech
+                console.log(`✅ Final transcript: "${transcript}"`);
                 this.lastSpeechTime = Date.now();
             } else {
                 interimTranscript += transcript;
-                console.log(`💭 Interim: "${transcript}"`);
-                
-                // Reset silence tracking for interim results too
                 this.lastSpeechTime = Date.now();
             }
         }
@@ -286,9 +260,6 @@ class VoiceHandler {
         // Process final results
         if (finalTranscript.trim().length > 0) {
             this.finalTranscript += finalTranscript;
-            
-            // For natural conversation, wait a bit to see if user continues speaking
-            // If not, we'll process what we have
             this.startSilenceDetection();
         }
     }
@@ -306,7 +277,7 @@ class VoiceHandler {
         };
         
         const message = errorMessages[event.error] || `Voice recognition error: ${event.error}`;
-        this.showVoiceError(message);
+        this.triggerError(message);
         
         // Handle specific errors
         if (event.error === 'not-allowed') {
@@ -321,7 +292,7 @@ class VoiceHandler {
         }
     }
 
-    // ===== NATURAL CONVERSATION METHODS =====
+    // ===== PUBLIC METHODS =====
 
     startAutoListening() {
         console.log('🤖 Starting auto-listening mode...');
@@ -342,7 +313,9 @@ class VoiceHandler {
             
             // Request microphone permission if needed
             this.requestMicrophonePermission().then(() => {
-                this.recognition.start();
+                if (this.recognition) {
+                    this.recognition.start();
+                }
                 
                 if (isAutoMode) {
                     this.updateTranscript('🎤 Auto-listening active - speak naturally...');
@@ -351,12 +324,12 @@ class VoiceHandler {
                 }
             }).catch(error => {
                 console.error('❌ Microphone permission failed:', error);
-                this.showVoiceError('Microphone permission required for conversation');
+                this.triggerError('Microphone permission required');
             });
             
         } catch (error) {
             console.error('❌ Failed to start listening:', error);
-            this.showVoiceError('Failed to start voice recognition');
+            this.triggerError('Failed to start voice recognition');
         }
     }
 
@@ -372,49 +345,26 @@ class VoiceHandler {
         }
         
         this.stopSilenceDetection();
+        this.stopHangupSilenceDetection();
     }
 
-    // Enable/disable interruption capability
-    enableInterruption() {
-        console.log('⚡ Interruption enabled - user can speak over AI');
-        this.canInterrupt = true;
-    }
-
-    disableInterruption() {
-        console.log('⚡ Interruption disabled');
-        this.canInterrupt = false;
-    }
-
-    handleInterruption() {
-        console.log('⚡ Handling user interruption of AI');
-        
-        // Tell roleplay manager to stop AI speech
-        if (this.roleplayManager) {
-            this.roleplayManager.handleUserInterruption();
-        }
-        
-        // Update UI to show user is taking over
-        this.updateTranscript('⚡ You interrupted - speak now...');
-    }
-
-    // ===== SILENCE DETECTION FOR NATURAL CONVERSATION =====
+    // ===== SILENCE DETECTION =====
 
     startSilenceDetection() {
         this.stopSilenceDetection();
         
-        console.log('🤫 Starting silence detection for natural conversation...');
+        console.log('🤫 Starting silence detection...');
         
         this.silenceCheckInterval = setInterval(() => {
             if (this.lastSpeechTime) {
                 const silenceDuration = Date.now() - this.lastSpeechTime;
                 
-                // If user has been silent for threshold, process their speech
                 if (silenceDuration >= this.silenceThreshold) {
                     console.log(`🤫 User finished speaking (${silenceDuration}ms silence)`);
                     this.processFinalUserSpeech();
                 }
             }
-        }, 200); // Check every 200ms
+        }, 200);
     }
 
     stopSilenceDetection() {
@@ -428,14 +378,18 @@ class VoiceHandler {
         const transcript = this.finalTranscript.trim();
         
         if (transcript.length > 0) {
-            console.log(`✅ Processing final user speech: "${transcript}"`);
+            console.log(`✅ Processing final speech: "${transcript}"`);
             
             // Stop listening since we're processing
             this.stopListening();
             
-            // Send to roleplay manager
-            if (this.roleplayManager) {
-                this.roleplayManager.processUserInput(transcript);
+            // FIXED: Trigger callback properly
+            if (this.onTranscript && typeof this.onTranscript === 'function') {
+                this.onTranscript(transcript);
+            } else if (this.roleplayManager && this.roleplayManager.handleVoiceInput) {
+                this.roleplayManager.handleVoiceInput(transcript);
+            } else {
+                console.warn('⚠️ No callback available for transcript');
             }
             
             // Clear transcript
@@ -444,10 +398,11 @@ class VoiceHandler {
         }
     }
 
-    // ===== HANG-UP SILENCE DETECTION (Original Roleplay 1.1 specs) =====
+    // ===== HANG-UP SILENCE DETECTION =====
 
     startHangupSilenceDetection() {
-        console.log('⏰ Starting hang-up silence detection (10s impatience, 15s hangup)');
+        this.stopHangupSilenceDetection();
+        console.log('⏰ Starting hang-up silence detection');
         
         this.hangupSilenceTimer = setInterval(() => {
             if (this.total_silence_start && this.isListening) {
@@ -457,60 +412,75 @@ class VoiceHandler {
                 if (totalSilence >= this.impatience_threshold && 
                     !this.impatience_triggered &&
                     totalSilence < this.hangup_threshold) {
-                    console.log('⏰ 10-second total silence - triggering impatience');
+                    console.log('⏰ 10-second silence - triggering impatience');
                     this.handleImpatience();
                 }
                 
                 // 15-second hang-up trigger
                 if (totalSilence >= this.hangup_threshold) {
-                    console.log('📞 15-second total silence - triggering hang-up');
+                    console.log('📞 15-second silence - triggering hang-up');
                     this.handleSilenceHangup();
                 }
             }
         }, 1000);
     }
 
+    stopHangupSilenceDetection() {
+        if (this.hangupSilenceTimer) {
+            clearInterval(this.hangupSilenceTimer);
+            this.hangupSilenceTimer = null;
+        }
+    }
+
     handleImpatience() {
-        console.log('⏰ Handling 10-second silence impatience');
+        console.log('⏰ Handling impatience');
         this.impatience_triggered = true;
         
-        const phrase = this.impatience_phrases[Math.floor(Math.random() * this.impatience_phrases.length)];
-        this.updateTranscript(`⏰ 10 seconds of silence... Prospect: "${phrase}"`);
+        const phrases = [
+            "Hello? Are you still with me?",
+            "Can you hear me?",
+            "Just checking you're there…",
+            "Still on the line?"
+        ];
         
-        if (this.roleplayManager && this.roleplayManager.isActive) {
-            this.roleplayManager.processUserInput('[SILENCE_IMPATIENCE]');
+        const phrase = phrases[Math.floor(Math.random() * phrases.length)];
+        this.updateTranscript(`⏰ Prospect: "${phrase}"`);
+        
+        // Trigger callback
+        if (this.onTranscript && typeof this.onTranscript === 'function') {
+            this.onTranscript('[SILENCE_IMPATIENCE]');
+        } else if (this.roleplayManager && this.roleplayManager.handleVoiceInput) {
+            this.roleplayManager.handleVoiceInput('[SILENCE_IMPATIENCE]');
         }
     }
 
     handleSilenceHangup() {
-        console.log('📞 Handling 15-second silence hang-up');
+        console.log('📞 Handling silence hang-up');
         
         this.stopListening();
         this.updateTranscript('📞 15 seconds of silence - The prospect hung up.');
         
-        if (this.roleplayManager && this.roleplayManager.isActive) {
-            this.roleplayManager.processUserInput('[SILENCE_HANGUP]');
+        // Trigger callback
+        if (this.onTranscript && typeof this.onTranscript === 'function') {
+            this.onTranscript('[SILENCE_HANGUP]');
+        } else if (this.roleplayManager && this.roleplayManager.handleVoiceInput) {
+            this.roleplayManager.handleVoiceInput('[SILENCE_HANGUP]');
         }
     }
 
     // ===== UI METHODS =====
 
     updateMicrophoneUI(isListening) {
-        if (!this.micButton) return;
-        
-        if (isListening) {
-            this.micButton.classList.add('listening');
-            this.micButton.classList.remove('btn-primary');
-            this.micButton.classList.add('btn-success');
-            this.micButton.innerHTML = '<i class="fas fa-microphone"></i>';
-            this.micButton.title = this.isAutoListening ? 
-                'Auto-listening active (natural conversation)' : 
-                'Listening - click to stop';
-        } else {
-            this.micButton.classList.remove('listening', 'btn-success');
-            this.micButton.classList.add('btn-primary');
-            this.micButton.innerHTML = '<i class="fas fa-microphone"></i>';
-            this.micButton.title = 'Click to start listening manually';
+        if (this.micButton) {
+            if (isListening) {
+                this.micButton.classList.add('listening');
+                this.micButton.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+                this.micButton.title = 'Listening - click to stop';
+            } else {
+                this.micButton.classList.remove('listening');
+                this.micButton.style.background = 'rgba(255, 255, 255, 0.1)';
+                this.micButton.title = 'Click to start listening';
+            }
         }
     }
 
@@ -520,9 +490,19 @@ class VoiceHandler {
         }
     }
 
-    showVoiceError(message) {
+    triggerError(message) {
         console.error('❌ Voice error:', message);
         
+        // Use callback if available
+        if (this.onError && typeof this.onError === 'function') {
+            this.onError(message);
+        } else {
+            // Fallback to direct UI update
+            this.showErrorInUI(message);
+        }
+    }
+
+    showErrorInUI(message) {
         if (this.errorElement) {
             const errorText = this.errorElement.querySelector('#voice-error-text');
             if (errorText) {
@@ -530,14 +510,13 @@ class VoiceHandler {
             }
             this.errorElement.style.display = 'block';
             
-            // Auto-hide after 5 seconds
             setTimeout(() => {
                 this.errorElement.style.display = 'none';
             }, 5000);
         }
     }
 
-    clearVoiceError() {
+    clearError() {
         if (this.errorElement) {
             this.errorElement.style.display = 'none';
         }
@@ -547,19 +526,15 @@ class VoiceHandler {
 
     async requestMicrophonePermission() {
         try {
-            console.log('🎤 Requesting microphone permission...');
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             stream.getTracks().forEach(track => track.stop());
-            console.log('✅ Microphone permission granted');
             return true;
         } catch (error) {
-            console.error('❌ Microphone permission denied:', error);
             throw new Error('Microphone permission denied');
         }
     }
 
     handlePermissionDenied() {
-        console.error('❌ Microphone permission permanently denied');
         this.stopListening();
         this.shouldRestart = false;
         
@@ -568,33 +543,11 @@ class VoiceHandler {
             this.micButton.innerHTML = '<i class="fas fa-microphone-slash"></i>';
         }
         
-        this.showPermissionInstructions();
-    }
-
-    showPermissionInstructions() {
-        const instructions = `
-            <div class="permission-instructions">
-                <h6>Microphone Permission Required</h6>
-                <p>For natural conversation:</p>
-                <ol>
-                    <li>Click the microphone icon in your browser's address bar</li>
-                    <li>Select "Allow" for microphone access</li>
-                    <li>Refresh this page and try again</li>
-                </ol>
-                <button class="btn btn-primary btn-sm" onclick="location.reload()">
-                    <i class="fas fa-refresh me-1"></i>Refresh Page
-                </button>
-            </div>
-        `;
-        
-        if (this.transcriptElement) {
-            this.transcriptElement.innerHTML = instructions;
-        }
+        this.updateTranscript('Microphone permission denied. Please refresh and allow access.');
     }
 
     pauseListening() {
         if (this.isListening) {
-            console.log('⏸️ Pausing voice recognition...');
             this.wasPausedBySystem = true;
             this.stopListening();
         }
@@ -602,27 +555,21 @@ class VoiceHandler {
 
     resumeListening() {
         if (this.wasPausedBySystem && this.shouldRestart) {
-            console.log('▶️ Resuming voice recognition...');
             this.wasPausedBySystem = false;
             this.startListening(this.isAutoListening);
         }
     }
 
-    // ===== GETTERS =====
-
     getListeningStatus() {
         return {
             isListening: this.isListening,
             isAutoListening: this.isAutoListening,
-            canInterrupt: this.canInterrupt,
             isSupported: this.isSupported
         };
     }
 
-    // ===== CLEANUP =====
-
     destroy() {
-        console.log('🧹 Destroying Natural Voice Handler...');
+        console.log('🧹 Destroying Voice Handler...');
         
         this.stopListening();
         this.shouldRestart = false;
@@ -636,6 +583,7 @@ class VoiceHandler {
         }
         
         this.stopSilenceDetection();
+        this.stopHangupSilenceDetection();
         
         // Remove event listeners
         if (this.handleKeydown) {
@@ -645,7 +593,7 @@ class VoiceHandler {
             document.removeEventListener('visibilitychange', this.handleVisibilityChange);
         }
         
-        console.log('✅ Natural Voice Handler destroyed');
+        console.log('✅ Voice Handler destroyed');
     }
 }
 
@@ -656,4 +604,4 @@ if (typeof module !== 'undefined' && module.exports) {
     window.VoiceHandler = VoiceHandler;
 }
 
-console.log('✅ Natural Conversation Voice Handler loaded successfully');
+console.log('✅ Voice Handler class loaded successfully');
