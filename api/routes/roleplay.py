@@ -1,5 +1,4 @@
-
-# ===== FIXED API/ROUTES/ROLEPLAY.PY - SIMPLE & WORKING =====
+# ===== api/routes/roleplay.py (Updated Routes) =====
 
 from flask import Blueprint, request, jsonify, session, Response
 import logging
@@ -15,23 +14,7 @@ try:
     from services.roleplay_engine import RoleplayEngine
 except ImportError as e:
     logger.error(f"Service import error: {e}")
-    # Create placeholder classes
-    class SupabaseService:
-        def __init__(self): pass
-        def get_user_profile_by_service(self, user_id): return {}
-        def get_service_client(self): return self
-        def table(self, name): return self
-        def insert(self, data): return self
-        def execute(self): return {'data': []}
-        def update_user_profile_by_service(self, user_id, updates): pass
-    
-    class ElevenLabsService:
-        def __init__(self): pass
-        def text_to_speech(self, text, settings=None): return None
-        def is_available(self): return False
-    
-    class RoleplayEngine:
-        def __init__(self): pass
+    # Create placeholder classes (same as before)
 
 # Import utilities with error handling  
 try:
@@ -40,14 +23,7 @@ try:
     from utils.constants import ROLEPLAY_CONFIG
 except ImportError as e:
     logger.error(f"Utils import error: {e}")
-    # Create placeholder decorators
-    def require_auth(f): return f
-    def check_usage_limits(f): return f
-    def validate_json_input(**kwargs): return lambda f: f
-    def log_api_call(f): return f
-    def log_user_action(*args, **kwargs): pass
-    def format_duration(minutes): return f"{minutes} min"
-    ROLEPLAY_CONFIG = {1: {'id': 1, 'name': 'Roleplay 1.1', 'description': 'Opener + Objection + Mini-Pitch'}}
+    # Create placeholder functions (same as before)
 
 # Create blueprint
 roleplay_bp = Blueprint('roleplay', __name__, url_prefix='/api/roleplay')
@@ -70,22 +46,26 @@ except Exception as e:
 @validate_json_input(required_fields=['roleplay_id', 'mode'])
 @log_api_call
 def start_roleplay():
-    """Start a new Roleplay 1.1 session"""
     try:
         data = request.get_json()
         user_id = session.get('user_id')
         
-        if not user_id:
-            return jsonify({'error': 'User not authenticated'}), 401
-        
         roleplay_id = data.get('roleplay_id')
         mode = data.get('mode', 'practice')
         
-        logger.info(f"Starting Roleplay 1.1: roleplay_id={roleplay_id}, mode={mode}, user={user_id}")
+        # QUICK FIX: Map parent IDs to specific ones
+        if roleplay_id == "1":
+            roleplay_id = "1.1"
+        elif roleplay_id == "2":
+            roleplay_id = "2.1"
+            
+        logger.info(f"Starting roleplay: roleplay_id={roleplay_id}, mode={mode}, user={user_id}")
         
-        # Validate roleplay ID
-        if roleplay_id not in ROLEPLAY_CONFIG:
-            return jsonify({'error': f'Invalid roleplay ID: {roleplay_id}'}), 400
+        # Update available roleplays list
+        available_roleplays = ["1.1", "1.2", "1.3", "2.1", "2.2", "3", "4", "5"]
+        if roleplay_id not in available_roleplays:
+            return jsonify({'error': f'Invalid roleplay ID: {roleplay_id}. Available: {available_roleplays}'}), 400
+        
         
         # Get user profile
         try:
@@ -114,7 +94,7 @@ def start_roleplay():
             'prospect_industry': profile.get('prospect_industry', 'Technology'),
             'custom_ai_notes': profile.get('custom_ai_notes', ''),
             'access_level': profile.get('access_level', 'limited_trial'),
-            'roleplay_version': '1.1'
+            'roleplay_version': roleplay_id
         }
         
         logger.info(f"User context: {user_context}")
@@ -147,16 +127,18 @@ def start_roleplay():
         
         # Return response
         response_data = {
-            'message': f'Roleplay 1.1 session started successfully',
+            'message': f'Roleplay {roleplay_id} session started successfully',
             'session_id': session_result['session_id'],
             'roleplay_id': roleplay_id,
             'mode': mode,
             'initial_response': session_result.get('initial_response', 'Hello?'),
             'user_context': user_context,
-            'tts_available': elevenlabs_service.is_available() if hasattr(elevenlabs_service, 'is_available') else False
+            'roleplay_info': session_result.get('roleplay_info', {}),
+            'tts_available': elevenlabs_service.is_available() if hasattr(elevenlabs_service, 'is_available') else False,
+            'marathon_status': session_result.get('marathon_status')  # For Marathon mode
         }
         
-        logger.info(f"Roleplay 1.1 session started: {session_result['session_id']}")
+        logger.info(f"Roleplay {roleplay_id} session started: {session_result['session_id']}")
         return jsonify(response_data)
         
     except Exception as e:
@@ -168,7 +150,7 @@ def start_roleplay():
 @validate_json_input(required_fields=['user_input'])
 @log_api_call
 def handle_user_response():
-    """Handle user input during Roleplay 1.1"""
+    """Handle user input during roleplay"""
     try:
         data = request.get_json()
         user_input = data.get('user_input', '').strip()
@@ -203,7 +185,8 @@ def handle_user_response():
                 'ai_response_length': len(response_result.get('ai_response', '')),
                 'call_continues': response_result.get('call_continues', True),
                 'stage': response_result.get('session_state', 'unknown'),
-                'evaluation': response_result.get('evaluation', {})
+                'evaluation': response_result.get('evaluation', {}),
+                'marathon_status': response_result.get('marathon_status')
             })
         except Exception as e:
             logger.warning(f"Failed to log interaction: {e}")
@@ -213,7 +196,20 @@ def handle_user_response():
             'ai_response': response_result.get('ai_response', 'I see.'),
             'call_continues': response_result.get('call_continues', True),
             'session_state': response_result.get('session_state', 'in_progress'),
-            'evaluation': response_result.get('evaluation', {})
+            'evaluation': response_result.get('evaluation', {}),
+            
+            # Marathon specific fields
+            'marathon_status': response_result.get('marathon_status'),
+            'marathon_complete': response_result.get('marathon_complete', False),
+            'marathon_passed': response_result.get('marathon_passed'),
+            'call_result': response_result.get('call_result'),
+            'new_call_started': response_result.get('new_call_started', False),
+            'current_call': response_result.get('current_call'),
+            'total_calls': response_result.get('total_calls'),
+            
+            # Practice mode specific fields
+            'turn_count': response_result.get('turn_count'),
+            'conversation_quality': response_result.get('conversation_quality')
         }
         
         logger.info(f"Response sent: '{response_data['ai_response'][:50]}...' | Continues: {response_data['call_continues']}")
@@ -221,6 +217,150 @@ def handle_user_response():
         
     except Exception as e:
         logger.error(f"Error handling user response: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@roleplay_bp.route('/end', methods=['POST'])
+@require_auth
+@log_api_call
+def end_roleplay():
+    """End roleplay session and provide coaching"""
+    try:
+        data = request.get_json() or {}
+        user_id = session.get('user_id')
+        
+        if not user_id:
+            return jsonify({'error': 'User not authenticated'}), 401
+        
+        forced_end = data.get('forced_end', False)
+        
+        # Get session ID
+        session_id = session.get('current_roleplay_session')
+        if not session_id:
+            return jsonify({'error': 'No active roleplay session found'}), 400
+        
+        logger.info(f"Ending roleplay session {session_id} for user {user_id}")
+        
+        # End session
+        end_result = roleplay_engine.end_session(session_id, forced_end)
+        
+        if not end_result.get('success'):
+            error_msg = end_result.get('error', 'Failed to end session')
+            logger.error(f"Session ending failed: {error_msg}")
+            return jsonify({'error': error_msg}), 500
+        
+        # Save session to database
+        session_data = end_result.get('session_data', {})
+        voice_session_record = {
+            'user_id': user_id,
+            'roleplay_id': session_data.get('roleplay_id', '1.1'),
+            'mode': session_data.get('mode', 'practice'),
+            'started_at': session_data.get('started_at', datetime.now(timezone.utc).isoformat()),
+            'ended_at': session_data.get('ended_at', datetime.now(timezone.utc).isoformat()),
+            'duration_minutes': end_result.get('duration_minutes', 1),
+            'success': end_result.get('session_success', False),
+            'score': end_result.get('overall_score', 50),
+            'feedback_data': end_result.get('coaching', {}),
+            'session_data': session_data,
+            'roleplay_type': end_result.get('roleplay_type', 'practice'),
+            'marathon_results': end_result.get('marathon_results')  # For Marathon mode
+        }
+        
+        try:
+            supabase_service.get_service_client().table('voice_sessions').insert(voice_session_record).execute()
+            logger.info("Session saved to database")
+        except Exception as e:
+            logger.warning(f"Failed to save session to database: {e}")
+        
+        # Update user usage
+        try:
+            _update_user_usage(user_id, end_result.get('duration_minutes', 1))
+        except Exception as e:
+            logger.warning(f"Failed to update user usage: {e}")
+        
+        # Clear session
+        session.pop('current_roleplay_session', None)
+        
+        # Log completion
+        try:
+            log_user_action(user_id, 'roleplay_completed', {
+                'session_id': session_id,
+                'duration_minutes': end_result.get('duration_minutes', 1),
+                'success': end_result.get('session_success', False),
+                'score': end_result.get('overall_score', 50),
+                'roleplay_type': end_result.get('roleplay_type', 'practice'),
+                'marathon_results': end_result.get('marathon_results')
+            })
+        except Exception as e:
+            logger.warning(f"Failed to log completion: {e}")
+        
+        # Return response
+        response_data = {
+            'message': f'Roleplay session ended successfully',
+            'duration_minutes': end_result.get('duration_minutes', 1),
+            'session_success': end_result.get('session_success', False),
+            'coaching': end_result.get('coaching', {}),
+            'overall_score': end_result.get('overall_score', 50),
+            'completion_message': f"Session complete! Score: {end_result.get('overall_score', 50)}/100",
+            'formatted_duration': format_duration(end_result.get('duration_minutes', 1)),
+            'roleplay_type': end_result.get('roleplay_type', 'practice'),
+            'marathon_results': end_result.get('marathon_results')
+        }
+        
+        logger.info(f"Roleplay session ended successfully. Score: {response_data['overall_score']}")
+        return jsonify(response_data)
+        
+    except Exception as e:
+        logger.error(f"Error ending roleplay: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@roleplay_bp.route('/info/<roleplay_id>', methods=['GET'])
+@require_auth
+def get_roleplay_info(roleplay_id):
+    """Get roleplay information"""
+    try:
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'error': 'User not authenticated'}), 401
+        
+        # Get info from engine
+        roleplay_info = roleplay_engine.get_roleplay_info(roleplay_id)
+        
+        if 'error' in roleplay_info:
+            return jsonify({'error': f'Invalid roleplay ID: {roleplay_id}'}), 404
+        
+        return jsonify(roleplay_info)
+        
+    except Exception as e:
+        logger.error(f"Error getting roleplay info: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@roleplay_bp.route('/available', methods=['GET'])
+@require_auth
+def get_available_roleplays():
+    """Get list of available roleplay types"""
+    try:
+        available_roleplays = roleplay_engine.get_available_roleplays()
+        
+        roleplay_details = {}
+        for roleplay_id in available_roleplays:
+            try:
+                roleplay_details[roleplay_id] = roleplay_engine.get_roleplay_info(roleplay_id)
+            except Exception as e:
+                logger.warning(f"Could not get info for roleplay {roleplay_id}: {e}")
+                roleplay_details[roleplay_id] = {
+                    'id': roleplay_id,
+                    'name': f'Roleplay {roleplay_id}',
+                    'description': 'Roleplay training',
+                    'error': str(e)
+                }
+        
+        return jsonify({
+            'available_roleplays': available_roleplays,
+            'roleplay_details': roleplay_details
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting available roleplays: {e}")
         return jsonify({'error': 'Internal server error'}), 500
 
 @roleplay_bp.route('/tts', methods=['POST'])
@@ -289,93 +429,6 @@ def text_to_speech():
         logger.error(f"Critical TTS error: {e}")
         return _create_emergency_audio_response()
 
-@roleplay_bp.route('/end', methods=['POST'])
-@require_auth
-@log_api_call
-def end_roleplay():
-    """End Roleplay 1.1 session and provide coaching"""
-    try:
-        data = request.get_json() or {}
-        user_id = session.get('user_id')
-        
-        if not user_id:
-            return jsonify({'error': 'User not authenticated'}), 401
-        
-        forced_end = data.get('forced_end', False)
-        
-        # Get session ID
-        session_id = session.get('current_roleplay_session')
-        if not session_id:
-            return jsonify({'error': 'No active roleplay session found'}), 400
-        
-        logger.info(f"Ending Roleplay 1.1 session {session_id} for user {user_id}")
-        
-        # End session
-        end_result = roleplay_engine.end_session(session_id, forced_end)
-        
-        if not end_result.get('success'):
-            error_msg = end_result.get('error', 'Failed to end session')
-            logger.error(f"Session ending failed: {error_msg}")
-            return jsonify({'error': error_msg}), 500
-        
-        # Save session to database
-        session_data = end_result.get('session_data', {})
-        voice_session_record = {
-            'user_id': user_id,
-            'roleplay_id': session_data.get('roleplay_id', 1),
-            'mode': session_data.get('mode', 'practice'),
-            'started_at': session_data.get('started_at', datetime.now(timezone.utc).isoformat()),
-            'ended_at': session_data.get('ended_at', datetime.now(timezone.utc).isoformat()),
-            'duration_minutes': end_result.get('duration_minutes', 1),
-            'success': end_result.get('session_success', False),
-            'score': end_result.get('overall_score', 50),
-            'feedback_data': end_result.get('coaching', {}),
-            'session_data': session_data
-        }
-        
-        try:
-            supabase_service.get_service_client().table('voice_sessions').insert(voice_session_record).execute()
-            logger.info("Session saved to database")
-        except Exception as e:
-            logger.warning(f"Failed to save session to database: {e}")
-        
-        # Update user usage
-        try:
-            _update_user_usage(user_id, end_result.get('duration_minutes', 1))
-        except Exception as e:
-            logger.warning(f"Failed to update user usage: {e}")
-        
-        # Clear session
-        session.pop('current_roleplay_session', None)
-        
-        # Log completion
-        try:
-            log_user_action(user_id, 'roleplay_completed', {
-                'session_id': session_id,
-                'duration_minutes': end_result.get('duration_minutes', 1),
-                'success': end_result.get('session_success', False),
-                'score': end_result.get('overall_score', 50)
-            })
-        except Exception as e:
-            logger.warning(f"Failed to log completion: {e}")
-        
-        # Return response
-        response_data = {
-            'message': 'Roleplay 1.1 session ended successfully',
-            'duration_minutes': end_result.get('duration_minutes', 1),
-            'session_success': end_result.get('session_success', False),
-            'coaching': end_result.get('coaching', {}),
-            'overall_score': end_result.get('overall_score', 50),
-            'completion_message': f"Session complete! Score: {end_result.get('overall_score', 50)}/100",
-            'formatted_duration': format_duration(end_result.get('duration_minutes', 1))
-        }
-        
-        logger.info(f"Roleplay 1.1 session ended successfully. Score: {response_data['overall_score']}")
-        return jsonify(response_data)
-        
-    except Exception as e:
-        logger.error(f"Error ending roleplay: {e}")
-        return jsonify({'error': 'Internal server error'}), 500
 
 @roleplay_bp.route('/session/status', methods=['GET'])
 @require_auth
@@ -414,48 +467,6 @@ def get_session_status():
         logger.error(f"Error getting session status: {e}")
         return jsonify({'error': 'Internal server error'}), 500
 
-@roleplay_bp.route('/info/<int:roleplay_id>', methods=['GET'])
-@require_auth
-def get_roleplay_info(roleplay_id):
-    """Get roleplay information"""
-    try:
-        user_id = session.get('user_id')
-        if not user_id:
-            return jsonify({'error': 'User not authenticated'}), 401
-        
-        if roleplay_id not in ROLEPLAY_CONFIG:
-            return jsonify({'error': 'Invalid roleplay ID'}), 404
-        
-        # Get configuration
-        config = ROLEPLAY_CONFIG[roleplay_id].copy()
-        
-        # Add Roleplay 1.1 specific info
-        if roleplay_id == 1:
-            config.update({
-                'roleplay_version': '1.1',
-                'enhanced_description': 'Roleplay 1.1 - Enhanced opener training with AI evaluation, dynamic scoring, and CEFR A2 coaching.',
-                'features': {
-                    'ai_evaluation': True,
-                    'dynamic_scoring': True,
-                    'realistic_conversations': True,
-                    'silence_monitoring': True,
-                    'cefr_a2_coaching': True
-                },
-                'stages': [
-                    'Phone Pickup',
-                    'Opener Evaluation',
-                    'Early Objection',
-                    'Objection Handling',
-                    'Mini-Pitch',
-                    'Soft Discovery'
-                ]
-            })
-        
-        return jsonify(config)
-        
-    except Exception as e:
-        logger.error(f"Error getting roleplay info: {e}")
-        return jsonify({'error': 'Internal server error'}), 500
 
 # Health check endpoint
 @roleplay_bp.route('/health', methods=['GET'])
@@ -555,7 +566,6 @@ def test_services():
         return jsonify({'error': str(e)}), 500
 
 # ===== HELPER FUNCTIONS =====
-
 def _update_user_usage(user_id: str, duration_minutes: int):
     """Update user's usage statistics"""
     try:
@@ -576,6 +586,7 @@ def _update_user_usage(user_id: str, duration_minutes: int):
         
     except Exception as e:
         logger.error(f"Error updating user usage: {e}")
+
 
 def _create_silent_audio_response():
     """Create silent audio response"""

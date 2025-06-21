@@ -1,12 +1,519 @@
-<!-- ===== UPDATED ROLEPLAY.HTML TEMPLATE - ROLEPLAY 1.1 COMPLIANT ===== -->
-
+<!-- ===== ENHANCED ROLEPLAY.HTML TEMPLATE - MARATHON MODE SUPPORT ===== -->
 {% extends "base.html" %}
 
-{% block title %}{{ roleplay_config.name if roleplay_config else 'Roleplay 1.1 - Phone Training' }} - Cold Calling Coach{% endblock %}
+{% block title %}{{ roleplay_info.name if roleplay_info else 'Roleplay Training' }} - Cold Calling Coach{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/roleplay.css') }}">
+<style>
+/* Enhanced roleplay-specific styles */
+.training-container {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    position: relative;
+}
 
+.back-to-dashboard {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    color: rgba(255, 255, 255, 0.8);
+    text-decoration: none;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    z-index: 10;
+    transition: color 0.3s ease;
+}
+
+.back-to-dashboard:hover {
+    color: white;
+    text-decoration: none;
+}
+
+.phone-container {
+    width: 100%;
+    max-width: 400px;
+    margin: 60px auto 20px auto;
+    perspective: 1000px;
+}
+
+.phone-screen {
+    background: linear-gradient(135deg, #1e3c72, #2a5298);
+    border-radius: 25px;
+    padding: 20px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    min-height: 600px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+}
+
+.status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: white;
+    font-size: 16px;
+    font-weight: 600;
+    padding: 10px 0 20px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 20px;
+}
+
+.status-icons {
+    display: flex;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.mode-selection {
+    text-align: center;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.mode-selection h3 {
+    color: white;
+    margin-bottom: 10px;
+    font-size: 24px;
+    font-weight: 700;
+}
+
+.roleplay-version {
+    color: rgba(255, 255, 255, 0.8);
+    margin-bottom: 30px;
+    font-size: 16px;
+}
+
+.mode-grid {
+    margin: 20px 0;
+}
+
+.mode-option {
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid transparent;
+    border-radius: 16px;
+    padding: 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin: 12px 0;
+    backdrop-filter: blur(10px);
+}
+
+.mode-option:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: #60a5fa;
+    transform: translateY(-2px);
+}
+
+.mode-option.selected {
+    background: rgba(96, 165, 250, 0.3);
+    border-color: #60a5fa;
+    box-shadow: 0 8px 25px rgba(96, 165, 250, 0.4);
+}
+
+.mode-option h5 {
+    margin: 16px 0 8px 0;
+    color: white;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.mode-option small {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.start-call-btn {
+    width: 100%;
+    padding: 16px 24px;
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 18px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-top: 20px;
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+}
+
+.start-call-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #059669, #047857);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.6);
+}
+
+.start-call-btn:disabled {
+    background: #6b7280;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.call-interface {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+}
+
+.call-status {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.contact-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    margin: 0 auto 12px auto;
+    display: block;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+}
+
+.contact-name {
+    color: white;
+    font-size: 22px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.contact-info {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 14px;
+    margin-bottom: 8px;
+}
+
+.call-status-text {
+    color: #10b981;
+    font-size: 16px;
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.call-duration {
+    color: white;
+    font-size: 18px;
+    font-weight: 600;
+    font-family: 'Courier New', monospace;
+}
+
+.live-transcript {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 20px 0;
+    flex: 1;
+    overflow-y: auto;
+    max-height: 300px;
+    min-height: 150px;
+    text-align: left;
+}
+
+.transcript-message {
+    margin: 8px 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    word-wrap: break-word;
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.transcript-message.user {
+    background: #1e40af;
+    margin-left: 20px;
+    border-top-right-radius: 4px;
+}
+
+.transcript-message.ai {
+    background: #7c3aed;
+    margin-right: 20px;
+    border-top-left-radius: 4px;
+}
+
+.transcript-message .speaker {
+    font-weight: bold;
+    font-size: 12px;
+    margin-bottom: 4px;
+    color: rgba(255, 255, 255, 0.8);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.transcript-message .message {
+    font-size: 14px;
+    line-height: 1.4;
+    color: white;
+}
+
+.call-controls {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    padding: 20px 0;
+}
+
+.control-btn {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+}
+
+.control-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.1);
+}
+
+.control-btn.mic {
+    background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.control-btn.mic:hover {
+    background: linear-gradient(135deg, #059669, #047857);
+}
+
+.end-call-container {
+    margin-top: 10px;
+}
+
+.end-call-btn {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    border: none;
+    color: white;
+    font-size: 32px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin: 0 auto;
+    display: block;
+    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+}
+
+.end-call-btn:hover {
+    background: linear-gradient(135deg, #dc2626, #b91c1c);
+    transform: scale(1.1);
+    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.6);
+}
+
+.feedback-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+}
+
+.feedback-header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.roleplay-badge {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    display: inline-block;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.score-circle {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    font-size: 24px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px auto;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+}
+
+.score-circle.excellent {
+    background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.score-circle.good {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+}
+
+.score-circle.needs-improvement {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+.feedback-category {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 8px 0;
+    text-align: left;
+    backdrop-filter: blur(10px);
+}
+
+.feedback-category h5 {
+    color: white;
+    margin-bottom: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+}
+
+.feedback-category p {
+    color: rgba(255, 255, 255, 0.9);
+    margin: 0;
+    line-height: 1.5;
+    font-size: 14px;
+}
+
+.feedback-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+.feedback-btn {
+    flex: 1;
+    padding: 12px 20px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 500;
+    backdrop-filter: blur(10px);
+}
+
+.feedback-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-1px);
+}
+
+.feedback-btn.primary {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    border-color: #3b82f6;
+}
+
+.feedback-btn.primary:hover {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+}
+
+/* Voice error styling */
+#voice-error {
+    background: rgba(239, 68, 68, 0.9);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-weight: 500;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .training-container {
+        padding: 10px;
+    }
+    
+    .phone-container {
+        max-width: 350px;
+        margin: 40px auto 10px auto;
+    }
+    
+    .phone-screen {
+        padding: 16px;
+        min-height: 500px;
+    }
+    
+    .mode-option {
+        padding: 20px 16px;
+    }
+    
+    .mode-option h5 {
+        font-size: 18px;
+    }
+    
+    .start-call-btn {
+        padding: 14px 20px;
+        font-size: 16px;
+    }
+    
+    .feedback-actions {
+        flex-direction: column;
+    }
+    
+    .back-to-dashboard {
+        position: relative;
+        top: auto;
+        left: auto;
+        margin-bottom: 20px;
+        align-self: flex-start;
+    }
+}
+
+@media (max-width: 480px) {
+    .phone-container {
+        max-width: 320px;
+    }
+    
+    .phone-screen {
+        padding: 12px;
+        border-radius: 20px;
+    }
+    
+    .control-btn {
+        width: 50px;
+        height: 50px;
+        font-size: 20px;
+    }
+    
+    .end-call-btn {
+        width: 70px;
+        height: 70px;
+        font-size: 28px;
+    }
+}
+</style>
 {% endblock %}
 
 {% block content %}
@@ -16,22 +523,7 @@
         <i class="fas fa-arrow-left me-2"></i>Dashboard
     </a>
 
-    <!-- Roleplay 1.1 Progress Indicator -->
-    <div class="progress-indicator" id="progress-indicator">
-        <div class="progress-step" id="step-opener">
-            <i class="fas fa-phone me-2"></i>Opener
-        </div>
-        <div class="progress-step" id="step-objection">
-            <i class="fas fa-exclamation-triangle me-2"></i>Objection
-        </div>
-        <div class="progress-step" id="step-pitch">
-            <i class="fas fa-bullhorn me-2"></i>Mini-Pitch
-        </div>
-        <div class="progress-step" id="step-discovery">
-            <i class="fas fa-search me-2"></i>Discovery
-        </div>
-    </div>
-
+    <!-- Phone Container -->
     <div class="phone-container" id="phone-container">
         <div class="phone-screen">
             <!-- Status Bar -->
@@ -46,27 +538,18 @@
 
             <!-- Mode Selection Screen -->
             <div class="mode-selection" id="mode-selection">
-                <h3 id="roleplay-title">Choose Training Mode</h3>
-                <div class="roleplay-version">Roleplay 1.1 - Opener + Objection + Mini-Pitch</div>
-                <div class="mode-grid">
-                    <div class="mode-option roleplay-11" data-mode="practice">
-                        <i class="fas fa-user-graduate fa-2x" style="color: #60a5fa;"></i>
-                        <h5>Practice Mode</h5>
-                        <small>Single call with detailed CEFR A2 coaching</small>
-                    </div>
-                    <div class="mode-option" data-mode="marathon">
-                        <i class="fas fa-running fa-2x" style="color: #fbbf24;"></i>
-                        <h5>Marathon Mode</h5>
-                        <small>10 calls, need 6 to pass</small>
-                    </div>
-                    <div class="mode-option" data-mode="legend">
-                        <i class="fas fa-trophy fa-2x" style="color: #f87171;"></i>
-                        <h5>Legend Mode</h5>
-                        <small>6 perfect calls (sudden death)</small>
+                <h3 id="roleplay-title">Loading...</h3>
+                <div class="roleplay-version" id="roleplay-version">Initializing...</div>
+                <div class="mode-grid" id="mode-grid">
+                    <!-- Mode options will be populated by JavaScript -->
+                    <div class="mode-option" style="opacity: 0.5;">
+                        <i class="fas fa-spinner fa-spin fa-2x" style="color: #60a5fa; margin-bottom: 12px;"></i>
+                        <h5>Loading...</h5>
+                        <small>Please wait while we set up your training</small>
                     </div>
                 </div>
                 <button class="start-call-btn" id="start-call-btn" disabled>
-                    Select a mode to start Roleplay 1.1 call
+                    Loading...
                 </button>
             </div>
 
@@ -84,16 +567,20 @@
 
                 <!-- Live Transcript -->
                 <div class="live-transcript" id="live-transcript">
-                    Waiting for Roleplay 1.1 conversation...
+                    <div style="text-align: center; color: rgba(255, 255, 255, 0.6); padding: 20px;">
+                        <i class="fas fa-microphone fa-2x" style="margin-bottom: 10px;"></i>
+                        <div>Waiting for conversation...</div>
+                        <small>Speak clearly into your microphone</small>
+                    </div>
                 </div>
 
                 <!-- Call Controls -->
                 <div style="margin-top: auto;">
                     <div class="call-controls">
                         <button class="control-btn mute" id="mute-btn" title="Mute">
-                            <i class="fas fa-microphone"></i>
+                            <i class="fas fa-microphone-slash"></i>
                         </button>
-                        <button class="control-btn mic" id="mic-btn" title="Hold to speak (10s=impatience, 15s=hangup)">
+                        <button class="control-btn mic" id="mic-btn" title="Voice recognition">
                             <i class="fas fa-microphone"></i>
                         </button>
                         <button class="control-btn speaker" id="speaker-btn" title="Speaker">
@@ -102,7 +589,7 @@
                     </div>
                     
                     <div class="end-call-container">
-                        <button class="end-call-btn" id="end-call-btn" title="End Roleplay 1.1 call">
+                        <button class="end-call-btn" id="end-call-btn" title="End call">
                             <i class="fas fa-phone"></i>
                         </button>
                     </div>
@@ -110,15 +597,15 @@
             </div>
 
             <!-- Feedback Section -->
-            <div class="feedback-section" id="feedback-section">
+            <div class="feedback-section" id="feedback-section" style="display: none;">
                 <div class="feedback-header">
-                    <div class="roleplay-badge">Roleplay 1.1</div>
+                    <div class="roleplay-badge" id="roleplay-badge">Training Complete</div>
                     <div class="score-circle" id="score-circle">85</div>
-                    <h4 style="color: white; margin: 0;">Call Complete!</h4>
-                    <p style="color: rgba(255,255,255,0.7); margin: 10px 0;">Here's your CEFR A2 coaching feedback</p>
+                    <h4 style="color: white; margin: 0 0 8px 0; font-size: 20px;">Great Job!</h4>
+                    <p style="color: rgba(255,255,255,0.7); margin: 0; font-size: 14px;">Here's your coaching feedback</p>
                 </div>
                 
-                <div id="feedback-content">
+                <div id="feedback-content" style="flex: 1; overflow-y: auto;">
                     <!-- Feedback will be populated here -->
                 </div>
                 
@@ -127,7 +614,7 @@
                         <i class="fas fa-redo me-2"></i>Try Again
                     </button>
                     <button class="feedback-btn primary" id="new-mode-btn">
-                        <i class="fas fa-phone me-2"></i>New Call
+                        <i class="fas fa-home me-2"></i>Dashboard
                     </button>
                 </div>
             </div>
@@ -137,7 +624,7 @@
 
 <!-- Hidden Data -->
 <div id="roleplay-data" 
-     data-roleplay-id="{{ roleplay_id if roleplay_id else 1 }}"
+     data-roleplay-id="{{ roleplay_id if roleplay_id else '1.1' }}"
      data-user-authenticated="{{ 'true' if session.get('user_id') else 'false' }}"
      style="display: none;">
 </div>
@@ -150,98 +637,80 @@
 {% endblock %}
 
 {% block extra_js %}
+<!-- Load voice handler first -->
 <script src="{{ url_for('static', filename='js/voice-handler.js') }}?v={{ get_file_version('js/voice-handler.js') }}"></script>
-<script src="{{ url_for('static', filename='js/roleplay.js') }}?v={{ get_file_version('js/roleplay.js') }}"></script>
+
+<!-- Load simple roleplay manager -->
+<script src="{{ url_for('static', filename='js/simple-roleplay-manager.js') }}?v=1"></script>
+
+<!-- Initialization and fallback -->
 <script>
-// Additional Roleplay 1.1 specific JavaScript
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('Roleplay 1.1 page loaded');
-    
-    // Add Roleplay 1.1 indicators to the page
-    const phoneContainer = document.getElementById('phone-container');
-    const statusBar = document.getElementById('status-bar');
-    
-    // Mark as Roleplay 1.1 active
-    if (phoneContainer) {
-        phoneContainer.classList.add('roleplay-11-active');
+console.log('🎬 Roleplay page initialization started');
+
+// Set up global error handling
+window.addEventListener('error', (e) => {
+    if (e.message && (e.message.includes('roleplay') || e.message.includes('voice'))) {
+        console.error('🚨 Roleplay system error:', e);
     }
-    
-    if (statusBar) {
-        statusBar.classList.add('roleplay-11-active');
-    }
-    
-    // Show progress indicator if call is active
-    const progressIndicator = document.getElementById('progress-indicator');
-    
-    // Monitor for call state changes to update progress
-    const observer = new MutationObserver((mutations) => {
-        mutations.forEach((mutation) => {
-            if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-                const callInterface = document.getElementById('call-interface');
-                if (callInterface && callInterface.style.display !== 'none') {
-                    progressIndicator.classList.add('show');
-                } else {
-                    progressIndicator.classList.remove('show');
-                }
-            }
-        });
-    });
-    
-    const callInterface = document.getElementById('call-interface');
-    if (callInterface) {
-        observer.observe(callInterface, { attributes: true });
-    }
-    
-    // Update progress steps based on roleplay manager state
-    window.updateRoleplay11Progress = (stage) => {
-        const steps = ['opener', 'objection', 'pitch', 'discovery'];
-        const currentIndex = steps.indexOf(stage);
-        
-        steps.forEach((step, index) => {
-            const element = document.getElementById(`step-${step}`);
-            if (element) {
-                element.classList.remove('completed', 'current', 'pending');
-                
-                if (index < currentIndex) {
-                    element.classList.add('completed');
-                } else if (index === currentIndex) {
-                    element.classList.add('current');
-                } else {
-                    element.classList.add('pending');
-                }
-            }
-        });
-    };
-    
-    // Initialize progress with opener as current
-    window.updateRoleplay11Progress('opener');
-    
-    // Handle window beforeunload for Roleplay 1.1
-    window.addEventListener('beforeunload', (e) => {
-        if (window.roleplayManager && window.roleplayManager.isActive) {
-            e.preventDefault();
-            e.returnValue = 'Are you sure you want to leave? Your Roleplay 1.1 session will be lost.';
-            return e.returnValue;
-        }
-    });
-    
-    console.log('Roleplay 1.1 enhancements loaded successfully');
 });
 
-// Global function to update score circle color based on score
-window.updateScoreCircleColor = (score) => {
-    const scoreCircle = document.getElementById('score-circle');
-    if (scoreCircle) {
-        scoreCircle.classList.remove('excellent', 'good', 'needs-improvement');
-        
-        if (score >= 85) {
-            scoreCircle.classList.add('excellent');
-        } else if (score >= 70) {
-            scoreCircle.classList.add('good');
+// Fallback initialization
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('📄 DOM loaded, checking roleplay manager...');
+    
+    // Give scripts time to load
+    setTimeout(() => {
+        if (!window.roleplayManager) {
+            console.warn('⚠️ Roleplay manager not initialized, creating emergency fallback...');
+            
+            // Create emergency fallback
+            window.roleplayManager = {
+                isActive: false,
+                showError: function(message) {
+                    console.error('📢 Fallback error:', message);
+                    
+                    const errorDiv = document.getElementById('voice-error');
+                    const errorText = document.getElementById('voice-error-text');
+                    
+                    if (errorDiv && errorText) {
+                        errorText.textContent = message;
+                        errorDiv.style.display = 'block';
+                        
+                        setTimeout(() => {
+                            errorDiv.style.display = 'none';
+                        }, 8000);
+                    }
+                }
+            };
+            
+            // Show error message
+            window.roleplayManager.showError('Roleplay system loading failed. Please refresh the page or check console for errors.');
+            
+            // Update UI to show error state
+            const titleElement = document.getElementById('roleplay-title');
+            const versionElement = document.getElementById('roleplay-version');
+            const startButton = document.getElementById('start-call-btn');
+            
+            if (titleElement) titleElement.textContent = 'System Error';
+            if (versionElement) versionElement.textContent = 'Please refresh the page';
+            if (startButton) {
+                startButton.textContent = 'Refresh Page';
+                startButton.disabled = false;
+                startButton.onclick = () => window.location.reload();
+            }
         } else {
-            scoreCircle.classList.add('needs-improvement');
+            console.log('✅ Roleplay manager initialized successfully!');
         }
-    }
-};
+    }, 2000);
+});
+
+// Debug info for troubleshooting
+console.log('🔍 Debug info:', {
+    url: window.location.href,
+    userAgent: navigator.userAgent.substring(0, 50),
+    timestamp: new Date().toISOString()
+});
+
+console.log('📜 Roleplay template script loaded');
 </script>
 {% endblock %}

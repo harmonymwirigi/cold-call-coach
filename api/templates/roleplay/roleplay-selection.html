@@ -1,0 +1,385 @@
+<!-- ===== templates/roleplay/roleplay-selection.html ===== -->
+
+{% extends "base.html" %}
+
+{% block title %}{{ roleplay_info.name }} - Choose Mode - Cold Calling Coach{% endblock %}
+
+{% block extra_css %}
+<style>
+.selection-container {
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+}
+
+.back-link {
+    color: #6c757d;
+    text-decoration: none;
+    margin-bottom: 2rem;
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.9rem;
+}
+
+.back-link:hover {
+    color: #495057;
+}
+
+.roleplay-header {
+    text-align: center;
+    margin-bottom: 3rem;
+}
+
+.roleplay-header h1 {
+    color: #2c3e50;
+    margin-bottom: 0.5rem;
+}
+
+.roleplay-header p {
+    color: #6c757d;
+    font-size: 1.1rem;
+}
+
+.modes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 2rem;
+    margin-bottom: 3rem;
+}
+
+.mode-card {
+    background: white;
+    border-radius: 16px;
+    padding: 2rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 3px solid transparent;
+    position: relative;
+    overflow: hidden;
+}
+
+.mode-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+}
+
+.mode-card.practice-mode {
+    border-color: #28a745;
+}
+
+.mode-card.marathon-mode {
+    border-color: #ffc107;
+}
+
+.mode-card.legend-mode {
+    border-color: #dc3545;
+}
+
+.mode-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #28a745, #20c997);
+}
+
+.mode-card.marathon-mode::before {
+    background: linear-gradient(90deg, #ffc107, #fd7e14);
+}
+
+.mode-card.legend-mode::before {
+    background: linear-gradient(90deg, #dc3545, #e83e8c);
+}
+
+.mode-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+.mode-icon.practice { color: #28a745; }
+.mode-icon.marathon { color: #ffc107; }
+.mode-icon.legend { color: #dc3545; }
+
+.mode-title {
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    color: #2c3e50;
+    text-align: center;
+}
+
+.mode-description {
+    color: #6c757d;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    line-height: 1.6;
+}
+
+.mode-features {
+    list-style: none;
+    padding: 0;
+    margin-bottom: 1.5rem;
+}
+
+.mode-features li {
+    padding: 0.25rem 0;
+    color: #495057;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+}
+
+.mode-features li::before {
+    content: "✓";
+    color: #28a745;
+    font-weight: bold;
+    margin-right: 0.5rem;
+}
+
+.mode-button {
+    width: 100%;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    text-decoration: none;
+    text-align: center;
+    transition: all 0.3s ease;
+    display: block;
+}
+
+.mode-button.practice {
+    background: #28a745;
+    color: white;
+}
+
+.mode-button.practice:hover {
+    background: #218838;
+    color: white;
+}
+
+.mode-button.marathon {
+    background: #ffc107;
+    color: #212529;
+}
+
+.mode-button.marathon:hover {
+    background: #e0a800;
+    color: #212529;
+}
+
+.mode-button.legend {
+    background: #dc3545;
+    color: white;
+}
+
+.mode-button.legend:hover {
+    background: #c82333;
+    color: white;
+}
+
+.unlock-badge {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.unlock-badge.unlocked {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.unlock-badge.locked {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.mode-card.locked {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.mode-card.locked:hover {
+    transform: none;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+@media (max-width: 768px) {
+    .modes-grid {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+    
+    .mode-card {
+        padding: 1.5rem;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="selection-container">
+    <!-- Back to Dashboard -->
+    <a href="/dashboard" class="back-link">
+        <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
+    </a>
+
+    <!-- Roleplay Header -->
+    <div class="roleplay-header">
+        <h1>{{ roleplay_info.name }}</h1>
+        <p>{{ roleplay_info.description }}</p>
+        <p class="text-muted">Choose your training mode to get started</p>
+    </div>
+
+    <!-- Modes Grid -->
+    <div class="modes-grid">
+        {% if main_roleplay_id == '1' %}
+            <!-- Practice Mode 1.1 -->
+            <div class="mode-card practice-mode" onclick="window.location.href='/roleplay/1.1'">
+                <div class="unlock-badge unlocked">Unlocked</div>
+                <div class="mode-icon practice">
+                    <i class="fas fa-user-graduate"></i>
+                </div>
+                <div class="mode-title">Practice Mode</div>
+                <div class="mode-description">
+                    Single call with detailed CEFR A2 coaching. Perfect for learning the fundamentals.
+                </div>
+                <ul class="mode-features">
+                    <li>One-on-one roleplay session</li>
+                    <li>Detailed performance feedback</li>
+                    <li>Grammar and vocabulary coaching</li>
+                    <li>Natural conversation flow</li>
+                    <li>Pronunciation guidance</li>
+                </ul>
+                <a href="/roleplay/1.1" class="mode-button practice">
+                    <i class="fas fa-play me-2"></i>Start Practice Mode
+                </a>
+            </div>
+
+            <!-- Marathon Mode 1.2 -->
+            <div class="mode-card marathon-mode" onclick="window.location.href='/roleplay/1.2'">
+                <div class="unlock-badge unlocked">Unlocked</div>
+                <div class="mode-icon marathon">
+                    <i class="fas fa-running"></i>
+                </div>
+                <div class="mode-title">Marathon Mode</div>
+                <div class="mode-description">
+                    10 consecutive calls - pass 6 to complete. Build stamina and consistency.
+                </div>
+                <ul class="mode-features">
+                    <li>10 calls in succession</li>
+                    <li>Need 6 successful calls to pass</li>
+                    <li>Random hang-ups included</li>
+                    <li>Builds conversation endurance</li>
+                    <li>Aggregated performance report</li>
+                </ul>
+                <a href="/roleplay/1.2" class="mode-button marathon">
+                    <i class="fas fa-fire me-2"></i>Start Marathon Mode
+                </a>
+            </div>
+
+            <!-- Legend Mode 1.3 -->
+            <div class="mode-card legend-mode" onclick="window.location.href='/roleplay/1.3'">
+                <div class="unlock-badge locked">Locked</div>
+                <div class="mode-icon legend">
+                    <i class="fas fa-crown"></i>
+                </div>
+                <div class="mode-title">Legend Mode</div>
+                <div class="mode-description">
+                    6 perfect calls in a row. The ultimate challenge for sales legends.
+                </div>
+                <ul class="mode-features">
+                    <li>6 consecutive perfect calls</li>
+                    <li>No mistakes allowed</li>
+                    <li>Unlock after Marathon success</li>
+                    <li>Ultimate bragging rights</li>
+                    <li>Elite performance certification</li>
+                </ul>
+                <div class="mode-button legend" style="opacity: 0.5; cursor: not-allowed;">
+                    <i class="fas fa-lock me-2"></i>Complete Marathon First
+                </div>
+            </div>
+
+        {% elif main_roleplay_id == '2' %}
+            <!-- Practice Mode 2.1 -->
+            <div class="mode-card practice-mode" onclick="window.location.href='/roleplay/2.1'">
+                <div class="unlock-badge locked">Locked</div>
+                <div class="mode-icon practice">
+                    <i class="fas fa-user-graduate"></i>
+                </div>
+                <div class="mode-title">Practice Mode</div>
+                <div class="mode-description">
+                    Master your pitch and handle advanced objections with detailed coaching.
+                </div>
+                <ul class="mode-features">
+                    <li>Advanced pitch practice</li>
+                    <li>Complex objection handling</li>
+                    <li>Meeting closing techniques</li>
+                    <li>Detailed performance feedback</li>
+                    <li>Advanced conversation flows</li>
+                </ul>
+                <div class="mode-button practice" style="opacity: 0.5; cursor: not-allowed;">
+                    <i class="fas fa-lock me-2"></i>Complete Roleplay 1 First
+                </div>
+            </div>
+
+            <!-- Marathon Mode 2.2 -->
+            <div class="mode-card marathon-mode" onclick="window.location.href='/roleplay/2.2'">
+                <div class="unlock-badge locked">Locked</div>
+                <div class="mode-icon marathon">
+                    <i class="fas fa-running"></i>
+                </div>
+                <div class="mode-title">Marathon Mode</div>
+                <div class="mode-description">
+                    10 advanced calls with complex scenarios. Master the full sales process.
+                </div>
+                <ul class="mode-features">
+                    <li>10 advanced scenario calls</li>
+                    <li>Complex objection patterns</li>
+                    <li>Full sales cycle practice</li>
+                    <li>Advanced closing techniques</li>
+                    <li>Professional-level challenges</li>
+                </ul>
+                <div class="mode-button marathon" style="opacity: 0.5; cursor: not-allowed;">
+                    <i class="fas fa-lock me-2"></i>Complete Roleplay 1 First
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Additional Info -->
+    <div class="text-center text-muted">
+        <p><i class="fas fa-info-circle me-1"></i>
+            Not sure which mode to choose? Start with Practice Mode to learn the basics.
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Roleplay selection page loaded for:', '{{ main_roleplay_id }}');
+    
+    // Add click handlers for locked modes
+    document.querySelectorAll('.mode-card.locked').forEach(card => {
+        card.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            alert('This mode is locked. Complete the previous requirements to unlock it.');
+        });
+    });
+});
+</script>
+{% endblock %}

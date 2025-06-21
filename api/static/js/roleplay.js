@@ -1,4 +1,4 @@
-// ===== NATURAL CONVERSATION ROLEPLAY MANAGER - roleplay.js =====
+// ===== FIXED roleplay.js - Remove parseInt() for roleplay IDs =====
 
 class PhoneRoleplayManager {
     constructor() {
@@ -61,13 +61,14 @@ class PhoneRoleplayManager {
     loadRoleplayData() {
         const roleplayData = document.getElementById('roleplay-data');
         if (roleplayData) {
-            const roleplayId = parseInt(roleplayData.dataset.roleplayId);
+            // FIXED: Don't use parseInt() - keep roleplay ID as string
+            const roleplayId = roleplayData.dataset.roleplayId || '1.1';
             const isAuthenticated = roleplayData.dataset.userAuthenticated === 'true';
             
             console.log('📊 Roleplay data:', { roleplayId, isAuthenticated });
             
             if (!isAuthenticated) {
-                this.showError('Please log in to access Roleplay 1.1 training');
+                this.showError('Please log in to access Roleplay training');
                 setTimeout(() => {
                     window.location.href = '/login';
                 }, 2000);
@@ -82,22 +83,36 @@ class PhoneRoleplayManager {
 
     async loadRoleplayInfo(roleplayId) {
         try {
-            console.log('📡 Loading Roleplay 1.1 info for ID:', roleplayId);
+            console.log('📡 Loading Roleplay info for ID:', roleplayId);
             const response = await this.apiCall(`/api/roleplay/info/${roleplayId}`);
             if (response.ok) {
                 const data = await response.json();
-                console.log('✅ Roleplay 1.1 info loaded:', data);
+                console.log('✅ Roleplay info loaded:', data);
                 this.updateRoleplayUI(data);
+            } else {
+                console.error('❌ Failed to load roleplay info:', await response.text());
+                // Fallback to default if API fails
+                this.updateRoleplayUI({
+                    name: `Roleplay ${roleplayId}`,
+                    job_title: 'CTO',
+                    industry: 'Technology'
+                });
             }
         } catch (error) {
-            console.error('❌ Error loading Roleplay 1.1 info:', error);
+            console.error('❌ Error loading Roleplay info:', error);
+            // Fallback to default
+            this.updateRoleplayUI({
+                name: `Roleplay ${roleplayId}`,
+                job_title: 'CTO', 
+                industry: 'Technology'
+            });
         }
     }
 
     updateRoleplayUI(roleplayData) {
         const titleElement = document.getElementById('roleplay-title');
         if (titleElement) {
-            titleElement.textContent = 'Natural Roleplay 1.1: ' + (roleplayData.name || 'Phone Training');
+            titleElement.textContent = 'Natural Conversation: ' + (roleplayData.name || 'Phone Training');
         }
 
         this.updateProspectInfo(roleplayData);
@@ -119,7 +134,7 @@ class PhoneRoleplayManager {
         if (avatarElement) {
             const avatarUrl = this.getAvatarUrl(roleplayData.job_title || 'CTO');
             avatarElement.src = avatarUrl;
-            avatarElement.alt = `Natural Roleplay 1.1 prospect`;
+            avatarElement.alt = `Natural Roleplay prospect`;
             
             avatarElement.onerror = function() {
                 this.src = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face';
@@ -269,7 +284,7 @@ class PhoneRoleplayManager {
     selectMode(mode) {
         if (!mode || this.isProcessing) return;
         
-        console.log('✅ Natural Roleplay 1.1 mode selected:', mode);
+        console.log('✅ Natural Roleplay mode selected:', mode);
         this.selectedMode = mode;
         
         // Update UI
@@ -286,7 +301,7 @@ class PhoneRoleplayManager {
         const startBtn = document.getElementById('start-call-btn');
         if (startBtn) {
             startBtn.disabled = false;
-            startBtn.textContent = `Start Natural Roleplay 1.1 ${this.capitalizeFirst(mode)}`;
+            startBtn.textContent = `Start Natural Roleplay ${this.capitalizeFirst(mode)}`;
         }
     }
 
@@ -298,17 +313,17 @@ class PhoneRoleplayManager {
 
         const roleplayId = this.getRoleplayId();
         if (!roleplayId) {
-            this.showError('Invalid Roleplay 1.1 configuration');
+            this.showError('Invalid Roleplay configuration');
             return;
         }
 
-        console.log('🚀 Starting Natural Roleplay 1.1 call:', { roleplayId, mode: this.selectedMode });
+        console.log('🚀 Starting Natural Roleplay call:', { roleplayId, mode: this.selectedMode });
 
         this.isProcessing = true;
         const startBtn = document.getElementById('start-call-btn');
         if (startBtn) {
             startBtn.disabled = true;
-            startBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Connecting to Natural Roleplay 1.1...';
+            startBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Connecting to Natural Roleplay...';
         }
 
         try {
@@ -322,7 +337,7 @@ class PhoneRoleplayManager {
 
             if (response.ok) {
                 const data = await response.json();
-                console.log('✅ Natural Roleplay 1.1 started successfully:', data);
+                console.log('✅ Natural Roleplay started successfully:', data);
                 
                 this.currentSession = data;
                 this.isActive = true;
@@ -331,24 +346,24 @@ class PhoneRoleplayManager {
                 
             } else {
                 const errorData = await response.json();
-                console.error('❌ Failed to start Natural Roleplay 1.1:', errorData);
-                this.showError(errorData.error || 'Failed to start Natural Roleplay 1.1 call');
+                console.error('❌ Failed to start Natural Roleplay:', errorData);
+                this.showError(errorData.error || 'Failed to start Natural Roleplay call');
             }
         } catch (error) {
-            console.error('❌ Error starting Natural Roleplay 1.1:', error);
+            console.error('❌ Error starting Natural Roleplay:', error);
             this.showError('Network error. Please try again.');
         } finally {
             this.isProcessing = false;
             
             if (!this.isActive && startBtn) {
                 startBtn.disabled = false;
-                startBtn.textContent = `Start Natural Roleplay 1.1 ${this.capitalizeFirst(this.selectedMode)}`;
+                startBtn.textContent = `Start Natural Roleplay ${this.capitalizeFirst(this.selectedMode)}`;
             }
         }
     }
 
     async startPhoneCallSequence(initialResponse) {
-        console.log('📞 Starting Natural Roleplay 1.1 call sequence...');
+        console.log('📞 Starting Natural Roleplay call sequence...');
         
         // Hide mode selection, show call interface
         document.getElementById('mode-selection').style.display = 'none';
@@ -381,7 +396,7 @@ class PhoneRoleplayManager {
     }
 
     async connectedState(initialResponse) {
-        console.log('✅ Connected - Natural Roleplay 1.1 active!');
+        console.log('✅ Connected - Natural Roleplay active!');
         this.callState = 'connected';
         this.updateCallStatus('Connected - Natural Conversation Active', 'connected');
         
@@ -389,7 +404,7 @@ class PhoneRoleplayManager {
         const avatar = document.getElementById('contact-avatar');
         if (avatar) {
             avatar.classList.remove('calling');
-            avatar.classList.add('roleplay-11-active');
+            avatar.classList.add('roleplay-active');
         }
         
         // Start call timer
@@ -400,7 +415,7 @@ class PhoneRoleplayManager {
         const transcript = document.getElementById('live-transcript');
         if (transcript) {
             transcript.classList.add('show');
-            transcript.classList.add('roleplay-11-active');
+            transcript.classList.add('roleplay-active');
         }
         
         // Enable natural conversation features
@@ -685,7 +700,7 @@ class PhoneRoleplayManager {
             sender: sender,
             message: message,
             timestamp: new Date(),
-            roleplay_version: '1.1',
+            roleplay_version: 'natural_conversation',
             natural_conversation: true
         });
         
@@ -705,10 +720,10 @@ class PhoneRoleplayManager {
             return;
         }
 
-        console.log('📞 Ending Natural Roleplay 1.1 call, success:', success);
+        console.log('📞 Ending Natural Roleplay call, success:', success);
 
         this.callState = 'ended';
-        this.updateCallStatus('Natural Roleplay 1.1 Call ended', 'ended');
+        this.updateCallStatus('Natural Roleplay Call ended', 'ended');
         this.isActive = false;
         this.aiIsSpeaking = false;
         
@@ -729,12 +744,12 @@ class PhoneRoleplayManager {
         const transcript = document.getElementById('live-transcript');
         if (transcript) {
             transcript.classList.remove('show');
-            transcript.classList.remove('roleplay-11-active');
+            transcript.classList.remove('roleplay-active');
         }
 
         const avatar = document.getElementById('contact-avatar');
         if (avatar) {
-            avatar.classList.remove('roleplay-11-active');
+            avatar.classList.remove('roleplay-active');
         }
 
         try {
@@ -768,25 +783,25 @@ class PhoneRoleplayManager {
     }
 
     showFeedback(coaching, score = 75) {
-        console.log('📊 Showing Natural Roleplay 1.1 feedback');
+        console.log('📊 Showing Natural Roleplay feedback');
         
         document.getElementById('call-interface').style.display = 'none';
         document.getElementById('feedback-section').style.display = 'flex';
         
         const feedbackHeader = document.querySelector('.feedback-header h4');
         if (feedbackHeader) {
-            feedbackHeader.textContent = 'Natural Roleplay 1.1 Complete!';
+            feedbackHeader.textContent = 'Natural Roleplay Complete!';
         }
         
         if (coaching) {
-            this.populateRoleplay11Feedback(coaching);
+            this.populateNaturalFeedback(coaching);
         }
         
         this.animateScore(score);
         this.updateScoreCircleColor(score);
     }
 
-    populateRoleplay11Feedback(coaching) {
+    populateNaturalFeedback(coaching) {
         const content = document.getElementById('feedback-content');
         if (!content) return;
         
@@ -814,7 +829,7 @@ class PhoneRoleplayManager {
         } else {
             content.innerHTML = `
                 <div class="feedback-item">
-                    <h6><i class="fas fa-info-circle me-2"></i>Natural Roleplay 1.1 Complete</h6>
+                    <h6><i class="fas fa-info-circle me-2"></i>Natural Roleplay Complete</h6>
                     <p style="margin: 0; font-size: 14px;">Your natural conversation call is complete. Great job!</p>
                 </div>
             `;
@@ -854,7 +869,7 @@ class PhoneRoleplayManager {
     }
 
     tryAgain() {
-        console.log('🔄 Trying again with Natural Roleplay 1.1');
+        console.log('🔄 Trying again with Natural Roleplay');
         this.showModeSelection();
         
         if (this.selectedMode) {
@@ -880,7 +895,7 @@ class PhoneRoleplayManager {
         const startBtn = document.getElementById('start-call-btn');
         if (startBtn) {
             startBtn.disabled = true;
-            startBtn.textContent = 'Select a mode for Natural Roleplay 1.1';
+            startBtn.textContent = 'Select a mode for Natural Roleplay';
         }
     }
 
@@ -891,7 +906,7 @@ class PhoneRoleplayManager {
         const alertDiv = document.createElement('div');
         alertDiv.className = 'alert alert-danger position-fixed';
         alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; max-width: 300px;';
-        alertDiv.innerHTML = `<strong>Natural Roleplay 1.1 Error:</strong> ${message}`;
+        alertDiv.innerHTML = `<strong>Natural Roleplay Error:</strong> ${message}`;
         
         document.body.appendChild(alertDiv);
         
@@ -904,7 +919,8 @@ class PhoneRoleplayManager {
 
     getRoleplayId() {
         const roleplayData = document.getElementById('roleplay-data');
-        return roleplayData ? parseInt(roleplayData.dataset.roleplayId) : 1;
+        // FIXED: Don't use parseInt() - return string directly
+        return roleplayData ? (roleplayData.dataset.roleplayId || '1.1') : '1.1';
     }
 
     async apiCall(endpoint, options = {}) {
