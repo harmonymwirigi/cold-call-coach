@@ -1,0 +1,443 @@
+<!-- ===== templates/roleplay/roleplay-1-selection.html ===== -->
+{% extends "base.html" %}
+
+{% block title %}Roleplay 1: Opener & Early Objections - Cold Calling Coach{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/roleplay.css') }}">
+<style>
+.selection-container {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+}
+
+.back-to-dashboard {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    color: rgba(255, 255, 255, 0.8);
+    text-decoration: none;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    transition: color 0.3s ease;
+}
+
+.back-to-dashboard:hover {
+    color: white;
+    text-decoration: none;
+}
+
+.selection-card {
+    background: linear-gradient(135deg, #1e3c72, #2a5298);
+    border-radius: 25px;
+    padding: 40px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    max-width: 800px;
+    width: 100%;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    text-align: center;
+}
+
+.roleplay-header {
+    margin-bottom: 40px;
+}
+
+.roleplay-title {
+    color: white;
+    font-size: 32px;
+    font-weight: 700;
+    margin-bottom: 10px;
+}
+
+.roleplay-description {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 18px;
+    margin-bottom: 30px;
+}
+
+.modes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.mode-card {
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid transparent;
+    border-radius: 16px;
+    padding: 30px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+    position: relative;
+}
+
+.mode-card:hover:not(.disabled) {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: #60a5fa;
+    transform: translateY(-5px);
+    box-shadow: 0 10px 30px rgba(96, 165, 250, 0.3);
+}
+
+.mode-card.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.mode-card.completed {
+    border-color: #10b981;
+    background: rgba(16, 185, 129, 0.2);
+}
+
+.mode-icon {
+    font-size: 48px;
+    margin-bottom: 20px;
+    color: #60a5fa;
+}
+
+.mode-card.completed .mode-icon {
+    color: #10b981;
+}
+
+.mode-card.disabled .mode-icon {
+    color: rgba(255, 255, 255, 0.3);
+}
+
+.mode-name {
+    color: white;
+    font-size: 22px;
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.mode-description {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 14px;
+    line-height: 1.4;
+    margin-bottom: 15px;
+}
+
+.mode-requirements {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    font-style: italic;
+}
+
+.mode-status {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-available {
+    background: rgba(16, 185, 129, 0.8);
+    color: white;
+}
+
+.status-locked {
+    background: rgba(239, 68, 68, 0.8);
+    color: white;
+}
+
+.status-completed {
+    background: rgba(16, 185, 129, 0.8);
+    color: white;
+}
+
+.progress-info {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 20px;
+    text-align: left;
+}
+
+.progress-title {
+    color: white;
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.progress-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.progress-status {
+    font-weight: 600;
+}
+
+.status-pass {
+    color: #10b981;
+}
+
+.status-fail {
+    color: #ef4444;
+}
+
+.status-pending {
+    color: #f59e0b;
+}
+
+@media (max-width: 768px) {
+    .modes-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .selection-card {
+        padding: 30px 20px;
+    }
+    
+    .roleplay-title {
+        font-size: 24px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="selection-container">
+    <!-- Back to Dashboard -->
+    <a href="/dashboard" class="back-to-dashboard">
+        <i class="fas fa-arrow-left me-2"></i>Dashboard
+    </a>
+
+    <!-- Selection Card -->
+    <div class="selection-card">
+        <!-- Header -->
+        <div class="roleplay-header">
+            <h1 class="roleplay-title">Roleplay 1: Opener & Early Objections</h1>
+            <p class="roleplay-description">
+                Master your cold call openers and handle early objections with confidence. 
+                Choose your training mode below.
+            </p>
+        </div>
+
+        <!-- Modes Grid -->
+        <div class="modes-grid">
+            <!-- Practice Mode (1.1) -->
+            <div class="mode-card" id="mode-1-1" data-mode="1.1" onclick="selectMode('1.1')">
+                <div class="mode-status status-available">Available</div>
+                <div class="mode-icon">
+                    <i class="fas fa-user-graduate"></i>
+                </div>
+                <h3 class="mode-name">Practice Mode</h3>
+                <p class="mode-description">
+                    Single call with detailed AI coaching and feedback. 
+                    Perfect for learning the fundamentals.
+                </p>
+                <div class="mode-requirements">
+                    Always available • Detailed feedback
+                </div>
+            </div>
+
+            <!-- Marathon Mode (1.2) -->
+            <div class="mode-card" id="mode-1-2" data-mode="1.2" onclick="selectMode('1.2')">
+                <div class="mode-status status-available">Available</div>
+                <div class="mode-icon">
+                    <i class="fas fa-running"></i>
+                </div>
+                <h3 class="mode-name">Marathon Mode</h3>
+                <p class="mode-description">
+                    10 calls in a row. Pass 6 out of 10 to unlock Legend Mode. 
+                    Tests your consistency.
+                </p>
+                <div class="mode-requirements">
+                    Need 6/10 passes • No in-call feedback
+                </div>
+            </div>
+
+            <!-- Legend Mode (1.3) -->
+            <div class="mode-card disabled" id="mode-1-3" data-mode="1.3">
+                <div class="mode-status status-locked">Locked</div>
+                <div class="mode-icon">
+                    <i class="fas fa-crown"></i>
+                </div>
+                <h3 class="mode-name">Legend Mode</h3>
+                <p class="mode-description">
+                    6 perfect calls in a row. Ultimate test of mastery. 
+                    Unlocks Roleplay 2.
+                </p>
+                <div class="mode-requirements">
+                    Requires Marathon completion • No second chances
+                </div>
+            </div>
+        </div>
+
+        <!-- Progress Info -->
+        <div class="progress-info">
+            <div class="progress-title">
+                <i class="fas fa-chart-line me-2"></i>Your Progress
+            </div>
+            <div class="progress-item">
+                <span>Practice Mode Best Score:</span>
+                <span class="progress-status status-pending" id="practice-score">Not attempted</span>
+            </div>
+            <div class="progress-item">
+                <span>Marathon Mode Status:</span>
+                <span class="progress-status status-pending" id="marathon-status">Not attempted</span>
+            </div>
+            <div class="progress-item">
+                <span>Legend Mode Status:</span>
+                <span class="progress-status status-pending" id="legend-status">Locked</span>
+            </div>
+            <div class="progress-item">
+                <span>Roleplay 2 Access:</span>
+                <span class="progress-status status-pending" id="roleplay2-status">Complete Legend to unlock</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden Data -->
+<div id="user-progress" style="display: none;">
+    {{ user_progress | tojson if user_progress else '{}' }}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+console.log('🎮 Roleplay 1 Selection Page Loaded');
+
+let userProgress = {};
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadUserProgress();
+    updateUIBasedOnProgress();
+});
+
+async function loadUserProgress() {
+    try {
+        // Get user progress from hidden element
+        const progressElement = document.getElementById('user-progress');
+        if (progressElement && progressElement.textContent.trim()) {
+            userProgress = JSON.parse(progressElement.textContent);
+        }
+        
+        // Also fetch latest progress from API
+        const response = await fetch('/api/user/roleplay-progress');
+        if (response.ok) {
+            const data = await response.json();
+            userProgress = data.progress || {};
+        }
+        
+        console.log('📊 User progress loaded:', userProgress);
+    } catch (error) {
+        console.error('❌ Failed to load user progress:', error);
+        userProgress = {};
+    }
+}
+
+function updateUIBasedOnProgress() {
+    // Update Practice Mode (1.1)
+    const practiceScore = userProgress['1.1']?.best_score || 0;
+    const practiceElement = document.getElementById('practice-score');
+    if (practiceScore > 0) {
+        practiceElement.textContent = `${practiceScore}/100`;
+        practiceElement.className = practiceScore >= 70 ? 'progress-status status-pass' : 'progress-status status-fail';
+    }
+
+    // Update Marathon Mode (1.2)
+    const marathonData = userProgress['1.2'];
+    const marathonElement = document.getElementById('marathon-status');
+    if (marathonData) {
+        const passed = marathonData.calls_passed || 0;
+        const total = marathonData.total_calls || 10;
+        marathonElement.textContent = `${passed}/${total} passed`;
+        marathonElement.className = marathonData.completed ? 'progress-status status-pass' : 'progress-status status-fail';
+    }
+
+    // Update Legend Mode (1.3) availability
+    const marathonCompleted = userProgress['1.2']?.completed && userProgress['1.2']?.passed;
+    const legendCard = document.getElementById('mode-1-3');
+    const legendStatus = document.getElementById('legend-status');
+    
+    if (marathonCompleted) {
+        legendCard.classList.remove('disabled');
+        legendCard.setAttribute('onclick', "selectMode('1.3')");
+        legendCard.querySelector('.mode-status').textContent = 'Available';
+        legendCard.querySelector('.mode-status').className = 'mode-status status-available';
+        legendStatus.textContent = 'Available';
+        legendStatus.className = 'progress-status status-available';
+    }
+
+    // Check if Legend is completed
+    const legendCompleted = userProgress['1.3']?.completed;
+    const roleplay2Status = document.getElementById('roleplay2-status');
+    if (legendCompleted) {
+        legendCard.classList.add('completed');
+        legendStatus.textContent = 'Completed';
+        legendStatus.className = 'progress-status status-pass';
+        roleplay2Status.textContent = 'Unlocked!';
+        roleplay2Status.className = 'progress-status status-pass';
+    }
+}
+
+function selectMode(modeId) {
+    const modeCard = document.getElementById(`mode-${modeId.replace('.', '-')}`);
+    
+    // Check if mode is disabled
+    if (modeCard.classList.contains('disabled')) {
+        alert('This mode is locked. Complete Marathon Mode first to unlock Legend Mode.');
+        return;
+    }
+    
+    // Check specific requirements
+    if (modeId === '1.3') {
+        const marathonCompleted = userProgress['1.2']?.completed && userProgress['1.2']?.passed;
+        if (!marathonCompleted) {
+            alert('Legend Mode requires completing Marathon Mode first. Pass 6 out of 10 calls in Marathon Mode to unlock.');
+            return;
+        }
+    }
+    
+    console.log(`🎯 Selected mode: ${modeId}`);
+    
+    // Add visual feedback
+    document.querySelectorAll('.mode-card').forEach(card => {
+        card.style.transform = 'scale(1)';
+        card.style.opacity = '1';
+    });
+    
+    modeCard.style.transform = 'scale(0.95)';
+    modeCard.style.opacity = '0.8';
+    
+    // Navigate to roleplay
+    setTimeout(() => {
+        window.location.href = `/roleplay/${modeId}`;
+    }, 200);
+}
+
+// Add hover effects
+document.querySelectorAll('.mode-card:not(.disabled)').forEach(card => {
+    card.addEventListener('mouseenter', () => {
+        card.style.transform = 'translateY(-5px) scale(1.02)';
+    });
+    
+    card.addEventListener('mouseleave', () => {
+        card.style.transform = 'translateY(0) scale(1)';
+    });
+});
+
+console.log('✅ Roleplay selection page initialized');
+</script>
+{% endblock %}

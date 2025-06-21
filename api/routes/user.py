@@ -1,6 +1,7 @@
 # ===== API/ROUTES/USER.PY (COMPLETELY FIXED) =====
 from flask import Blueprint, request, jsonify, session
 from services.supabase_client import SupabaseService
+from services.user_progress_service import UserProgressService
 from utils.decorators import require_auth
 from utils.constants import ROLEPLAY_CONFIG
 from datetime import datetime, timedelta, timezone
@@ -10,6 +11,7 @@ logger = logging.getLogger(__name__)
 user_bp = Blueprint('user', __name__)
 
 supabase_service = SupabaseService()
+progress_service = UserProgressService()
 
 @user_bp.route('/profile', methods=['GET'])
 @require_auth
@@ -314,3 +316,297 @@ def _parse_iso_datetime(date_string: str) -> datetime:
     except (ValueError, TypeError) as e:
         logger.warning(f"Could not parse datetime {date_string}: {e}")
         return datetime.now(timezone.utc)
+
+# ===== COMPLETE FIX: Replace these functions in routes/user.py =====
+
+@user_bp.route('/roleplay-progress', methods=['GET'])
+@require_auth
+def get_user_roleplay_progress():
+    """Get comprehensive user roleplay progress - FIXED"""
+    try:
+        user_id = session.get('user_id')
+        
+        # Get progress data
+        progress = progress_service.get_user_roleplay_progress(user_id)
+        available_roleplays = progress_service.get_available_roleplays(user_id)
+        completion_stats = progress_service.get_completion_stats(user_id)
+        recommendations = progress_service.get_next_recommendations(user_id)
+        
+        # Get recent activity
+        recent_completions = get_recent_completions(user_id, limit=5)
+        
+        # Get achievements - FIXED: Call helper function
+        achievements = get_user_achievements_helper(user_id)
+        
+        response_data = {
+            'user_id': user_id,
+            'progress': progress,
+            'available_roleplays': available_roleplays,
+            'completion_stats': completion_stats,
+            'recommendations': recommendations,
+            'recent_activity': recent_completions,
+            'achievements': achievements,
+            'last_updated': datetime.now(timezone.utc).isoformat()
+        }
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        logger.error(f"Error getting user progress: {e}")
+        return jsonify({'error': 'Failed to load progress data'}), 500
+
+# ADD this new helper function:
+def get_user_achievements_helper(user_id: str):
+    """Helper function to get user achievements (not a route)"""
+    try:
+        result = supabase_service.get_service_client().table('user_achievements').select(
+            '*'
+        ).eq('user_id', user_id).order('earned_at', desc=True).execute()
+        
+        achievements = result.data if result.data else []
+        
+        return {
+            'achievements': achievements,
+            'total_points': sum(a.get('points', 0) for a in achievements),
+            'total_count': len(achievements)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting achievements for user {user_id}: {e}")
+        return {'achievements': [], 'total_points': 0, 'total_count': 0}
+
+# UPDATE the existing route function:
+@user_bp.route('/achievements', methods=['GET'])
+@require_auth  
+def get_user_achievements():
+    """Get user's achievements (route function) - UPDATED"""
+    try:
+        user_id = session.get('user_id')
+        
+        # Call the helper function
+        return jsonify(get_user_achievements_helper(user_id))
+        
+    except Exception as e:
+        logger.error(f"Error getting achievements: {e}")
+        return jsonify({'achievements': [], 'total_points': 0, 'total_count': 0})
+
+@user_bp.route('/leaderboard/<roleplay_id>', methods=['GET'])
+@require_auth
+def get_roleplay_leaderboard(roleplay_id):
+    """Get leaderboard for specific roleplay"""
+    try:
+        limit = min(int(request.args.get('limit', 10)), 50)
+        user_id = session.get('user_id')
+        
+        leaderboard = progress_service.get_leaderboard(roleplay_id, limit)
+        
+        # Find user's rank
+        user_rank = None
+        user_score = None
+        for entry in leaderboard:
+            if entry['user_id'] == user_id:
+                user_rank = entry['rank']
+                user_score = entry['score']
+                break
+        
+        # If user not in top, find their rank
+        if user_rank is None:
+            user_stats = supabase_service.get_service_client().table('user_roleplay_stats').select(
+                'best_score'
+            ).eq('user_id', user_id).eq('roleplay_id', roleplay_id).execute()
+            
+            if user_stats.data and user_stats.data[0]['best_score']:
+                user_score = user_stats.data[0]['best_score']
+                
+                # Count how many users have higher scores
+                higher_scores = supabase_service.get_service_client().table('user_roleplay_stats').select(
+                    'user_id', count='exact'
+                ).eq('roleplay_id', roleplay_id).gt('best_score', user_score).execute()
+                
+                user_rank = (higher_scores.count or 0) + 1
+        
+        return jsonify({
+            'roleplay_id': roleplay_id,
+            'leaderboard': leaderboard,
+            'user_rank': user_rank,
+            'user_score': user_score,
+            'total_participants': len(leaderboard)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting leaderboard: {e}")
+        return jsonify({'error': 'Failed to load leaderboard'}), 500
+    
+@user_bp.route('/export-progress', methods=['GET'])
+@require_auth
+def export_user_progress():
+    """Export user's complete progress data"""
+    try:
+        user_id = session.get('user_id')
+        format_type = request.args.get('format', 'json')  # json, csv
+        
+        # Get all user data
+        progress = progress_service.get_user_roleplay_progress(user_id)
+        completions = get_all_completions(user_id)
+        achievements = get_user_achievements(user_id)
+        
+        export_data = {
+            'user_id': user_id,
+            'exported_at': datetime.now(timezone.utc).isoformat(),
+            'progress_summary': progress,
+            'all_completions': completions,
+            'achievements': achievements['achievements'],
+            'statistics': progress_service.get_completion_stats(user_id)
+        }
+        
+        if format_type == 'csv':
+            # Convert to CSV format
+            return export_to_csv(export_data)
+        else:
+            # Return JSON
+            return jsonify(export_data)
+        
+    except Exception as e:
+        logger.error(f"Error exporting progress: {e}")
+        return jsonify({'error': 'Failed to export data'}), 500
+
+# ===== Helper Functions =====
+
+def get_recent_completions(user_id: str, limit: int = 5):
+    """Get recent roleplay completions"""
+    try:
+        result = supabase_service.get_service_client().table('roleplay_completions').select(
+            'roleplay_id, score, completed_at, duration_minutes, success'
+        ).eq('user_id', user_id).order('completed_at', desc=True).limit(limit).execute()
+        
+        return result.data if result.data else []
+        
+    except Exception as e:
+        logger.error(f"Error getting recent completions: {e}")
+        return []
+
+def get_all_completions(user_id: str):
+    """Get all user completions for export"""
+    try:
+        result = supabase_service.get_service_client().table('roleplay_completions').select(
+            '*'
+        ).eq('user_id', user_id).order('completed_at', desc=True).execute()
+        
+        return result.data if result.data else []
+        
+    except Exception as e:
+        logger.error(f"Error getting all completions: {e}")
+        return []
+
+def calculate_improvement_trend(user_id: str):
+    """Calculate if user is improving over time"""
+    try:
+        # Get recent scores vs older scores
+        recent_completions = supabase_service.get_service_client().table('roleplay_completions').select(
+            'score, completed_at'
+        ).eq('user_id', user_id).order('completed_at', desc=True).limit(10).execute()
+        
+        if not recent_completions.data or len(recent_completions.data) < 3:
+            return 'insufficient_data'
+        
+        scores = [c['score'] for c in recent_completions.data]
+        recent_avg = sum(scores[:3]) / 3  # Last 3
+        older_avg = sum(scores[3:]) / len(scores[3:])  # Earlier ones
+        
+        if recent_avg > older_avg + 5:
+            return 'improving'
+        elif recent_avg < older_avg - 5:
+            return 'declining'
+        else:
+            return 'stable'
+            
+    except Exception as e:
+        logger.error(f"Error calculating improvement trend: {e}")
+        return 'unknown'
+
+def calculate_consistency_score(scores):
+    """Calculate how consistent user's performance is"""
+    if not scores or len(scores) < 2:
+        return 0
+    
+    # Calculate standard deviation
+    mean = sum(scores) / len(scores)
+    variance = sum((x - mean) ** 2 for x in scores) / len(scores)
+    std_dev = variance ** 0.5
+    
+    # Convert to consistency score (lower std_dev = higher consistency)
+    # Scale from 0-100 where 100 is perfect consistency
+    max_possible_std = 50  # Assume max std dev of 50 points
+    consistency = max(0, 100 - (std_dev / max_possible_std * 100))
+    
+    return round(consistency, 1)
+
+def export_to_csv(data):
+    """Convert export data to CSV format"""
+    import csv
+    import io
+    from flask import Response
+    
+    output = io.StringIO()
+    
+    # Write completions data
+    if data['all_completions']:
+        writer = csv.DictWriter(output, fieldnames=[
+            'roleplay_id', 'score', 'completed_at', 'duration_minutes', 'success'
+        ])
+        writer.writeheader()
+        for completion in data['all_completions']:
+            writer.writerow({
+                'roleplay_id': completion['roleplay_id'],
+                'score': completion['score'],
+                'completed_at': completion['completed_at'],
+                'duration_minutes': completion['duration_minutes'],
+                'success': completion['success']
+            })
+    
+    csv_data = output.getvalue()
+    output.close()
+    
+    return Response(
+        csv_data,
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=roleplay_progress.csv'}
+    )
+
+# ===== Achievement Tracking =====
+
+@user_bp.route('/award-achievement', methods=['POST'])
+@require_auth
+def award_achievement():
+    """Award achievement to user (internal use)"""
+    try:
+        data = request.get_json()
+        user_id = session.get('user_id')
+        
+        # Verify this is an internal request or admin
+        # Add proper authorization logic here
+        
+        achievement_data = {
+            'user_id': user_id,
+            'achievement_type': data['type'],
+            'roleplay_id': data.get('roleplay_id'),
+            'title': data['title'],
+            'description': data['description'],
+            'badge_icon': data.get('badge_icon', 'fas fa-trophy'),
+            'points': data.get('points', 0)
+        }
+        
+        result = supabase_service.get_service_client().table('user_achievements').insert(
+            achievement_data
+        ).execute()
+        
+        if result.data:
+            return jsonify({'success': True, 'achievement': result.data[0]})
+        else:
+            return jsonify({'success': False, 'error': 'Failed to award achievement'}), 500
+            
+    except Exception as e:
+        logger.error(f"Error awarding achievement: {e}")
+        return jsonify({'error': 'Failed to award achievement'}), 500
+
+logger.info("User progress routes initialized")

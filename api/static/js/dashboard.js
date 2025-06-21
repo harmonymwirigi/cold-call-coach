@@ -18,8 +18,10 @@ class Dashboard {
         
         // Load dashboard data
         this.loadDashboard();
+        
+        // Load progress data
+        this.loadDashboardProgress();
     }
-
     setupEventListeners() {
         // Refresh button
         const refreshBtn = document.getElementById('refresh-dashboard');
@@ -542,14 +544,132 @@ class Dashboard {
     getUserStats() {
         return this.userStats;
     }
+   
+    
+    updateDashboardProgress(data) {
+        const { progress, completion_stats, recommendations } = data;
+        
+        // Update overview stats
+        if (completion_stats) {
+            document.getElementById('completion-percentage').textContent = 
+                Math.round(completion_stats.completion_percentage || 0) + '%';
+            document.getElementById('average-score').textContent = 
+                completion_stats.average_best_score || '--';
+            document.getElementById('total-attempts').textContent = 
+                completion_stats.total_attempts || 0;
+            document.getElementById('current-level').textContent = 
+                completion_stats.current_level || 'Beginner';
+        }
+        
+        // Update Roleplay 1 progress
+        updateRoleplayProgress('1.1', progress['1.1']);
+        updateRoleplayProgress('1.2', progress['1.2']);
+        updateRoleplayProgress('1.3', progress['1.3']);
+        
+        // Update recommendations
+        updateRecommendations(recommendations || []);
+        
+        // Update overall status
+        updateRoleplayStatus(progress);
+    }
+    updateRoleplayProgress(roleplayId, progressData) {
+        if (!progressData) return;
+        
+        const cleanId = roleplayId.replace('.', '-');
+        const scoreElement = document.getElementById(`rp${cleanId}-score`);
+        const progressElement = document.getElementById(`rp${cleanId}-progress`);
+        
+        if (scoreElement && progressData.best_score > 0) {
+            scoreElement.textContent = `${progressData.best_score}/100`;
+            scoreElement.className = progressData.completed ? 'text-success' : 'text-warning';
+        }
+        
+        if (progressElement) {
+            const progressPercent = Math.min(100, progressData.best_score || 0);
+            progressElement.style.width = progressPercent + '%';
+        }
+    }
+    updateRecommendations(recommendations) {
+        const container = document.getElementById('recommendations-list');
+        if (!container) return;
+        
+        if (recommendations.length === 0) {
+            container.innerHTML = '<div class="alert alert-info">No recommendations at this time.</div>';
+            return;
+        }
+        
+        container.innerHTML = recommendations.map(rec => `
+            <div class="alert alert-${rec.priority === 'high' ? 'warning' : 'info'}">
+                <i class="fas fa-${rec.type === 'start' ? 'play' : 'arrow-right'} me-2"></i>
+                ${rec.message}
+                ${rec.roleplay_id ? `<a href="/roleplay/${rec.roleplay_id}" class="btn btn-sm btn-outline-primary ms-2">Start</a>` : ''}
+            </div>
+        `).join('');
+    }
+    async loadDashboardProgress() {
+        try {
+            console.log('🏆 Loading dashboard progress...');
+            
+            const response = await fetch('/api/user/roleplay-progress', {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                this.updateDashboardProgress(data);
+                console.log('✅ Dashboard progress loaded successfully');
+            } else {
+                console.warn(`Failed to load progress data: ${response.status}`);
+                // Don't throw error, just log warning
+            }
+        } catch (error) {
+            console.error('Error loading dashboard progress:', error);
+            // Don't throw error, dashboard can still work without progress data
+        }
+    }
+    updateRoleplayStatus(progress) {
+        // Update Roleplay 1 status
+        const rp1Completed = progress['1.3']?.completed;
+        const rp1Status = document.getElementById('rp1-status');
+        if (rp1Status) {
+            if (rp1Completed) {
+                rp1Status.textContent = 'Mastered';
+                rp1Status.className = 'badge bg-success';
+            } else if (progress['1.1']?.attempts > 0) {
+                rp1Status.textContent = 'In Progress';
+                rp1Status.className = 'badge bg-warning';
+            } else {
+                rp1Status.textContent = 'Not Started';
+                rp1Status.className = 'badge bg-secondary';
+            }
+        }
+        
+        // Update Roleplay 2 status
+        const rp2Status = document.getElementById('rp2-status');
+        if (rp2Status) {
+            if (rp1Completed) {
+                rp2Status.textContent = 'Available';
+                rp2Status.className = 'badge bg-success';
+            } else {
+                rp2Status.textContent = 'Locked';
+                rp2Status.className = 'badge bg-danger';
+            }
+        }
+    }
+    
 }
 
 // Initialize dashboard when DOM loads
 let dashboard;
-
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('🏠 Dashboard DOM loaded, initializing...');
+    
+    // Initialize dashboard class
     dashboard = new Dashboard();
+    
+    // Don't try to call updateDashboardProgress here - it's already called in Dashboard class
 });
-
 // Export for global access
 window.dashboard = dashboard;
