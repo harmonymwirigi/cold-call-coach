@@ -1,4 +1,4 @@
-// ===== FIXED: voice-handler.js - NO AUDIO OVERLAP =====
+// ===== MOBILE-OPTIMIZED: voice-handler.js =====
 
 class VoiceHandler {
     constructor(roleplayManager) {
@@ -7,11 +7,14 @@ class VoiceHandler {
         this.isListening = false;
         this.isSupported = false;
         
-        // CRITICAL: Audio state management to prevent overlap
+        // MOBILE DETECTION
+        this.isMobile = this.detectMobile();
+        this.isIOS = this.detectIOS();
+        
+        // Audio state management
         this.currentAudio = null;
         this.isAudioPlaying = false;
         this.audioQueue = [];
-        this.isProcessingAudio = false;
         
         // Conversation state
         this.isUserTurn = false;
@@ -22,12 +25,19 @@ class VoiceHandler {
         this.onTranscript = null;
         this.onError = null;
         
-        // Natural conversation settings
-        this.settings = {
-            continuous: true,
-            interimResults: true,
+        // MOBILE-SPECIFIC: Different settings for mobile vs desktop
+        this.settings = this.isMobile ? {
+            continuous: false,        // MOBILE: Don't use continuous mode
+            interimResults: false,    // MOBILE: Only final results
             language: 'en-US',
-            maxAlternatives: 1
+            maxAlternatives: 1,
+            autoRestart: false       // MOBILE: No auto-restart
+        } : {
+            continuous: true,         // DESKTOP: Use continuous mode
+            interimResults: true,     // DESKTOP: Show interim results
+            language: 'en-US',
+            maxAlternatives: 1,
+            autoRestart: true        // DESKTOP: Allow auto-restart
         };
         
         // State management
@@ -36,23 +46,42 @@ class VoiceHandler {
         this.silenceTimer = null;
         this.isAutoListening = false;
         
-        // Silence detection for natural conversation
-        this.silenceThreshold = 2000;  // 2 seconds = user finished
+        // MOBILE-SPECIFIC: Gentler silence detection
+        this.silenceThreshold = this.isMobile ? 3000 : 2000;  // 3s on mobile, 2s on desktop
         this.lastSpeechTime = null;
         this.silenceCheckInterval = null;
         
-        // Roleplay 1.1 silence specifications
-        this.impatience_threshold = 10000;  // 10 seconds
-        this.hangup_threshold = 15000;      // 15 seconds
+        // Roleplay silence specifications
+        this.impatience_threshold = 10000;
+        this.hangup_threshold = 15000;
         this.total_silence_start = null;
         this.impatience_triggered = false;
         this.hangupSilenceTimer = null;
         
+        // MOBILE-SPECIFIC: Manual control flags
+        this.manualMode = this.isMobile;  // Use manual mode on mobile
         this.shouldRestart = false;
         this.wasPausedBySystem = false;
+        this.lastStartTime = 0;
         
-        console.log('🎤 VoiceHandler constructor called');
+        console.log(`🎤 VoiceHandler initialized - Mobile: ${this.isMobile}, iOS: ${this.isIOS}`);
         this.init();
+    }
+
+    // ===== MOBILE DETECTION =====
+
+    detectMobile() {
+        const userAgent = navigator.userAgent.toLowerCase();
+        const mobileKeywords = ['mobile', 'android', 'iphone', 'ipad', 'tablet'];
+        const isMobileUA = mobileKeywords.some(keyword => userAgent.includes(keyword));
+        const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        const isSmallScreen = window.innerWidth <= 768;
+        
+        return isMobileUA || (isTouchDevice && isSmallScreen);
+    }
+
+    detectIOS() {
+        return /iPad|iPhone|iPod/.test(navigator.userAgent);
     }
 
     init() {
@@ -66,7 +95,12 @@ class VoiceHandler {
             this.initializeSpeechRecognition();
         }
         
-        console.log(`✅ Voice Handler initialized. Supported: ${this.isSupported}`);
+        // Show mobile-specific instructions
+        if (this.isMobile) {
+            this.showMobileInstructions();
+        }
+        
+        console.log(`✅ Voice Handler initialized. Mobile: ${this.isMobile}, Supported: ${this.isSupported}`);
     }
 
     checkBrowserSupport() {
@@ -76,6 +110,11 @@ class VoiceHandler {
             this.isSupported = true;
             this.SpeechRecognition = SpeechRecognition;
             console.log('✅ Web Speech API supported');
+            
+            // MOBILE WARNING: Some mobile browsers have limited support
+            if (this.isMobile) {
+                console.log('📱 Mobile detected - using optimized settings');
+            }
         } else {
             this.isSupported = false;
             console.error('❌ Web Speech API not supported');
@@ -93,12 +132,41 @@ class VoiceHandler {
                 micButton.innerHTML = '<i class="fas fa-microphone-slash"></i>';
                 micButton.title = 'Voice recognition not supported';
             }
-            
-            this.triggerError('Voice recognition not supported. Use Chrome, Edge, or Safari.');
+            this.triggerError('Voice recognition not supported in this browser.');
         } else {
             if (micButton) {
-                micButton.title = 'Voice recognition ready';
+                if (this.isMobile) {
+                    micButton.title = 'Tap to speak (Mobile Mode)';
+                    micButton.innerHTML = '<i class="fas fa-microphone"></i><br><small>Tap to Talk</small>';
+                } else {
+                    micButton.title = 'Voice recognition ready';
+                }
             }
+        }
+    }
+
+    showMobileInstructions() {
+        const instructionElement = document.getElementById('live-transcript');
+        if (instructionElement && this.isMobile) {
+            const mobileInstructions = document.createElement('div');
+            mobileInstructions.id = 'mobile-instructions';
+            mobileInstructions.style.cssText = `
+                background: rgba(59, 130, 246, 0.1);
+                border: 1px solid rgba(59, 130, 246, 0.3);
+                border-radius: 8px;
+                padding: 12px;
+                margin-bottom: 12px;
+                font-size: 12px;
+                color: rgba(255, 255, 255, 0.9);
+                text-align: center;
+            `;
+            mobileInstructions.innerHTML = `
+                <i class="fas fa-mobile-alt"></i> <strong>Mobile Mode:</strong><br>
+                Tap the microphone button when it's your turn to speak.<br>
+                Speak clearly and wait for processing.
+            `;
+            
+            instructionElement.prepend(mobileInstructions);
         }
     }
 
@@ -108,38 +176,56 @@ class VoiceHandler {
         this.errorElement = document.getElementById('voice-error');
         
         if (this.transcriptElement) {
-            this.transcriptElement.textContent = 'Voice recognition ready...';
+            this.transcriptElement.textContent = this.isMobile ? 
+                'Mobile voice recognition ready - Tap mic when it\'s your turn' : 
+                'Voice recognition ready...';
         }
     }
 
     setupEventListeners() {
-        // Microphone button click
+        // MOBILE-SPECIFIC: Touch events for better mobile experience
         if (this.micButton) {
-            this.micButton.addEventListener('click', () => {
-                console.log('🎤 Manual mic button clicked');
-                if (this.isListening) {
-                    this.stopListening();
-                } else {
-                    this.startListening(false);
-                }
-            });
+            if (this.isMobile) {
+                // MOBILE: Use touch events and manual control
+                this.micButton.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    this.handleMobileTouch();
+                });
+                
+                this.micButton.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.handleMobileTouch();
+                });
+            } else {
+                // DESKTOP: Normal click behavior
+                this.micButton.addEventListener('click', () => {
+                    console.log('🎤 Manual mic button clicked');
+                    if (this.isListening) {
+                        this.stopListening();
+                    } else {
+                        this.startListening(false);
+                    }
+                });
+            }
         }
         
-        // Keyboard shortcuts
-        this.handleKeydown = (e) => {
-            if (e.code === 'Space' && !e.target.matches('input, textarea')) {
-                e.preventDefault();
-                if (!this.isListening && this.isUserTurn) {
-                    this.startListening(false);
+        // Keyboard shortcuts (desktop only)
+        if (!this.isMobile) {
+            this.handleKeydown = (e) => {
+                if (e.code === 'Space' && !e.target.matches('input, textarea')) {
+                    e.preventDefault();
+                    if (!this.isListening && this.isUserTurn) {
+                        this.startListening(false);
+                    }
                 }
-            }
+                
+                if (e.code === 'Escape' && this.isListening) {
+                    this.stopListening();
+                }
+            };
             
-            if (e.code === 'Escape' && this.isListening) {
-                this.stopListening();
-            }
-        };
-        
-        document.addEventListener('keydown', this.handleKeydown);
+            document.addEventListener('keydown', this.handleKeydown);
+        }
         
         // Handle page visibility changes
         this.handleVisibilityChange = () => {
@@ -149,11 +235,106 @@ class VoiceHandler {
                     this.pauseListening();
                 }
             } else if (!document.hidden) {
-                this.resumeListening();
+                // MOBILE: Don't auto-resume on mobile
+                if (!this.isMobile) {
+                    this.resumeListening();
+                }
             }
         };
         
         document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    }
+
+    // ===== MOBILE-SPECIFIC METHODS =====
+
+    handleMobileTouch() {
+        console.log('📱 Mobile touch detected');
+        
+        // Prevent rapid tapping
+        const now = Date.now();
+        if (now - this.lastStartTime < 1000) {
+            console.log('📱 Ignoring rapid tap');
+            return;
+        }
+        this.lastStartTime = now;
+        
+        if (this.isListening) {
+            console.log('📱 Stopping mobile listening');
+            this.stopListening();
+        } else if (this.isUserTurn && !this.isAudioPlaying) {
+            console.log('📱 Starting mobile listening');
+            this.startMobileListening();
+        } else if (this.isAudioPlaying) {
+            console.log('📱 Cannot start - AI is speaking');
+            this.showMobileMessage('Wait for AI to finish speaking');
+        } else {
+            console.log('📱 Cannot start - not your turn');
+            this.showMobileMessage('Wait for your turn to speak');
+        }
+    }
+
+    startMobileListening() {
+        if (!this.isSupported || this.isListening) return;
+        
+        console.log('📱 Starting mobile listening mode');
+        
+        try {
+            this.shouldRestart = false;  // MOBILE: No auto-restart
+            this.finalTranscript = '';
+            this.currentTranscript = '';
+            this.lastSpeechTime = null;
+            
+            this.requestMicrophonePermission().then(() => {
+                if (this.recognition && !this.isAudioPlaying) {
+                    this.recognition.start();
+                }
+                
+                this.updateTranscript('📱 Listening - speak now (will stop automatically)');
+                this.showMobileMessage('Speak now...', 'success');
+            }).catch(error => {
+                console.error('❌ Mobile microphone permission failed:', error);
+                this.triggerError('Microphone permission required');
+            });
+            
+        } catch (error) {
+            console.error('❌ Failed to start mobile listening:', error);
+            this.triggerError('Failed to start voice recognition');
+        }
+    }
+
+    showMobileMessage(message, type = 'info') {
+        // Create temporary mobile message
+        const existingMessage = document.getElementById('mobile-message');
+        if (existingMessage) {
+            existingMessage.remove();
+        }
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.id = 'mobile-message';
+        messageDiv.style.cssText = `
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10000;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            color: white;
+            background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            animation: slideDown 0.3s ease-out;
+        `;
+        
+        messageDiv.textContent = message;
+        document.body.appendChild(messageDiv);
+        
+        setTimeout(() => {
+            if (messageDiv && messageDiv.parentNode) {
+                messageDiv.remove();
+            }
+        }, 2000);
     }
 
     initializeSpeechRecognition() {
@@ -162,15 +343,15 @@ class VoiceHandler {
         try {
             this.recognition = new this.SpeechRecognition();
             
-            // Configure for natural conversation
-            this.recognition.continuous = true;
-            this.recognition.interimResults = true;
+            // Configure based on device type
+            this.recognition.continuous = this.settings.continuous;
+            this.recognition.interimResults = this.settings.interimResults;
             this.recognition.lang = this.settings.language;
             this.recognition.maxAlternatives = this.settings.maxAlternatives;
             
             this.setupRecognitionEventHandlers();
             
-            console.log('🎤 Speech recognition initialized');
+            console.log('🎤 Speech recognition initialized for', this.isMobile ? 'mobile' : 'desktop');
         } catch (error) {
             console.error('❌ Failed to initialize speech recognition:', error);
             this.triggerError('Failed to initialize voice recognition');
@@ -187,11 +368,18 @@ class VoiceHandler {
             this.updateMicrophoneUI(true);
             this.clearError();
             
-            // Start silence tracking only if it's user's turn
+            // MOBILE: Show feedback
+            if (this.isMobile) {
+                this.showMobileMessage('Listening...', 'success');
+            }
+            
+            // Start silence tracking only if user's turn
             if (this.isUserTurn) {
                 this.total_silence_start = Date.now();
                 this.impatience_triggered = false;
-                this.startHangupSilenceDetection();
+                if (!this.isMobile) {  // MOBILE: No hang-up detection
+                    this.startHangupSilenceDetection();
+                }
             }
         };
         
@@ -203,9 +391,9 @@ class VoiceHandler {
             this.stopSilenceDetection();
             this.stopHangupSilenceDetection();
             
-            // Auto-restart only if should restart and it's user's turn
-            if (this.shouldRestart && this.isSupported && this.isUserTurn && !this.isAudioPlaying) {
-                console.log('🔄 Auto-restarting recognition...');
+            // MOBILE: No auto-restart
+            if (!this.isMobile && this.shouldRestart && this.isSupported && this.isUserTurn && !this.isAudioPlaying) {
+                console.log('🔄 Auto-restarting recognition (desktop)...');
                 setTimeout(() => {
                     this.startListening(this.isAutoListening);
                 }, 100);
@@ -227,7 +415,7 @@ class VoiceHandler {
             console.log('🗣️ Speech detected');
             this.lastSpeechTime = Date.now();
             
-            // CRITICAL: Stop any playing audio when user starts speaking
+            // Stop any playing audio when user starts speaking
             if (this.isAudioPlaying) {
                 console.log('⚡ User interrupted AI - stopping audio');
                 this.stopAllAudio();
@@ -244,8 +432,15 @@ class VoiceHandler {
             console.log('🤐 Speech ended');
             this.lastSpeechTime = Date.now();
             
-            // Start checking for silence to detect when user finished
-            this.startSilenceDetection();
+            // MOBILE: Process immediately, don't wait for silence
+            if (this.isMobile) {
+                setTimeout(() => {
+                    this.processFinalUserSpeech();
+                }, 500);  // Short delay for mobile
+            } else {
+                // DESKTOP: Use silence detection
+                this.startSilenceDetection();
+            }
             
             // Restart hang-up silence tracking
             this.total_silence_start = Date.now();
@@ -279,12 +474,29 @@ class VoiceHandler {
         
         // Update current transcript
         this.currentTranscript = finalTranscript + interimTranscript;
-        this.updateTranscript(`🎤 You: "${this.currentTranscript}"`);
+        
+        // MOBILE: Show immediate feedback
+        if (this.isMobile && (finalTranscript || interimTranscript)) {
+            this.updateTranscript(`📱 You: "${this.currentTranscript}"`);
+        } else if (!this.isMobile) {
+            this.updateTranscript(`🎤 You: "${this.currentTranscript}"`);
+        }
         
         // Process final results
         if (finalTranscript.trim().length > 0) {
             this.finalTranscript += finalTranscript;
-            this.startSilenceDetection();
+            
+            // MOBILE: Process immediately
+            if (this.isMobile) {
+                // Small delay to catch any additional final results
+                setTimeout(() => {
+                    if (this.finalTranscript.trim()) {
+                        this.processFinalUserSpeech();
+                    }
+                }, 300);
+            } else {
+                this.startSilenceDetection();
+            }
         }
     }
 
@@ -294,7 +506,7 @@ class VoiceHandler {
         const errorMessages = {
             'network': 'Network error. Check internet connection.',
             'not-allowed': 'Microphone access denied. Please allow microphone access.',
-            'no-speech': 'No speech detected. Try speaking louder.',
+            'no-speech': this.isMobile ? 'No speech detected. Try tapping and speaking clearly.' : 'No speech detected. Try speaking louder.',
             'aborted': 'Voice recognition aborted.',
             'audio-capture': 'No microphone found. Connect microphone.',
             'service-not-allowed': 'Voice recognition service not allowed.',
@@ -303,12 +515,17 @@ class VoiceHandler {
         const message = errorMessages[event.error] || `Voice recognition error: ${event.error}`;
         this.triggerError(message);
         
+        // MOBILE: Show error message
+        if (this.isMobile) {
+            this.showMobileMessage(message, 'error');
+        }
+        
         // Handle specific errors
         if (event.error === 'not-allowed') {
             this.handlePermissionDenied();
         } else if (event.error === 'network') {
             setTimeout(() => {
-                if (this.shouldRestart && this.isUserTurn) {
+                if (this.shouldRestart && this.isUserTurn && !this.isMobile) {
                     console.log('🔄 Retrying after network error...');
                     this.startListening(this.isAutoListening);
                 }
@@ -316,12 +533,12 @@ class VoiceHandler {
         }
     }
 
-    // ===== AUDIO MANAGEMENT (CRITICAL FIX) =====
+    // ===== MODIFIED AUDIO MANAGEMENT =====
 
     async playAudio(text, isInterruptible = true) {
-        console.log(`🔊 Playing audio: "${text.substring(0, 50)}..." (interruptible: ${isInterruptible})`);
+        console.log(`🔊 Playing audio: "${text.substring(0, 50)}..." (Mobile: ${this.isMobile})`);
         
-        // CRITICAL: Stop any existing audio first
+        // Stop any existing audio first
         this.stopAllAudio();
         
         // Set AI turn state
@@ -424,7 +641,6 @@ class VoiceHandler {
     }
 
     async simulateSpeakingTime(text) {
-        // Simulate natural speaking time (150 words per minute)
         const words = text.split(' ').length;
         const speakingTime = Math.max(1000, (words / 150) * 60 * 1000);
         
@@ -442,10 +658,15 @@ class VoiceHandler {
 
     setUserTurn(isUserTurn) {
         this.isUserTurn = isUserTurn;
-        console.log(`👤 User turn: ${isUserTurn}`);
+        console.log(`👤 User turn: ${isUserTurn} (Mobile: ${this.isMobile})`);
         
         if (isUserTurn) {
-            this.updateTranscript('🎤 Your turn - speak when ready...');
+            if (this.isMobile) {
+                this.updateTranscript('📱 Your turn - tap microphone to speak');
+                this.showMobileMessage('Your turn! Tap mic to speak');
+            } else {
+                this.updateTranscript('🎤 Your turn - speak when ready...');
+            }
         }
     }
 
@@ -456,21 +677,39 @@ class VoiceHandler {
         if (isAITurn) {
             // Stop listening when AI is speaking
             this.stopListening();
+            
+            if (this.isMobile) {
+                this.showMobileMessage('AI is speaking...');
+            }
         }
     }
 
     startAutoListeningForUser() {
         if (this.isUserTurn && !this.isAudioPlaying && !this.isAITurn) {
             console.log('🎤 Starting auto-listening for user turn');
-            setTimeout(() => {
-                this.startAutoListening();
-            }, 500); // Small delay to ensure clean state
+            
+            if (this.isMobile) {
+                // MOBILE: Don't auto-start, just show instruction
+                this.updateTranscript('📱 Your turn - tap microphone when ready');
+                this.showMobileMessage('Your turn! Tap mic to speak');
+            } else {
+                // DESKTOP: Auto-start as before
+                setTimeout(() => {
+                    this.startAutoListening();
+                }, 500);
+            }
         }
     }
 
     // ===== PUBLIC METHODS =====
 
     startAutoListening() {
+        if (this.isMobile) {
+            // MOBILE: Manual mode only
+            console.log('📱 Auto-listening disabled on mobile - use manual tap');
+            return;
+        }
+        
         console.log('🤖 Starting auto-listening mode...');
         this.startListening(true);
     }
@@ -484,22 +723,23 @@ class VoiceHandler {
         
         if (!this.isSupported || this.isListening) return;
         
-        console.log(`🎤 Starting listening - Auto mode: ${isAutoMode}`);
+        console.log(`🎤 Starting listening - Auto mode: ${isAutoMode} (Mobile: ${this.isMobile})`);
         this.isAutoListening = isAutoMode;
         
         try {
-            this.shouldRestart = true;
+            this.shouldRestart = !this.isMobile;  // MOBILE: No auto-restart
             this.finalTranscript = '';
             this.currentTranscript = '';
             this.lastSpeechTime = null;
             
-            // Request microphone permission if needed
             this.requestMicrophonePermission().then(() => {
                 if (this.recognition && !this.isAudioPlaying) {
                     this.recognition.start();
                 }
                 
-                if (isAutoMode) {
+                if (this.isMobile) {
+                    this.updateTranscript('📱 Listening - speak clearly...');
+                } else if (isAutoMode) {
                     this.updateTranscript('🎤 Auto-listening active - speak naturally...');
                 } else {
                     this.updateTranscript('🎤 Listening - speak when ready...');
@@ -530,9 +770,12 @@ class VoiceHandler {
         this.stopHangupSilenceDetection();
     }
 
-    // ===== SILENCE DETECTION =====
+    // ===== SILENCE DETECTION (MODIFIED FOR MOBILE) =====
 
     startSilenceDetection() {
+        // MOBILE: Use shorter detection on mobile
+        if (this.isMobile) return;  // Skip silence detection on mobile
+        
         this.stopSilenceDetection();
         
         console.log('🤫 Starting silence detection...');
@@ -566,6 +809,11 @@ class VoiceHandler {
             this.stopListening();
             this.setUserTurn(false);
             
+            // MOBILE: Show processing message
+            if (this.isMobile) {
+                this.showMobileMessage('Processing...', 'info');
+            }
+            
             // Trigger callback
             if (this.onTranscript && typeof this.onTranscript === 'function') {
                 this.onTranscript(transcript);
@@ -578,12 +826,18 @@ class VoiceHandler {
             // Clear transcript
             this.finalTranscript = '';
             this.currentTranscript = '';
+        } else if (this.isMobile) {
+            // MOBILE: No speech detected
+            this.showMobileMessage('No speech detected. Try again.', 'error');
+            this.setUserTurn(true);  // Let them try again
         }
     }
 
-    // ===== HANG-UP SILENCE DETECTION =====
+    // ===== HANG-UP SILENCE DETECTION (DISABLED ON MOBILE) =====
 
     startHangupSilenceDetection() {
+        if (this.isMobile) return;  // Skip on mobile
+        
         this.stopHangupSilenceDetection();
         console.log('⏰ Starting hang-up silence detection');
         
@@ -591,7 +845,6 @@ class VoiceHandler {
             if (this.total_silence_start && this.isListening && this.isUserTurn) {
                 const totalSilence = Date.now() - this.total_silence_start;
                 
-                // 10-second impatience trigger
                 if (totalSilence >= this.impatience_threshold && 
                     !this.impatience_triggered &&
                     totalSilence < this.hangup_threshold) {
@@ -599,7 +852,6 @@ class VoiceHandler {
                     this.handleImpatience();
                 }
                 
-                // 15-second hang-up trigger
                 if (totalSilence >= this.hangup_threshold) {
                     console.log('📞 15-second silence - triggering hang-up');
                     this.handleSilenceHangup();
@@ -629,7 +881,6 @@ class VoiceHandler {
         const phrase = phrases[Math.floor(Math.random() * phrases.length)];
         this.updateTranscript(`⏰ Prospect: "${phrase}"`);
         
-        // Trigger callback
         if (this.onTranscript && typeof this.onTranscript === 'function') {
             this.onTranscript('[SILENCE_IMPATIENCE]');
         } else if (this.roleplayManager && this.roleplayManager.handleVoiceInput) {
@@ -643,7 +894,6 @@ class VoiceHandler {
         this.stopListening();
         this.updateTranscript('📞 15 seconds of silence - The prospect hung up.');
         
-        // Trigger callback
         if (this.onTranscript && typeof this.onTranscript === 'function') {
             this.onTranscript('[SILENCE_HANGUP]');
         } else if (this.roleplayManager && this.roleplayManager.handleVoiceInput) {
@@ -660,11 +910,17 @@ class VoiceHandler {
             if (isListening) {
                 micButton.classList.add('listening');
                 micButton.style.background = 'linear-gradient(135deg, #10b981, #059669)';
-                micButton.title = 'Listening - click to stop';
+                micButton.innerHTML = this.isMobile ? 
+                    '<i class="fas fa-microphone"></i><br><small>Listening...</small>' :
+                    '<i class="fas fa-microphone"></i>';
+                micButton.title = this.isMobile ? 'Listening - speak now' : 'Listening - click to stop';
             } else {
                 micButton.classList.remove('listening');
                 micButton.style.background = 'rgba(255, 255, 255, 0.1)';
-                micButton.title = 'Click to start listening';
+                micButton.innerHTML = this.isMobile ? 
+                    '<i class="fas fa-microphone"></i><br><small>Tap to Talk</small>' :
+                    '<i class="fas fa-microphone"></i>';
+                micButton.title = this.isMobile ? 'Tap to speak' : 'Click to start listening';
             }
         }
     }
@@ -682,6 +938,11 @@ class VoiceHandler {
             this.onError(message);
         } else {
             this.showErrorInUI(message);
+        }
+        
+        // MOBILE: Also show mobile message
+        if (this.isMobile) {
+            this.showMobileMessage(message, 'error');
         }
     }
 
@@ -728,6 +989,10 @@ class VoiceHandler {
         }
         
         this.updateTranscript('Microphone permission denied. Please refresh and allow access.');
+        
+        if (this.isMobile) {
+            this.showMobileMessage('Microphone access required', 'error');
+        }
     }
 
     pauseListening() {
@@ -738,7 +1003,7 @@ class VoiceHandler {
     }
 
     resumeListening() {
-        if (this.wasPausedBySystem && this.shouldRestart && this.isUserTurn) {
+        if (this.wasPausedBySystem && this.shouldRestart && this.isUserTurn && !this.isMobile) {
             this.wasPausedBySystem = false;
             this.startListening(this.isAutoListening);
         }
@@ -751,7 +1016,9 @@ class VoiceHandler {
             isSupported: this.isSupported,
             isUserTurn: this.isUserTurn,
             isAITurn: this.isAITurn,
-            isAudioPlaying: this.isAudioPlaying
+            isAudioPlaying: this.isAudioPlaying,
+            isMobile: this.isMobile,
+            manualMode: this.manualMode
         };
     }
 
@@ -781,6 +1048,17 @@ class VoiceHandler {
             document.removeEventListener('visibilitychange', this.handleVisibilityChange);
         }
         
+        // Clean up mobile instructions
+        const mobileInstructions = document.getElementById('mobile-instructions');
+        if (mobileInstructions) {
+            mobileInstructions.remove();
+        }
+        
+        const mobileMessage = document.getElementById('mobile-message');
+        if (mobileMessage) {
+            mobileMessage.remove();
+        }
+        
         console.log('✅ Voice Handler destroyed');
     }
 }
@@ -792,4 +1070,4 @@ if (typeof module !== 'undefined' && module.exports) {
     window.VoiceHandler = VoiceHandler;
 }
 
-console.log('✅ Fixed Voice Handler class loaded successfully');
+console.log('✅ Mobile-optimized Voice Handler class loaded successfully');

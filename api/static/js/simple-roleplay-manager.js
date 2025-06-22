@@ -909,6 +909,413 @@ class SimpleRoleplayManager {
     }
 }
 
+class MobileFallbackHandler {
+    constructor(roleplayManager) {
+        this.roleplayManager = roleplayManager;
+        this.isMobile = this.detectMobile();
+        this.textInputMode = false;
+        this.textInputElement = null;
+        
+        if (this.isMobile) {
+            this.initializeMobileFallback();
+        }
+    }
+    
+    detectMobile() {
+        const userAgent = navigator.userAgent.toLowerCase();
+        const mobileKeywords = ['mobile', 'android', 'iphone', 'ipad', 'tablet'];
+        return mobileKeywords.some(keyword => userAgent.includes(keyword)) || 
+               ('ontouchstart' in window && window.innerWidth <= 768);
+    }
+    
+    initializeMobileFallback() {
+        console.log('📱 Initializing mobile fallback input');
+        this.createFallbackUI();
+        this.setupFallbackEvents();
+    }
+    
+    createFallbackUI() {
+        // Create toggle button for input mode
+        const callInterface = document.getElementById('call-interface');
+        if (!callInterface) return;
+        
+        const fallbackContainer = document.createElement('div');
+        fallbackContainer.id = 'mobile-fallback-container';
+        fallbackContainer.style.cssText = `
+            margin-top: 12px;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        `;
+        
+        fallbackContainer.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <span style="color: rgba(255, 255, 255, 0.8); font-size: 12px;">
+                    📱 Voice issues? Use text input:
+                </span>
+                <button id="toggle-input-mode" style="
+                    background: rgba(59, 130, 246, 0.8);
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 4px 8px;
+                    font-size: 11px;
+                    cursor: pointer;
+                ">
+                    Enable Text
+                </button>
+            </div>
+            <div id="text-input-container" style="display: none;">
+                <div style="display: flex; gap: 8px;">
+                    <input 
+                        type="text" 
+                        id="mobile-text-input" 
+                        placeholder="Type your response..."
+                        style="
+                            flex: 1;
+                            padding: 8px 12px;
+                            border: 1px solid rgba(255, 255, 255, 0.3);
+                            border-radius: 4px;
+                            background: rgba(255, 255, 255, 0.1);
+                            color: white;
+                            font-size: 14px;
+                        "
+                    />
+                    <button id="send-text-input" style="
+                        background: linear-gradient(135deg, #10b981, #059669);
+                        color: white;
+                        border: none;
+                        border-radius: 4px;
+                        padding: 8px 12px;
+                        font-size: 12px;
+                        cursor: pointer;
+                        white-space: nowrap;
+                    ">
+                        Send
+                    </button>
+                </div>
+                <div style="margin-top: 6px; font-size: 10px; color: rgba(255, 255, 255, 0.6);">
+                    💡 Tip: Try voice first, use text if voice doesn't work
+                </div>
+            </div>
+        `;
+        
+        // Insert before call controls
+        const callControls = callInterface.querySelector('.call-controls');
+        if (callControls) {
+            callInterface.insertBefore(fallbackContainer, callControls);
+        } else {
+            callInterface.appendChild(fallbackContainer);
+        }
+    }
+    
+    setupFallbackEvents() {
+        const toggleButton = document.getElementById('toggle-input-mode');
+        const textContainer = document.getElementById('text-input-container');
+        const textInput = document.getElementById('mobile-text-input');
+        const sendButton = document.getElementById('send-text-input');
+        
+        if (toggleButton && textContainer && textInput && sendButton) {
+            // Toggle input mode
+            toggleButton.addEventListener('click', () => {
+                this.textInputMode = !this.textInputMode;
+                
+                if (this.textInputMode) {
+                    textContainer.style.display = 'block';
+                    toggleButton.textContent = 'Use Voice';
+                    toggleButton.style.background = 'rgba(239, 68, 68, 0.8)';
+                    textInput.focus();
+                    
+                    // Disable voice when text mode is active
+                    if (this.roleplayManager.voiceHandler) {
+                        this.roleplayManager.voiceHandler.stopListening();
+                    }
+                    
+                    this.showMobileMessage('Text input mode enabled', 'info');
+                } else {
+                    textContainer.style.display = 'none';
+                    toggleButton.textContent = 'Enable Text';
+                    toggleButton.style.background = 'rgba(59, 130, 246, 0.8)';
+                    
+                    this.showMobileMessage('Voice mode enabled', 'info');
+                }
+            });
+            
+            // Send text input
+            const sendTextInput = () => {
+                const text = textInput.value.trim();
+                if (text && this.roleplayManager) {
+                    console.log('📱 Sending text input:', text);
+                    
+                    // Clear input
+                    textInput.value = '';
+                    
+                    // Send to roleplay manager
+                    this.roleplayManager.handleVoiceInput(text);
+                    
+                    this.showMobileMessage('Message sent!', 'success');
+                }
+            };
+            
+            sendButton.addEventListener('click', sendTextInput);
+            
+            // Enter key to send
+            textInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    sendTextInput();
+                }
+            });
+            
+            // Show/hide based on user turn
+            this.setupTurnVisibility();
+        }
+    }
+    
+    setupTurnVisibility() {
+        // Show text input only when it's user's turn
+        const observer = new MutationObserver(() => {
+            this.updateTextInputVisibility();
+        });
+        
+        const transcript = document.getElementById('live-transcript');
+        if (transcript) {
+            observer.observe(transcript, { childList: true, subtree: true });
+        }
+        
+        // Also check periodically
+        setInterval(() => {
+            this.updateTextInputVisibility();
+        }, 2000);
+    }
+    
+    updateTextInputVisibility() {
+        const textContainer = document.getElementById('text-input-container');
+        const textInput = document.getElementById('mobile-text-input');
+        
+        if (!textContainer || !this.textInputMode) return;
+        
+        // Check if it's user's turn based on roleplay manager state
+        const isUserTurn = this.roleplayManager && 
+                          this.roleplayManager.conversationState && 
+                          this.roleplayManager.conversationState.isUserTurn;
+        
+        if (isUserTurn) {
+            textInput.disabled = false;
+            textInput.placeholder = "Type your response...";
+            textInput.style.opacity = '1';
+        } else {
+            textInput.disabled = true;
+            textInput.placeholder = "Wait for your turn...";
+            textInput.style.opacity = '0.6';
+        }
+    }
+    
+    showMobileMessage(message, type = 'info') {
+        // Create temporary message
+        const existingMessage = document.getElementById('mobile-fallback-message');
+        if (existingMessage) {
+            existingMessage.remove();
+        }
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.id = 'mobile-fallback-message';
+        messageDiv.style.cssText = `
+            position: fixed;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10001;
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: 12px;
+            font-weight: 500;
+            color: white;
+            background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#6366f1'};
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            animation: slideDown 0.3s ease-out;
+        `;
+        
+        messageDiv.textContent = message;
+        document.body.appendChild(messageDiv);
+        
+        setTimeout(() => {
+            if (messageDiv && messageDiv.parentNode) {
+                messageDiv.remove();
+            }
+        }, 2000);
+    }
+    
+    destroy() {
+        const fallbackContainer = document.getElementById('mobile-fallback-container');
+        if (fallbackContainer) {
+            fallbackContainer.remove();
+        }
+        
+        const fallbackMessage = document.getElementById('mobile-fallback-message');
+        if (fallbackMessage) {
+            fallbackMessage.remove();
+        }
+    }
+}
+
+// Enhanced Simple Roleplay Manager with Mobile Support
+class EnhancedSimpleRoleplayManager extends SimpleRoleplayManager {
+    constructor() {
+        super();
+        
+        // Add mobile fallback handler
+        this.mobileFallback = new MobileFallbackHandler(this);
+        
+        console.log('📱 Enhanced manager with mobile fallback initialized');
+    }
+    
+    // Override voice handler initialization for mobile
+    initializeVoiceHandler() {
+        try {
+            if (typeof VoiceHandler !== 'undefined') {
+                this.voiceHandler = new VoiceHandler(this);
+                console.log('🎤 Voice handler initialized successfully');
+                
+                // Set up callbacks
+                this.voiceHandler.onTranscript = (transcript) => this.handleVoiceInput(transcript);
+                this.voiceHandler.onError = (error) => this.handleVoiceError(error);
+                
+                if (this.voiceHandler.isSupported) {
+                    console.log('✅ Voice recognition supported and ready');
+                    
+                    // Show mobile-specific guidance
+                    if (this.voiceHandler.isMobile) {
+                        console.log('📱 Mobile voice optimizations active');
+                    }
+                } else {
+                    console.warn('⚠️ Voice recognition not supported in this browser');
+                    this.showMobileVoiceWarning();
+                }
+            } else {
+                console.warn('⚠️ VoiceHandler class not available');
+                setTimeout(() => this.initializeVoiceHandler(), 1000);
+            }
+        } catch (error) {
+            console.error('❌ Failed to initialize voice handler:', error);
+            this.showMobileVoiceWarning();
+        }
+    }
+    
+    handleVoiceError(error) {
+        console.error('🎤 Voice error:', error);
+        
+        // Show error in UI
+        this.showError(error);
+        
+        // If on mobile and voice fails, suggest text input
+        if (this.voiceHandler && this.voiceHandler.isMobile) {
+            setTimeout(() => {
+                this.showMobileVoiceHelp();
+            }, 2000);
+        }
+    }
+    
+    showMobileVoiceWarning() {
+        if (this.mobileFallback && this.mobileFallback.isMobile) {
+            const warning = document.createElement('div');
+            warning.style.cssText = `
+                background: rgba(245, 158, 11, 0.1);
+                border: 1px solid rgba(245, 158, 11, 0.3);
+                border-radius: 8px;
+                padding: 12px;
+                margin: 12px;
+                color: rgba(245, 158, 11, 0.9);
+                font-size: 12px;
+                text-align: center;
+            `;
+            warning.innerHTML = `
+                <i class="fas fa-exclamation-triangle"></i> 
+                <strong>Voice recognition may not work on this mobile browser.</strong><br>
+                You can use the text input option below as an alternative.
+            `;
+            
+            const callInterface = document.getElementById('call-interface');
+            if (callInterface) {
+                callInterface.prepend(warning);
+            }
+        }
+    }
+    
+    showMobileVoiceHelp() {
+        if (this.mobileFallback && this.mobileFallback.isMobile) {
+            this.mobileFallback.showMobileMessage('Voice issues? Try the text input below', 'info');
+        }
+    }
+    
+    // Override start auto listening for mobile
+    startAutoListening() {
+        if (this.voiceHandler && this.voiceHandler.isMobile) {
+            // Mobile: Don't auto-start, show instruction
+            this.addSystemMessage('📱 Your turn - tap microphone to speak (or use text input)');
+            this.updateMicrophoneUI(false);
+        } else if (this.voiceHandler && this.voiceHandler.isSupported && this.isActive) {
+            // Desktop: Auto-start as normal
+            console.log('🎤 Starting auto-listening for user turn...');
+            
+            setTimeout(() => {
+                if (this.conversationState.isUserTurn && !this.conversationState.isProcessing) {
+                    this.voiceHandler.startAutoListening();
+                    this.updateMicrophoneUI(true);
+                }
+            }, 500);
+        } else {
+            console.warn('⚠️ Cannot start auto-listening: voice handler not available');
+        }
+    }
+    
+    // Enhanced error handling
+    showError(message) {
+        console.error('❌ Error:', message);
+        
+        // Standard error display
+        const errorDiv = document.getElementById('voice-error');
+        const errorText = document.getElementById('voice-error-text');
+        
+        if (errorDiv && errorText) {
+            errorText.textContent = message;
+            errorDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Mobile-specific error handling
+        if (this.mobileFallback && this.mobileFallback.isMobile) {
+            this.mobileFallback.showMobileMessage(message, 'error');
+            
+            // If voice error, suggest text input
+            if (message.toLowerCase().includes('voice') || message.toLowerCase().includes('microphone')) {
+                setTimeout(() => {
+                    this.mobileFallback.showMobileMessage('Try text input instead', 'info');
+                }, 3000);
+            }
+        }
+    }
+    
+    // Enhanced cleanup
+    destroy() {
+        super.destroy();
+        
+        if (this.mobileFallback) {
+            this.mobileFallback.destroy();
+        }
+    }
+}
+
+// Replace the original manager
+if (typeof window !== 'undefined') {
+    window.SimpleRoleplayManager = EnhancedSimpleRoleplayManager;
+}
+
+console.log('📱 Enhanced mobile-compatible roleplay manager loaded');
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🚀 DOM loaded, initializing Simple Roleplay Manager...');
