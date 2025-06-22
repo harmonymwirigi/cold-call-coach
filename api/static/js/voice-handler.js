@@ -1,4 +1,4 @@
-// ===== NATURAL MOBILE: voice-handler.js - Smart Auto-Restart =====
+// ===== SIMPLE & RELIABLE: voice-handler.js (Mobile-First Design) =====
 
 class VoiceHandler {
     constructor(roleplayManager) {
@@ -7,7 +7,7 @@ class VoiceHandler {
         this.isListening = false;
         this.isSupported = false;
         
-        // Mobile detection
+        // Device detection
         this.isMobile = this.detectMobile();
         this.isIOS = this.detectIOS();
         
@@ -18,24 +18,23 @@ class VoiceHandler {
         // Conversation state
         this.isUserTurn = false;
         this.isAITurn = false;
-        this.conversationActive = false;
         
         // Callback interface
         this.onTranscript = null;
         this.onError = null;
         
-        // SMART MOBILE: Intelligent restart prevention
-        this.lastStartTime = 0;
-        this.restartAttempts = 0;
-        this.maxRestartAttempts = 3;
-        this.restartCooldown = 2000; // 2 seconds between restart attempts
-        this.isInCooldown = false;
-        this.pendingRestart = false;
+        // SIMPLE APPROACH: Minimal auto-restart, maximum reliability
+        this.autoRestartEnabled = !this.isMobile; // MOBILE: No auto-restart
+        this.shouldRestart = false;
+        this.restartTimeout = null;
+        this.lastSuccessfulStart = 0;
+        this.consecutiveFailures = 0;
+        this.maxConsecutiveFailures = 2;
         
-        // Natural conversation settings
+        // Recognition settings (optimized for reliability)
         this.settings = {
             continuous: true,
-            interimResults: this.isMobile ? false : true, // Simpler on mobile
+            interimResults: !this.isMobile, // MOBILE: Final results only
             language: 'en-US',
             maxAlternatives: 1
         };
@@ -43,36 +42,28 @@ class VoiceHandler {
         // State management
         this.currentTranscript = '';
         this.finalTranscript = '';
-        this.silenceTimer = null;
         this.isAutoListening = false;
         
-        // Silence detection (gentler on mobile)
-        this.silenceThreshold = this.isMobile ? 2500 : 2000;
+        // Simplified silence detection
+        this.silenceThreshold = this.isMobile ? 3000 : 2000; // Longer on mobile
         this.lastSpeechTime = null;
-        this.silenceCheckInterval = null;
+        this.silenceTimer = null;
         
-        // Roleplay silence specifications
+        // Hang-up silence (disabled on mobile for reliability)
         this.impatience_threshold = 10000;
         this.hangup_threshold = 15000;
         this.total_silence_start = null;
         this.impatience_triggered = false;
         this.hangupSilenceTimer = null;
+        this.hangupDetectionEnabled = !this.isMobile; // MOBILE: Disabled
         
-        this.shouldRestart = false;
-        this.wasPausedBySystem = false;
-        
-        console.log(`🎤 Natural Voice Handler - Mobile: ${this.isMobile}, iOS: ${this.isIOS}`);
+        console.log(`🎤 Simple Voice Handler - Mobile: ${this.isMobile}, Auto-restart: ${this.autoRestartEnabled}`);
         this.init();
     }
 
     detectMobile() {
-        const userAgent = navigator.userAgent.toLowerCase();
-        const mobileKeywords = ['mobile', 'android', 'iphone', 'ipad', 'tablet'];
-        const isMobileUA = mobileKeywords.some(keyword => userAgent.includes(keyword));
-        const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-        const isSmallScreen = window.innerWidth <= 768;
-        
-        return isMobileUA || (isTouchDevice && isSmallScreen);
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+               (window.innerWidth <= 768 && 'ontouchstart' in window);
     }
 
     detectIOS() {
@@ -80,7 +71,7 @@ class VoiceHandler {
     }
 
     init() {
-        console.log('🎤 Initializing Natural Voice Handler...');
+        console.log('🎤 Initializing Simple Voice Handler...');
         
         this.checkBrowserSupport();
         this.initializeUIElements();
@@ -90,7 +81,7 @@ class VoiceHandler {
             this.initializeSpeechRecognition();
         }
         
-        console.log(`✅ Natural Voice Handler initialized. Mobile: ${this.isMobile}, Supported: ${this.isSupported}`);
+        console.log(`✅ Simple Voice Handler ready. Mobile mode: ${this.isMobile}`);
     }
 
     checkBrowserSupport() {
@@ -99,10 +90,10 @@ class VoiceHandler {
         if (SpeechRecognition) {
             this.isSupported = true;
             this.SpeechRecognition = SpeechRecognition;
-            console.log('✅ Web Speech API supported');
+            console.log('✅ Speech recognition supported');
         } else {
             this.isSupported = false;
-            console.error('❌ Web Speech API not supported');
+            console.error('❌ Speech recognition not supported');
         }
         
         this.updateSupportUI();
@@ -117,10 +108,12 @@ class VoiceHandler {
                 micButton.innerHTML = '<i class="fas fa-microphone-slash"></i>';
                 micButton.title = 'Voice recognition not supported';
             }
-            this.triggerError('Voice recognition not supported. Use Chrome, Edge, or Safari.');
+            this.triggerError('Voice recognition not supported. Please use Chrome, Edge, or Safari.');
         } else {
             if (micButton) {
-                micButton.title = this.isMobile ? 'Voice recognition ready (Mobile)' : 'Voice recognition ready';
+                micButton.title = this.isMobile ? 
+                    'Voice ready - will auto-start when it\'s your turn' : 
+                    'Voice recognition ready';
             }
         }
     }
@@ -131,20 +124,18 @@ class VoiceHandler {
         this.errorElement = document.getElementById('voice-error');
         
         if (this.transcriptElement) {
-            this.transcriptElement.textContent = 'Voice recognition ready...';
+            this.transcriptElement.textContent = this.isMobile ? 
+                'Voice ready for mobile - will start automatically' : 
+                'Voice recognition ready...';
         }
     }
 
     setupEventListeners() {
-        // Microphone button click (works for both mobile and desktop)
+        // Microphone button (manual trigger)
         if (this.micButton) {
             this.micButton.addEventListener('click', () => {
                 console.log('🎤 Manual mic button clicked');
-                if (this.isListening) {
-                    this.stopListening();
-                } else {
-                    this.forceStartListening(); // Force start, bypassing cooldowns
-                }
+                this.handleManualMicClick();
             });
         }
         
@@ -154,7 +145,7 @@ class VoiceHandler {
                 if (e.code === 'Space' && !e.target.matches('input, textarea')) {
                     e.preventDefault();
                     if (!this.isListening && this.isUserTurn) {
-                        this.startListening(false);
+                        this.startListening();
                     }
                 }
                 
@@ -166,19 +157,31 @@ class VoiceHandler {
             document.addEventListener('keydown', this.handleKeydown);
         }
         
-        // Handle page visibility changes
+        // Page visibility (simple handling)
         this.handleVisibilityChange = () => {
-            if (document.hidden) {
-                this.pauseAllAudio();
-                if (this.isListening) {
-                    this.pauseListening();
-                }
-            } else if (!document.hidden) {
-                this.resumeListening();
+            if (document.hidden && this.isListening) {
+                console.log('📱 Page hidden - stopping recognition');
+                this.stopListening();
             }
         };
         
         document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    }
+
+    handleManualMicClick() {
+        if (this.isListening) {
+            console.log('🛑 Manual stop requested');
+            this.stopListening();
+        } else if (this.isUserTurn && !this.isAudioPlaying) {
+            console.log('🎤 Manual start requested');
+            this.startListening();
+        } else if (this.isAudioPlaying) {
+            console.log('⚡ User wants to interrupt AI');
+            this.stopAllAudio();
+        } else {
+            console.log('⏳ Not user turn yet');
+            this.showMessage('Wait for your turn to speak', 'info');
+        }
     }
 
     initializeSpeechRecognition() {
@@ -187,7 +190,7 @@ class VoiceHandler {
         try {
             this.recognition = new this.SpeechRecognition();
             
-            // Configure for natural conversation
+            // Simple, reliable configuration
             this.recognition.continuous = this.settings.continuous;
             this.recognition.interimResults = this.settings.interimResults;
             this.recognition.lang = this.settings.language;
@@ -195,7 +198,7 @@ class VoiceHandler {
             
             this.setupRecognitionEventHandlers();
             
-            console.log('🎤 Speech recognition initialized');
+            console.log('🎤 Speech recognition configured');
         } catch (error) {
             console.error('❌ Failed to initialize speech recognition:', error);
             this.triggerError('Failed to initialize voice recognition');
@@ -211,11 +214,11 @@ class VoiceHandler {
             this.isListening = true;
             this.updateMicrophoneUI(true);
             this.clearError();
-            this.restartAttempts = 0; // Reset restart attempts on successful start
-            this.isInCooldown = false;
+            this.lastSuccessfulStart = Date.now();
+            this.consecutiveFailures = 0; // Reset on successful start
             
-            // Start silence tracking only if it's user's turn
-            if (this.isUserTurn) {
+            // Start hang-up detection (desktop only)
+            if (this.hangupDetectionEnabled && this.isUserTurn) {
                 this.total_silence_start = Date.now();
                 this.impatience_triggered = false;
                 this.startHangupSilenceDetection();
@@ -230,8 +233,8 @@ class VoiceHandler {
             this.stopSilenceDetection();
             this.stopHangupSilenceDetection();
             
-            // SMART RESTART: Intelligent auto-restart with cooldown
-            this.handleSmartRestart();
+            // SIMPLE RESTART LOGIC: Only restart in very safe conditions
+            this.handleSimpleRestart();
         };
         
         // Recognition results
@@ -244,20 +247,20 @@ class VoiceHandler {
             this.handleRecognitionError(event);
         };
         
-        // Speech detection events
+        // Speech events
         this.recognition.onspeechstart = () => {
             console.log('🗣️ Speech detected');
             this.lastSpeechTime = Date.now();
             
-            // Stop any playing audio when user starts speaking
+            // Stop AI audio if user interrupts
             if (this.isAudioPlaying) {
-                console.log('⚡ User interrupted AI - stopping audio');
+                console.log('⚡ User interrupted - stopping AI audio');
                 this.stopAllAudio();
                 this.setAITurn(false);
                 this.setUserTurn(true);
             }
             
-            // Reset hang-up silence timer
+            // Reset hang-up timer
             this.total_silence_start = null;
             this.impatience_triggered = false;
         };
@@ -266,99 +269,69 @@ class VoiceHandler {
             console.log('🤐 Speech ended');
             this.lastSpeechTime = Date.now();
             
-            // Start checking for silence to detect when user finished
+            // Start silence detection
             this.startSilenceDetection();
             
-            // Restart hang-up silence tracking
-            this.total_silence_start = Date.now();
+            // Restart hang-up detection
+            if (this.hangupDetectionEnabled) {
+                this.total_silence_start = Date.now();
+            }
         };
     }
 
-    // ===== SMART RESTART LOGIC (THE KEY FIX) =====
+    // ===== SIMPLE RESTART LOGIC =====
 
-    handleSmartRestart() {
-        // Don't restart if we shouldn't, or if we're in cooldown
-        if (!this.shouldRestart || this.isInCooldown || !this.isSupported) {
-            return;
+    handleSimpleRestart() {
+        // Clear any pending restart
+        if (this.restartTimeout) {
+            clearTimeout(this.restartTimeout);
+            this.restartTimeout = null;
         }
         
-        // Don't restart if it's not user turn or if AI is speaking
-        if (!this.isUserTurn || this.isAudioPlaying) {
-            return;
-        }
-        
-        // Check restart attempts and timing
-        const now = Date.now();
-        const timeSinceLastStart = now - this.lastStartTime;
-        
-        // MOBILE: Be more conservative with restarts
-        if (this.isMobile) {
-            // On mobile, only restart if enough time has passed and not too many attempts
-            if (timeSinceLastStart < this.restartCooldown || this.restartAttempts >= this.maxRestartAttempts) {
-                console.log(`📱 Mobile restart blocked: attempts=${this.restartAttempts}, cooldown=${timeSinceLastStart < this.restartCooldown}`);
-                this.enterCooldownMode();
-                return;
+        // Don't restart if conditions aren't perfect
+        if (!this.shouldRestart || 
+            !this.isUserTurn || 
+            this.isAudioPlaying || 
+            !this.isSupported ||
+            this.consecutiveFailures >= this.maxConsecutiveFailures) {
+            
+            if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
+                console.log('🔴 Too many failures - manual restart required');
+                this.showManualRestartMessage();
             }
-        }
-        
-        // Increment restart attempts
-        this.restartAttempts++;
-        
-        // If too many restart attempts, enter cooldown
-        if (this.restartAttempts >= this.maxRestartAttempts) {
-            console.log('🔄 Too many restart attempts, entering cooldown');
-            this.enterCooldownMode();
             return;
         }
         
-        // Perform smart restart with delay
-        const restartDelay = this.isMobile ? 1000 : 300; // Longer delay on mobile
+        // MOBILE: No auto-restart, show manual instruction
+        if (!this.autoRestartEnabled) {
+            console.log('📱 Mobile: No auto-restart - showing manual instruction');
+            this.showMobileInstruction();
+            return;
+        }
         
-        console.log(`🔄 Smart restart in ${restartDelay}ms (attempt ${this.restartAttempts}/${this.maxRestartAttempts})`);
+        // DESKTOP: Simple auto-restart with delay
+        const timeSinceLastStart = Date.now() - this.lastSuccessfulStart;
+        const restartDelay = Math.max(1000, 2000 - timeSinceLastStart); // At least 1 second delay
         
-        setTimeout(() => {
-            // Double-check conditions before restarting
+        console.log(`🔄 Auto-restart in ${restartDelay}ms`);
+        
+        this.restartTimeout = setTimeout(() => {
+            // Double-check conditions before restart
             if (this.shouldRestart && this.isUserTurn && !this.isAudioPlaying && !this.isListening) {
-                this.startListening(this.isAutoListening);
+                console.log('🔄 Executing auto-restart');
+                this.startListening();
             }
         }, restartDelay);
     }
 
-    enterCooldownMode() {
-        console.log('❄️ Entering cooldown mode');
-        this.isInCooldown = true;
-        this.restartAttempts = 0;
-        
-        // Show user-friendly message
-        if (this.isMobile) {
-            this.updateTranscript('📱 Your turn - tap microphone if voice recognition stopped');
-        } else {
-            this.updateTranscript('🎤 Your turn - click microphone if needed');
-        }
-        
-        // Auto-exit cooldown after delay
-        setTimeout(() => {
-            console.log('❄️ Exiting cooldown mode');
-            this.isInCooldown = false;
-            this.restartAttempts = 0;
-            
-            // Try to restart if still needed
-            if (this.shouldRestart && this.isUserTurn && !this.isAudioPlaying && !this.isListening) {
-                console.log('🔄 Post-cooldown restart attempt');
-                this.startListening(this.isAutoListening);
-            }
-        }, this.restartCooldown * 2); // Double cooldown for exit
+    showMobileInstruction() {
+        this.updateTranscript('📱 Your turn - tap the microphone to speak');
+        this.showMessage('Your turn! Tap the microphone', 'info');
     }
 
-    forceStartListening() {
-        // Force start, bypassing all cooldowns and restrictions
-        console.log('🔧 Force starting listening (user initiated)');
-        
-        this.isInCooldown = false;
-        this.restartAttempts = 0;
-        this.lastStartTime = Date.now();
-        
-        this.startListening(false);
+    showManualRestartMessage() {
+        this.updateTranscript('🎤 Voice recognition paused - click microphone to continue');
+        this.showMessage('Click the microphone to continue', 'info');
     }
 
     handleRecognitionResult(event) {
@@ -371,7 +344,7 @@ class VoiceHandler {
         let interimTranscript = '';
         let finalTranscript = '';
         
-        // Process all results
+        // Process results
         for (let i = event.resultIndex; i < event.results.length; i++) {
             const result = event.results[i];
             const transcript = result[0].transcript;
@@ -380,15 +353,17 @@ class VoiceHandler {
                 finalTranscript += transcript + ' ';
                 console.log(`✅ Final transcript: "${transcript}"`);
                 this.lastSpeechTime = Date.now();
-            } else {
+            } else if (!this.isMobile) { // Only show interim on desktop
                 interimTranscript += transcript;
                 this.lastSpeechTime = Date.now();
             }
         }
         
-        // Update current transcript
+        // Update transcript display
         this.currentTranscript = finalTranscript + interimTranscript;
-        this.updateTranscript(`🎤 You: "${this.currentTranscript}"`);
+        if (this.currentTranscript.trim()) {
+            this.updateTranscript(`🎤 You: "${this.currentTranscript.trim()}"`);
+        }
         
         // Process final results
         if (finalTranscript.trim().length > 0) {
@@ -399,33 +374,30 @@ class VoiceHandler {
 
     handleRecognitionError(event) {
         console.error('❌ Voice recognition error:', event.error);
+        this.consecutiveFailures++;
         
         const errorMessages = {
-            'network': 'Network error. Check internet connection.',
-            'not-allowed': 'Microphone access denied. Please allow microphone access.',
-            'no-speech': 'No speech detected. Try speaking louder.',
-            'aborted': 'Voice recognition aborted.',
-            'audio-capture': 'No microphone found. Connect microphone.',
-            'service-not-allowed': 'Voice recognition service not allowed.',
+            'network': 'Network error. Check your internet connection.',
+            'not-allowed': 'Microphone access denied. Please allow microphone access and refresh.',
+            'no-speech': 'No speech detected. Try speaking louder or closer to the microphone.',
+            'aborted': 'Voice recognition was interrupted.',
+            'audio-capture': 'No microphone found. Please connect a microphone.',
+            'service-not-allowed': 'Voice service not allowed.',
         };
         
-        const message = errorMessages[event.error] || `Voice recognition error: ${event.error}`;
+        const message = errorMessages[event.error] || `Voice error: ${event.error}`;
         this.triggerError(message);
         
         // Handle specific errors
         if (event.error === 'not-allowed') {
             this.handlePermissionDenied();
-        } else if (event.error === 'network') {
-            // Network errors: try again after delay
-            setTimeout(() => {
-                if (this.shouldRestart && this.isUserTurn) {
-                    console.log('🔄 Retrying after network error...');
-                    this.startListening(this.isAutoListening);
-                }
-            }, 3000);
         } else if (event.error === 'no-speech') {
-            // No speech errors: don't count against restart attempts
-            this.restartAttempts = Math.max(0, this.restartAttempts - 1);
+            // Don't count no-speech as a "real" failure
+            this.consecutiveFailures = Math.max(0, this.consecutiveFailures - 1);
+            
+            if (this.isMobile) {
+                this.showMessage('No speech heard. Tap mic to try again.', 'warning');
+            }
         }
     }
 
@@ -434,19 +406,14 @@ class VoiceHandler {
     async playAudio(text, isInterruptible = true) {
         console.log(`🔊 Playing audio: "${text.substring(0, 50)}..."`);
         
-        // Stop any existing audio first
         this.stopAllAudio();
-        
-        // Set AI turn state
         this.setAITurn(true);
         this.setUserTurn(false);
         
         try {
             const response = await fetch('/api/roleplay/tts', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text: text })
             });
             
@@ -458,55 +425,51 @@ class VoiceHandler {
                     this.currentAudio = new Audio(audioUrl);
                     this.isAudioPlaying = true;
                     
-                    // Setup event handlers
                     this.currentAudio.onended = () => {
-                        console.log('✅ Audio finished playing');
+                        console.log('✅ Audio finished');
                         this.cleanupAudio(audioUrl);
-                        
-                        // Switch to user turn after audio ends
-                        this.setAITurn(false);
-                        this.setUserTurn(true);
-                        this.startAutoListeningForUser();
+                        this.transitionToUserTurn();
                     };
                     
                     this.currentAudio.onerror = () => {
-                        console.log('❌ Audio playback error');
+                        console.log('❌ Audio error');
                         this.cleanupAudio(audioUrl);
-                        this.setAITurn(false);
-                        this.setUserTurn(true);
-                        this.startAutoListeningForUser();
+                        this.transitionToUserTurn();
                     };
                     
-                    // Play the audio
                     await this.currentAudio.play();
-                    console.log('🎵 Audio playing successfully');
+                    console.log('🎵 Audio playing');
                     
                 } else {
-                    console.log('📢 Audio too small, simulating speech time');
+                    console.log('📢 Audio too small, simulating');
                     await this.simulateSpeakingTime(text);
-                    this.setAITurn(false);
-                    this.setUserTurn(true);
-                    this.startAutoListeningForUser();
+                    this.transitionToUserTurn();
                 }
             } else {
-                console.log('🎵 TTS failed, simulating speech time');
+                console.log('🎵 TTS failed, simulating');
                 await this.simulateSpeakingTime(text);
-                this.setAITurn(false);
-                this.setUserTurn(true);
-                this.startAutoListeningForUser();
+                this.transitionToUserTurn();
             }
         } catch (error) {
-            console.error('❌ Audio playback failed:', error);
+            console.error('❌ Audio failed:', error);
             await this.simulateSpeakingTime(text);
-            this.setAITurn(false);
-            this.setUserTurn(true);
-            this.startAutoListeningForUser();
+            this.transitionToUserTurn();
         }
     }
 
-    stopAllAudio() {
-        console.log('🔇 Stopping all audio');
+    transitionToUserTurn() {
+        this.setAITurn(false);
+        this.setUserTurn(true);
         
+        // Start listening after a brief delay
+        setTimeout(() => {
+            if (this.isUserTurn && !this.isAudioPlaying) {
+                this.startAutoListening();
+            }
+        }, this.isMobile ? 1000 : 500); // Longer delay on mobile
+    }
+
+    stopAllAudio() {
         if (this.currentAudio) {
             try {
                 this.currentAudio.pause();
@@ -516,15 +479,7 @@ class VoiceHandler {
                 console.warn('Error stopping audio:', e);
             }
         }
-        
         this.isAudioPlaying = false;
-    }
-
-    pauseAllAudio() {
-        if (this.currentAudio && !this.currentAudio.paused) {
-            this.currentAudio.pause();
-            console.log('⏸️ Audio paused');
-        }
     }
 
     cleanupAudio(audioUrl) {
@@ -539,13 +494,8 @@ class VoiceHandler {
         const words = text.split(' ').length;
         const speakingTime = Math.max(1000, (words / 150) * 60 * 1000);
         
-        console.log(`🕐 Simulating speaking time: ${speakingTime}ms for ${words} words`);
-        
         return new Promise(resolve => {
-            setTimeout(() => {
-                console.log('✅ Simulated speaking complete');
-                resolve();
-            }, speakingTime);
+            setTimeout(resolve, speakingTime);
         });
     }
 
@@ -553,17 +503,15 @@ class VoiceHandler {
 
     setUserTurn(isUserTurn) {
         this.isUserTurn = isUserTurn;
-        console.log(`👤 User turn: ${isUserTurn} (Mobile: ${this.isMobile})`);
+        console.log(`👤 User turn: ${isUserTurn}`);
         
         if (isUserTurn) {
-            // Reset restart attempts when it becomes user's turn
-            this.restartAttempts = 0;
-            this.isInCooldown = false;
+            this.consecutiveFailures = 0; // Reset failures on new turn
             
             if (this.isMobile) {
-                this.updateTranscript('📱 Your turn - speak naturally (auto-listening)');
+                this.updateTranscript('📱 Your turn - voice will start automatically');
             } else {
-                this.updateTranscript('🎤 Your turn - speak naturally...');
+                this.updateTranscript('🎤 Your turn - speak when ready...');
             }
         }
     }
@@ -573,50 +521,32 @@ class VoiceHandler {
         console.log(`🤖 AI turn: ${isAITurn}`);
         
         if (isAITurn) {
-            // Stop listening when AI is speaking
             this.stopListening();
-        }
-    }
-
-    startAutoListeningForUser() {
-        if (this.isUserTurn && !this.isAudioPlaying && !this.isAITurn) {
-            console.log('🎤 Starting auto-listening for user turn');
-            
-            // Small delay for clean transition, longer on mobile
-            const delay = this.isMobile ? 800 : 500;
-            
-            setTimeout(() => {
-                if (this.isUserTurn && !this.isAudioPlaying && !this.isAITurn) {
-                    this.startAutoListening();
-                }
-            }, delay);
         }
     }
 
     // ===== PUBLIC METHODS =====
 
     startAutoListening() {
-        console.log('🤖 Starting auto-listening mode...');
-        this.startListening(true);
-    }
-
-    startListening(isAutoMode = false) {
-        // Don't start listening if AI is speaking
-        if (this.isAITurn || this.isAudioPlaying) {
-            console.log('🚫 Cannot start listening - AI is speaking');
+        if (!this.isUserTurn || this.isAudioPlaying) {
+            console.log('🚫 Cannot start auto-listening - wrong turn or audio playing');
             return;
         }
         
-        if (!this.isSupported || this.isListening) return;
+        console.log('🤖 Starting auto-listening...');
+        this.startListening();
+    }
+
+    startListening() {
+        if (this.isAITurn || this.isAudioPlaying || !this.isSupported || this.isListening) {
+            console.log('🚫 Cannot start listening - conditions not met');
+            return;
+        }
         
-        // Record start time for cooldown management
-        this.lastStartTime = Date.now();
-        
-        console.log(`🎤 Starting listening - Auto mode: ${isAutoMode} (Mobile: ${this.isMobile})`);
-        this.isAutoListening = isAutoMode;
+        console.log(`🎤 Starting listening (Mobile: ${this.isMobile})`);
         
         try {
-            this.shouldRestart = true;
+            this.shouldRestart = this.autoRestartEnabled; // Only on desktop
             this.finalTranscript = '';
             this.currentTranscript = '';
             this.lastSpeechTime = null;
@@ -626,11 +556,7 @@ class VoiceHandler {
                     this.recognition.start();
                 }
                 
-                if (isAutoMode) {
-                    this.updateTranscript('🎤 Auto-listening active - speak naturally...');
-                } else {
-                    this.updateTranscript('🎤 Listening - speak when ready...');
-                }
+                this.updateTranscript('🎤 Listening - speak naturally...');
             }).catch(error => {
                 console.error('❌ Microphone permission failed:', error);
                 this.triggerError('Microphone permission required');
@@ -645,12 +571,16 @@ class VoiceHandler {
     stopListening() {
         if (!this.isListening) return;
         
-        console.log('🛑 Stopping voice recognition...');
+        console.log('🛑 Stopping listening...');
         this.shouldRestart = false;
-        this.isAutoListening = false;
         
         if (this.recognition) {
             this.recognition.stop();
+        }
+        
+        if (this.restartTimeout) {
+            clearTimeout(this.restartTimeout);
+            this.restartTimeout = null;
         }
         
         this.stopSilenceDetection();
@@ -664,22 +594,18 @@ class VoiceHandler {
         
         console.log('🤫 Starting silence detection...');
         
-        this.silenceCheckInterval = setInterval(() => {
+        this.silenceTimer = setTimeout(() => {
             if (this.lastSpeechTime && this.isUserTurn) {
-                const silenceDuration = Date.now() - this.lastSpeechTime;
-                
-                if (silenceDuration >= this.silenceThreshold) {
-                    console.log(`🤫 User finished speaking (${silenceDuration}ms silence)`);
-                    this.processFinalUserSpeech();
-                }
+                console.log('🤫 User finished speaking');
+                this.processFinalUserSpeech();
             }
-        }, 200);
+        }, this.silenceThreshold);
     }
 
     stopSilenceDetection() {
-        if (this.silenceCheckInterval) {
-            clearInterval(this.silenceCheckInterval);
-            this.silenceCheckInterval = null;
+        if (this.silenceTimer) {
+            clearTimeout(this.silenceTimer);
+            this.silenceTimer = null;
         }
     }
 
@@ -689,7 +615,6 @@ class VoiceHandler {
         if (transcript.length > 0) {
             console.log(`✅ Processing final speech: "${transcript}"`);
             
-            // Stop listening since we're processing
             this.stopListening();
             this.setUserTurn(false);
             
@@ -702,17 +627,22 @@ class VoiceHandler {
                 console.warn('⚠️ No callback available for transcript');
             }
             
-            // Clear transcript
             this.finalTranscript = '';
             this.currentTranscript = '';
+        } else if (this.isMobile) {
+            // Mobile: No speech detected, show instruction
+            this.showMessage('No speech detected. Tap mic to try again.', 'warning');
+            this.showMobileInstruction();
         }
     }
 
-    // ===== HANG-UP SILENCE DETECTION =====
+    // ===== HANG-UP DETECTION (DESKTOP ONLY) =====
 
     startHangupSilenceDetection() {
+        if (!this.hangupDetectionEnabled) return;
+        
         this.stopHangupSilenceDetection();
-        console.log('⏰ Starting hang-up silence detection');
+        console.log('⏰ Starting hang-up detection');
         
         this.hangupSilenceTimer = setInterval(() => {
             if (this.total_silence_start && this.isListening && this.isUserTurn) {
@@ -721,12 +651,10 @@ class VoiceHandler {
                 if (totalSilence >= this.impatience_threshold && 
                     !this.impatience_triggered &&
                     totalSilence < this.hangup_threshold) {
-                    console.log('⏰ 10-second silence - triggering impatience');
                     this.handleImpatience();
                 }
                 
                 if (totalSilence >= this.hangup_threshold) {
-                    console.log('📞 15-second silence - triggering hang-up');
                     this.handleSilenceHangup();
                 }
             }
@@ -741,9 +669,7 @@ class VoiceHandler {
     }
 
     handleImpatience() {
-        console.log('⏰ Handling impatience');
         this.impatience_triggered = true;
-        
         const phrases = [
             "Hello? Are you still with me?",
             "Can you hear me?",
@@ -754,23 +680,17 @@ class VoiceHandler {
         const phrase = phrases[Math.floor(Math.random() * phrases.length)];
         this.updateTranscript(`⏰ Prospect: "${phrase}"`);
         
-        if (this.onTranscript && typeof this.onTranscript === 'function') {
+        if (this.onTranscript) {
             this.onTranscript('[SILENCE_IMPATIENCE]');
-        } else if (this.roleplayManager && this.roleplayManager.handleVoiceInput) {
-            this.roleplayManager.handleVoiceInput('[SILENCE_IMPATIENCE]');
         }
     }
 
     handleSilenceHangup() {
-        console.log('📞 Handling silence hang-up');
-        
         this.stopListening();
         this.updateTranscript('📞 15 seconds of silence - The prospect hung up.');
         
-        if (this.onTranscript && typeof this.onTranscript === 'function') {
+        if (this.onTranscript) {
             this.onTranscript('[SILENCE_HANGUP]');
-        } else if (this.roleplayManager && this.roleplayManager.handleVoiceInput) {
-            this.roleplayManager.handleVoiceInput('[SILENCE_HANGUP]');
         }
     }
 
@@ -787,7 +707,7 @@ class VoiceHandler {
             } else {
                 micButton.classList.remove('listening');
                 micButton.style.background = 'rgba(255, 255, 255, 0.1)';
-                micButton.title = 'Click to start listening';
+                micButton.title = this.isMobile ? 'Tap to speak' : 'Click to start listening';
             }
         }
     }
@@ -795,6 +715,16 @@ class VoiceHandler {
     updateTranscript(text) {
         if (this.transcriptElement) {
             this.transcriptElement.textContent = text;
+        }
+    }
+
+    showMessage(message, type = 'info') {
+        // Simple message system
+        console.log(`📢 ${type.toUpperCase()}: ${message}`);
+        
+        // You could enhance this with a toast notification system
+        if (this.isMobile && type === 'info') {
+            // Simple mobile notification could go here
         }
     }
 
@@ -853,31 +783,16 @@ class VoiceHandler {
         this.updateTranscript('Microphone permission denied. Please refresh and allow access.');
     }
 
-    pauseListening() {
-        if (this.isListening) {
-            this.wasPausedBySystem = true;
-            this.stopListening();
-        }
-    }
-
-    resumeListening() {
-        if (this.wasPausedBySystem && this.shouldRestart && this.isUserTurn) {
-            this.wasPausedBySystem = false;
-            this.startListening(this.isAutoListening);
-        }
-    }
-
     getListeningStatus() {
         return {
             isListening: this.isListening,
-            isAutoListening: this.isAutoListening,
             isSupported: this.isSupported,
             isUserTurn: this.isUserTurn,
             isAITurn: this.isAITurn,
             isAudioPlaying: this.isAudioPlaying,
             isMobile: this.isMobile,
-            restartAttempts: this.restartAttempts,
-            isInCooldown: this.isInCooldown
+            autoRestartEnabled: this.autoRestartEnabled,
+            consecutiveFailures: this.consecutiveFailures
         };
     }
 
@@ -886,7 +801,6 @@ class VoiceHandler {
         
         this.stopListening();
         this.stopAllAudio();
-        this.shouldRestart = false;
         
         if (this.recognition) {
             this.recognition.onstart = null;
@@ -896,10 +810,13 @@ class VoiceHandler {
             this.recognition = null;
         }
         
+        if (this.restartTimeout) {
+            clearTimeout(this.restartTimeout);
+        }
+        
         this.stopSilenceDetection();
         this.stopHangupSilenceDetection();
         
-        // Remove event listeners
         if (this.handleKeydown) {
             document.removeEventListener('keydown', this.handleKeydown);
         }
@@ -918,4 +835,4 @@ if (typeof module !== 'undefined' && module.exports) {
     window.VoiceHandler = VoiceHandler;
 }
 
-console.log('✅ Natural Mobile Voice Handler loaded successfully');
+console.log('✅ Simple Reliable Voice Handler loaded');
