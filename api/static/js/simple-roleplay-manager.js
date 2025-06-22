@@ -1,4 +1,4 @@
-// ===== static/js/simple-roleplay-manager.js =====
+// ===== FIXED: simple-roleplay-manager.js - LOGICAL CONVERSATION =====
 
 class SimpleRoleplayManager {
     constructor() {
@@ -8,28 +8,44 @@ class SimpleRoleplayManager {
         this.mode = 'practice';
         this.callTimer = null;
         this.callStartTime = null;
-        this.voiceHandler = null; // Add this
+        this.voiceHandler = null;
+        
+        // CRITICAL: Conversation state management
+        this.conversationState = {
+            isProcessing: false,
+            isAIResponding: false,
+            isUserTurn: false,
+            lastResponse: null,
+            turnCount: 0
+        };
+        
+        // Audio management
+        this.audioManager = {
+            currentAudio: null,
+            isPlaying: false,
+            queue: []
+        };
         
         console.log(`🚀 Simple Roleplay Manager initialized for: ${this.currentRoleplayId}`);
         
         this.initializeElements();
         this.bindEvents();
         this.setupInterface();
-        this.initializeVoiceHandler(); // Add this
+        this.initializeVoiceHandler();
     }
 
-    // NEW METHOD: Initialize voice handler properly
+    // ===== INITIALIZATION =====
+
     initializeVoiceHandler() {
         try {
             if (typeof VoiceHandler !== 'undefined') {
                 this.voiceHandler = new VoiceHandler(this);
                 console.log('🎤 Voice handler initialized successfully');
                 
-                // Set up callbacks
+                // Set up proper callbacks
                 this.voiceHandler.onTranscript = (transcript) => this.handleVoiceInput(transcript);
                 this.voiceHandler.onError = (error) => this.showError(error);
                 
-                // Check if supported
                 if (this.voiceHandler.isSupported) {
                     console.log('✅ Voice recognition supported and ready');
                 } else {
@@ -37,7 +53,7 @@ class SimpleRoleplayManager {
                 }
             } else {
                 console.warn('⚠️ VoiceHandler class not available');
-                setTimeout(() => this.initializeVoiceHandler(), 1000); // Retry after 1 second
+                setTimeout(() => this.initializeVoiceHandler(), 1000);
             }
         } catch (error) {
             console.error('❌ Failed to initialize voice handler:', error);
@@ -45,7 +61,6 @@ class SimpleRoleplayManager {
     }
     
     extractRoleplayId() {
-        // Get from URL
         const pathParts = window.location.pathname.split('/');
         const roleplayIndex = pathParts.indexOf('roleplay');
         
@@ -53,7 +68,6 @@ class SimpleRoleplayManager {
             return pathParts[roleplayIndex + 1];
         }
         
-        // Get from data attribute
         const dataElement = document.getElementById('roleplay-data');
         if (dataElement) {
             return dataElement.dataset.roleplayId || '1.1';
@@ -84,7 +98,6 @@ class SimpleRoleplayManager {
             currentTime: document.getElementById('current-time')
         };
         
-        // Log which elements were found
         const foundElements = Object.keys(this.elements).filter(key => this.elements[key]);
         const missingElements = Object.keys(this.elements).filter(key => !this.elements[key]);
         
@@ -113,35 +126,22 @@ class SimpleRoleplayManager {
             });
         }
         
-        // Voice handler integration
-        if (window.voiceHandler) {
-            window.voiceHandler.onTranscript = (transcript) => this.handleVoiceInput(transcript);
-            window.voiceHandler.onError = (error) => this.showError(error);
-            console.log('🎤 Voice handler integrated');
-        } else {
-            console.warn('⚠️ Voice handler not available');
-        }
-        
         console.log('📎 Events bound successfully');
     }
     
     setupInterface() {
-        // Update title and info
         this.updateRoleplayInfo();
-        
-        // Create simple mode selection
         this.createModeSelection();
-        
-        // Update time display
         this.updateTime();
         setInterval(() => this.updateTime(), 1000);
         
         console.log('🎯 Interface setup complete');
     }
     
+    // ===== ROLEPLAY INFO =====
+    
     async updateRoleplayInfo() {
         try {
-            // Map parent IDs to specific ones for API calls
             let apiRoleplayId = this.currentRoleplayId;
             if (apiRoleplayId === '1') {
                 apiRoleplayId = '1.1';
@@ -149,7 +149,6 @@ class SimpleRoleplayManager {
                 apiRoleplayId = '2.1';
             }
             
-            // Try to get info from API first
             const response = await fetch(`/api/roleplay/info/${apiRoleplayId}`);
             let roleplayInfo;
             
@@ -157,12 +156,10 @@ class SimpleRoleplayManager {
                 roleplayInfo = await response.json();
                 console.log('📋 Loaded roleplay info from API:', roleplayInfo);
             } else {
-                // Fallback to hardcoded info
                 roleplayInfo = this.getFallbackRoleplayInfo();
                 console.log('📋 Using fallback roleplay info:', roleplayInfo);
             }
             
-            // Update UI elements
             if (this.elements.roleplayTitle) {
                 this.elements.roleplayTitle.textContent = roleplayInfo.name || `Roleplay ${this.currentRoleplayId}`;
             }
@@ -213,10 +210,8 @@ class SimpleRoleplayManager {
             return;
         }
         
-        // Clear existing content
         this.elements.modeGrid.innerHTML = '';
         
-        // Create simple mode option
         const modeOption = document.createElement('div');
         modeOption.className = 'mode-option selected';
         modeOption.dataset.mode = 'practice';
@@ -227,14 +222,11 @@ class SimpleRoleplayManager {
             <small style="color: rgba(255, 255, 255, 0.8); font-size: 14px;">Single call with detailed coaching</small>
         `;
         
-        // Add click handler
         modeOption.addEventListener('click', () => {
             this.selectMode('practice');
         });
         
         this.elements.modeGrid.appendChild(modeOption);
-        
-        // Auto-select practice mode
         this.selectMode('practice');
         
         console.log('🎮 Mode selection created');
@@ -243,7 +235,6 @@ class SimpleRoleplayManager {
     selectMode(modeId) {
         this.mode = modeId;
         
-        // Update UI to show selected mode
         const modeOptions = document.querySelectorAll('.mode-option');
         modeOptions.forEach(option => {
             option.classList.remove('selected');
@@ -254,7 +245,6 @@ class SimpleRoleplayManager {
             selectedOption.classList.add('selected');
         }
         
-        // Enable start button
         if (this.elements.startCallBtn) {
             this.elements.startCallBtn.disabled = false;
             this.elements.startCallBtn.textContent = `Start ${this.mode} call`;
@@ -263,6 +253,8 @@ class SimpleRoleplayManager {
         
         console.log(`🎯 Mode selected: ${modeId}`);
     }
+    
+    // ===== CALL MANAGEMENT =====
     
     async startCall() {
         if (this.isActive) {
@@ -273,18 +265,24 @@ class SimpleRoleplayManager {
         try {
             console.log(`🚀 Starting call: ${this.currentRoleplayId} (${this.mode})`);
             
-            // Show loading state
+            // Reset conversation state
+            this.conversationState = {
+                isProcessing: false,
+                isAIResponding: false,
+                isUserTurn: false,
+                lastResponse: null,
+                turnCount: 0
+            };
+            
             if (this.elements.startCallBtn) {
                 this.elements.startCallBtn.textContent = 'Connecting...';
                 this.elements.startCallBtn.disabled = true;
             }
             
-            // Create timeout promise
             const timeoutPromise = new Promise((_, reject) =>
                 setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000)
             );
             
-            // Create fetch promise
             const fetchPromise = fetch('/api/roleplay/start', {
                 method: 'POST',
                 headers: {
@@ -296,7 +294,6 @@ class SimpleRoleplayManager {
                 })
             });
             
-            // Race timeout vs fetch
             const response = await Promise.race([fetchPromise, timeoutPromise]);
             
             if (!response.ok) {
@@ -307,7 +304,6 @@ class SimpleRoleplayManager {
             const data = await response.json();
             console.log('✅ Call start response:', data);
             
-            // Validate response
             if (!data.session_id) {
                 throw new Error('No session ID received from server');
             }
@@ -322,20 +318,11 @@ class SimpleRoleplayManager {
             
             // Show call interface
             this.showCallInterface();
-            
-            // Start call timer
             this.startCallTimer();
             
-            // Handle initial response with small delay
+            // CRITICAL: Handle initial AI response properly
             setTimeout(() => {
-                this.addToTranscript('AI', data.initial_response);
-                this.playAudio(data.initial_response);
-                
-                // FIXED: Start auto-listening after AI speaks (with delay for audio)
-                setTimeout(() => {
-                    this.addToTranscript('System', '🎤 Your turn - speak now...');
-                    this.startAutoListening(); // NEW: Start auto-listening
-                }, 3000); // Wait 3 seconds for AI audio to finish
+                this.handleAIResponse(data.initial_response, true); // true = start conversation
             }, 500);
             
             console.log('✅ Call started successfully:', this.sessionId);
@@ -344,7 +331,6 @@ class SimpleRoleplayManager {
             console.error('❌ Failed to start call:', error);
             this.showError(`Failed to start call: ${error.message}`);
             
-            // Reset button state
             if (this.elements.startCallBtn) {
                 this.elements.startCallBtn.textContent = 'Start Practice Call';
                 this.elements.startCallBtn.disabled = false;
@@ -352,28 +338,231 @@ class SimpleRoleplayManager {
         }
     }
 
-    // NEW METHOD: Start auto-listening for natural conversation
-    startAutoListening() {
-        if (this.voiceHandler && this.voiceHandler.isSupported) {
-            console.log('🎤 Starting auto-listening for natural conversation...');
-            this.voiceHandler.startAutoListening();
+    // ===== CONVERSATION FLOW (CRITICAL FIX) =====
+
+    async handleAIResponse(aiResponse, isInitial = false) {
+        console.log(`🤖 Handling AI response: "${aiResponse.substring(0, 50)}..." (initial: ${isInitial})`);
+        
+        // Set conversation state
+        this.conversationState.isAIResponding = true;
+        this.conversationState.isUserTurn = false;
+        this.conversationState.lastResponse = aiResponse;
+        
+        // Add to conversation display
+        this.addToTranscript('AI', aiResponse);
+        
+        // Update voice handler state
+        if (this.voiceHandler) {
+            this.voiceHandler.setAITurn(true);
+            this.voiceHandler.setUserTurn(false);
+        }
+        
+        try {
+            // Play AI response with proper audio management
+            await this.playAIResponseWithProperFlow(aiResponse);
             
-            // Update UI to show listening state
-            this.updateMicrophoneUI(true);
-        } else {
-            console.warn('⚠️ Voice handler not available for auto-listening');
-            this.showError('Voice recognition not available. Please check browser compatibility.');
+            // After AI speaks, transition to user turn
+            this.transitionToUserTurn();
+            
+        } catch (error) {
+            console.error('❌ Error handling AI response:', error);
+            // Still transition to user turn on error
+            this.transitionToUserTurn();
         }
     }
 
-    // NEW METHOD: Stop auto-listening
-    stopAutoListening() {
-        if (this.voiceHandler) {
-            console.log('🛑 Stopping auto-listening...');
-            this.voiceHandler.stopListening();
-            this.updateMicrophoneUI(false);
+    async playAIResponseWithProperFlow(text) {
+        console.log(`🔊 Playing AI response with proper flow: "${text.substring(0, 50)}..."`);
+        
+        try {
+            // Use voice handler's audio system if available
+            if (this.voiceHandler && this.voiceHandler.playAudio) {
+                await this.voiceHandler.playAudio(text, true);
+            } else {
+                // Fallback to manual audio handling
+                await this.playAudioFallback(text);
+            }
+        } catch (error) {
+            console.warn('🔇 Audio playback failed, using simulation:', error);
+            await this.simulateSpeakingTime(text);
         }
     }
+
+    async playAudioFallback(text) {
+        const response = await fetch('/api/roleplay/tts', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ text })
+        });
+        
+        if (response.ok) {
+            const audioBlob = await response.blob();
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = new Audio(audioUrl);
+            
+            return new Promise((resolve) => {
+                audio.onended = () => {
+                    URL.revokeObjectURL(audioUrl);
+                    resolve();
+                };
+                
+                audio.onerror = () => {
+                    URL.revokeObjectURL(audioUrl);
+                    resolve();
+                };
+                
+                audio.play().catch(() => resolve());
+            });
+        }
+    }
+
+    async simulateSpeakingTime(text) {
+        const words = text.split(' ').length;
+        const speakingTime = Math.max(1500, (words / 150) * 60 * 1000);
+        
+        console.log(`🕐 Simulating speaking time: ${speakingTime}ms for ${words} words`);
+        
+        return new Promise(resolve => {
+            setTimeout(resolve, speakingTime);
+        });
+    }
+
+    transitionToUserTurn() {
+        console.log('👤 Transitioning to user turn');
+        
+        // Update conversation state
+        this.conversationState.isAIResponding = false;
+        this.conversationState.isUserTurn = true;
+        this.conversationState.turnCount++;
+        
+        // Update voice handler state
+        if (this.voiceHandler) {
+            this.voiceHandler.setAITurn(false);
+            this.voiceHandler.setUserTurn(true);
+        }
+        
+        // Show user prompt and start listening
+        this.addSystemMessage('🎤 Your turn - speak now...');
+        this.startAutoListening();
+    }
+
+    startAutoListening() {
+        if (this.voiceHandler && this.voiceHandler.isSupported && this.isActive) {
+            console.log('🎤 Starting auto-listening for user turn...');
+            
+            // Small delay to ensure clean state transition
+            setTimeout(() => {
+                if (this.conversationState.isUserTurn && !this.conversationState.isProcessing) {
+                    this.voiceHandler.startAutoListening();
+                    this.updateMicrophoneUI(true);
+                }
+            }, 500);
+        } else {
+            console.warn('⚠️ Cannot start auto-listening: voice handler not available or call not active');
+        }
+    }
+
+    async handleVoiceInput(transcript) {
+        // Validate state
+        if (!this.isActive || !this.sessionId) {
+            console.warn('⚠️ Cannot process voice input: call not active');
+            return;
+        }
+        
+        if (this.conversationState.isProcessing || this.conversationState.isAIResponding) {
+            console.warn('⚠️ Cannot process voice input: already processing');
+            return;
+        }
+        
+        try {
+            console.log(`🎤 Processing voice input: "${transcript}"`);
+            
+            // Set processing state
+            this.conversationState.isProcessing = true;
+            this.conversationState.isUserTurn = false;
+            
+            // Stop listening while processing
+            if (this.voiceHandler) {
+                this.voiceHandler.stopListening();
+                this.voiceHandler.setUserTurn(false);
+            }
+            
+            // Add user input to conversation
+            this.addToTranscript('You', transcript);
+            this.addSystemMessage('🤖 Processing your response...');
+            
+            // Send to API
+            const response = await fetch('/api/roleplay/respond', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    user_input: transcript
+                })
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to process response');
+            }
+            
+            const data = await response.json();
+            console.log('✅ API response received:', data);
+            
+            // Reset processing state
+            this.conversationState.isProcessing = false;
+            
+            // Handle response based on call continuation
+            if (data.call_continues) {
+                // Continue conversation with AI response
+                await this.handleAIResponse(data.ai_response);
+            } else {
+                // Call is ending
+                console.log('📞 Call ending...');
+                this.addToTranscript('AI', data.ai_response);
+                
+                // End call after brief delay
+                setTimeout(() => {
+                    this.handleCallEnd(data);
+                }, 2000);
+            }
+            
+        } catch (error) {
+            console.error('❌ Failed to process voice input:', error);
+            this.showError('Failed to process your response');
+            
+            // Reset state and restart listening
+            this.conversationState.isProcessing = false;
+            setTimeout(() => {
+                if (this.isActive && this.conversationState.isUserTurn) {
+                    this.startAutoListening();
+                }
+            }, 3000);
+        }
+    }
+
+    // ===== CONVERSATION DISPLAY =====
+    
+    addToTranscript(speaker, text) {
+        if (!this.elements.liveTranscript) return;
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `transcript-message ${speaker.toLowerCase()}`;
+        
+        messageDiv.innerHTML = `
+            <div class="speaker">${speaker}:</div>
+            <div class="message">${text}</div>
+        `;
+        
+        this.elements.liveTranscript.appendChild(messageDiv);
+        this.elements.liveTranscript.scrollTop = this.elements.liveTranscript.scrollHeight;
+        
+        console.log(`💬 ${speaker}: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+    }
+
     addSystemMessage(message) {
         if (!this.elements.liveTranscript) return;
         
@@ -393,6 +582,9 @@ class SimpleRoleplayManager {
         
         console.log(`📢 System: ${message}`);
     }
+    
+    // ===== CALL INTERFACE =====
+    
     showCallInterface() {
         console.log('📱 Showing call interface');
         
@@ -403,10 +595,8 @@ class SimpleRoleplayManager {
             this.elements.callInterface.style.display = 'flex';
         }
         
-        // Update contact info with random selection
         this.updateContactInfo();
         
-        // Clear transcript
         if (this.elements.liveTranscript) {
             this.elements.liveTranscript.innerHTML = '';
         }
@@ -455,69 +645,6 @@ class SimpleRoleplayManager {
         console.log('⏱️ Call timer started');
     }
     
-    async handleVoiceInput(transcript) {
-        if (!this.isActive || !this.sessionId) {
-            console.warn('⚠️ Cannot process voice input: call not active');
-            return;
-        }
-        
-        try {
-            console.log(`🎤 Processing voice input: "${transcript}"`);
-            
-            // Stop listening while processing
-            this.stopAutoListening();
-            
-            this.addToTranscript('You', transcript);
-            
-            const response = await fetch('/api/roleplay/respond', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    user_input: transcript
-                })
-            });
-            
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to process response');
-            }
-            
-            const data = await response.json();
-            
-            // Add AI response to transcript
-            this.addToTranscript('AI', data.ai_response);
-            
-            // Play audio response
-            await this.playAudio(data.ai_response);
-            
-            // Check if call should continue
-            if (data.call_continues) {
-                // FIXED: Restart auto-listening after AI responds
-                setTimeout(() => {
-                    this.addToTranscript('System', '🎤 Your turn - speak now...');
-                    this.startAutoListening();
-                }, 2000); // Wait 2 seconds for AI audio
-            } else {
-                console.log('📞 Call ending...');
-                setTimeout(() => this.handleCallEnd(data), 2000);
-            }
-            
-        } catch (error) {
-            console.error('❌ Failed to process voice input:', error);
-            this.showError('Failed to process your response');
-            
-            // Restart listening on error
-            setTimeout(() => {
-                if (this.isActive) {
-                    this.startAutoListening();
-                }
-            }, 3000);
-        }
-    }
-
-    // NEW METHOD: Update microphone UI
     updateMicrophoneUI(isListening) {
         if (this.elements.micBtn) {
             if (isListening) {
@@ -534,55 +661,7 @@ class SimpleRoleplayManager {
         }
     }
     
-    addToTranscript(speaker, text) {
-        if (!this.elements.liveTranscript) return;
-        
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `transcript-message ${speaker.toLowerCase()}`;
-        
-        messageDiv.innerHTML = `
-            <div class="speaker">${speaker}:</div>
-            <div class="message">${text}</div>
-        `;
-        
-        this.elements.liveTranscript.appendChild(messageDiv);
-        this.elements.liveTranscript.scrollTop = this.elements.liveTranscript.scrollHeight;
-        
-        console.log(`💬 ${speaker}: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
-    }
-    
-    async playAudio(text) {
-        try {
-            const response = await fetch('/api/roleplay/tts', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ text })
-            });
-            
-            if (response.ok) {
-                const audioBlob = await response.blob();
-                const audioUrl = URL.createObjectURL(audioBlob);
-                const audio = new Audio(audioUrl);
-                
-                audio.play().catch(e => {
-                    console.warn('🔇 Audio play failed:', e);
-                });
-                
-                // Clean up URL after playing
-                audio.addEventListener('ended', () => {
-                    URL.revokeObjectURL(audioUrl);
-                });
-                
-                console.log('🔊 Audio played successfully');
-            } else {
-                console.warn('🔇 TTS request failed:', response.status);
-            }
-        } catch (error) {
-            console.warn('🔇 TTS failed:', error);
-        }
-    }
+    // ===== CALL ENDING =====
     
     async endCall() {
         if (!this.isActive) {
@@ -594,7 +673,10 @@ class SimpleRoleplayManager {
             console.log('📞 Ending call...');
             
             // Stop voice recognition
-            this.stopAutoListening();
+            if (this.voiceHandler) {
+                this.voiceHandler.stopListening();
+                this.voiceHandler.stopAllAudio();
+            }
             
             const response = await fetch('/api/roleplay/end', {
                 method: 'POST',
@@ -609,7 +691,6 @@ class SimpleRoleplayManager {
                 this.handleCallEnd(data);
             } else {
                 console.warn('⚠️ End call request failed:', response.status);
-                // Force end anyway
                 this.forceEndCall();
             }
             
@@ -628,7 +709,12 @@ class SimpleRoleplayManager {
             this.callTimer = null;
         }
         
-        // Show basic feedback
+        // Stop voice handler
+        if (this.voiceHandler) {
+            this.voiceHandler.stopListening();
+            this.voiceHandler.stopAllAudio();
+        }
+        
         this.showFeedback({
             overall_score: 75,
             coaching: {
@@ -644,13 +730,30 @@ class SimpleRoleplayManager {
         
         this.isActive = false;
         
+        // Reset conversation state
+        this.conversationState = {
+            isProcessing: false,
+            isAIResponding: false,
+            isUserTurn: false,
+            lastResponse: null,
+            turnCount: 0
+        };
+        
         if (this.callTimer) {
             clearInterval(this.callTimer);
             this.callTimer = null;
         }
         
+        // Stop voice handler
+        if (this.voiceHandler) {
+            this.voiceHandler.stopListening();
+            this.voiceHandler.stopAllAudio();
+        }
+        
         this.showFeedback(data);
     }
+    
+    // ===== FEEDBACK =====
     
     showFeedback(data) {
         console.log('📊 Showing feedback');
@@ -662,28 +765,26 @@ class SimpleRoleplayManager {
             this.elements.feedbackSection.style.display = 'block';
         }
         
-        // Update score
         const score = data.overall_score || 75;
         if (this.elements.scoreCircle) {
             this.elements.scoreCircle.textContent = score;
             this.updateScoreCircleColor(score);
         }
         
-        // Populate feedback content
         if (this.elements.feedbackContent) {
             const coaching = data.coaching || {};
             this.elements.feedbackContent.innerHTML = `
                 <div class="feedback-category">
                     <h5><i class="fas fa-phone me-2"></i>Opening</h5>
-                    <p>${coaching.opening || 'Good job on your opening!'}</p>
+                    <p>${coaching.opening || coaching.sales_coaching || 'Good job on your opening!'}</p>
                 </div>
                 <div class="feedback-category">
                     <h5><i class="fas fa-bullhorn me-2"></i>Communication</h5>
-                    <p>${coaching.communication || 'Your communication was clear and professional.'}</p>
+                    <p>${coaching.communication || coaching.grammar_coaching || 'Your communication was clear and professional.'}</p>
                 </div>
                 <div class="feedback-category">
                     <h5><i class="fas fa-star me-2"></i>Overall Performance</h5>
-                    <p>${coaching.overall || 'Keep practicing to improve your skills!'}</p>
+                    <p>${coaching.overall || coaching.rapport_assertiveness || 'Keep practicing to improve your skills!'}</p>
                 </div>
             `;
         }
@@ -705,15 +806,27 @@ class SimpleRoleplayManager {
         }
     }
     
+    // ===== RESET AND CLEANUP =====
+    
     resetInterface() {
         console.log('🔄 Resetting interface');
         
-        // Stop voice recognition
-        this.stopAutoListening();
+        // Stop all audio and voice recognition
+        if (this.voiceHandler) {
+            this.voiceHandler.stopListening();
+            this.voiceHandler.stopAllAudio();
+        }
         
         // Reset state
         this.isActive = false;
         this.sessionId = null;
+        this.conversationState = {
+            isProcessing: false,
+            isAIResponding: false,
+            isUserTurn: false,
+            lastResponse: null,
+            turnCount: 0
+        };
         
         if (this.callTimer) {
             clearInterval(this.callTimer);
@@ -756,9 +869,12 @@ class SimpleRoleplayManager {
     }
 
     destroy() {
-        this.stopAutoListening();
         if (this.voiceHandler) {
             this.voiceHandler.destroy();
+        }
+        
+        if (this.callTimer) {
+            clearInterval(this.callTimer);
         }
     }
     
@@ -789,7 +905,6 @@ class SimpleRoleplayManager {
             }, 5000);
         }
         
-        // Also log to console for debugging
         console.error('Error details:', message);
     }
 }
@@ -804,7 +919,6 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (error) {
         console.error('❌ Failed to initialize Simple Roleplay Manager:', error);
         
-        // Create minimal fallback
         window.roleplayManager = {
             isActive: false,
             showError: function(message) {
@@ -815,4 +929,4 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-console.log('📜 Simple Roleplay Manager script loaded');
+console.log('📜 Fixed Simple Roleplay Manager script loaded');

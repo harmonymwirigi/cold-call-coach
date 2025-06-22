@@ -1,4 +1,4 @@
-// ===== FIXED: voice-handler.js - Callback Interface =====
+// ===== FIXED: voice-handler.js - NO AUDIO OVERLAP =====
 
 class VoiceHandler {
     constructor(roleplayManager) {
@@ -6,13 +6,21 @@ class VoiceHandler {
         this.recognition = null;
         this.isListening = false;
         this.isSupported = false;
-        this.micButton = null;
-        this.transcriptElement = null;
-        this.errorElement = null;
         
-        // FIXED: Proper callback interface
-        this.onTranscript = null; // Will be set by roleplay manager
-        this.onError = null; // Will be set by roleplay manager
+        // CRITICAL: Audio state management to prevent overlap
+        this.currentAudio = null;
+        this.isAudioPlaying = false;
+        this.audioQueue = [];
+        this.isProcessingAudio = false;
+        
+        // Conversation state
+        this.isUserTurn = false;
+        this.isAITurn = false;
+        this.conversationActive = false;
+        
+        // Callback interface
+        this.onTranscript = null;
+        this.onError = null;
         
         // Natural conversation settings
         this.settings = {
@@ -27,16 +35,15 @@ class VoiceHandler {
         this.finalTranscript = '';
         this.silenceTimer = null;
         this.isAutoListening = false;
-        this.canInterrupt = false;
         
         // Silence detection for natural conversation
-        this.silenceThreshold = 2000;  // 2 seconds of silence = user finished speaking
+        this.silenceThreshold = 2000;  // 2 seconds = user finished
         this.lastSpeechTime = null;
         this.silenceCheckInterval = null;
         
         // Roleplay 1.1 silence specifications
-        this.impatience_threshold = 10000;  // 10 seconds for impatience trigger
-        this.hangup_threshold = 15000;      // 15 seconds for hang-up
+        this.impatience_threshold = 10000;  // 10 seconds
+        this.hangup_threshold = 15000;      // 15 seconds
         this.total_silence_start = null;
         this.impatience_triggered = false;
         this.hangupSilenceTimer = null;
@@ -113,7 +120,7 @@ class VoiceHandler {
                 if (this.isListening) {
                     this.stopListening();
                 } else {
-                    this.startListening(false); // Manual activation
+                    this.startListening(false);
                 }
             });
         }
@@ -122,7 +129,7 @@ class VoiceHandler {
         this.handleKeydown = (e) => {
             if (e.code === 'Space' && !e.target.matches('input, textarea')) {
                 e.preventDefault();
-                if (!this.isListening) {
+                if (!this.isListening && this.isUserTurn) {
                     this.startListening(false);
                 }
             }
@@ -136,11 +143,12 @@ class VoiceHandler {
         
         // Handle page visibility changes
         this.handleVisibilityChange = () => {
-            if (document.hidden && this.isListening) {
-                console.log('👁️ Page hidden - pausing recognition');
-                this.pauseListening();
-            } else if (!document.hidden && this.recognition) {
-                console.log('👁️ Page visible - resuming recognition');
+            if (document.hidden) {
+                this.pauseAllAudio();
+                if (this.isListening) {
+                    this.pauseListening();
+                }
+            } else if (!document.hidden) {
                 this.resumeListening();
             }
         };
@@ -179,10 +187,12 @@ class VoiceHandler {
             this.updateMicrophoneUI(true);
             this.clearError();
             
-            // Start silence tracking
-            this.total_silence_start = Date.now();
-            this.impatience_triggered = false;
-            this.startHangupSilenceDetection();
+            // Start silence tracking only if it's user's turn
+            if (this.isUserTurn) {
+                this.total_silence_start = Date.now();
+                this.impatience_triggered = false;
+                this.startHangupSilenceDetection();
+            }
         };
         
         // Recognition ends
@@ -193,8 +203,8 @@ class VoiceHandler {
             this.stopSilenceDetection();
             this.stopHangupSilenceDetection();
             
-            // Auto-restart if still supposed to be listening
-            if (this.shouldRestart && this.isSupported) {
+            // Auto-restart only if should restart and it's user's turn
+            if (this.shouldRestart && this.isSupported && this.isUserTurn && !this.isAudioPlaying) {
                 console.log('🔄 Auto-restarting recognition...');
                 setTimeout(() => {
                     this.startListening(this.isAutoListening);
@@ -202,7 +212,7 @@ class VoiceHandler {
             }
         };
         
-        // Recognition results - MAIN CONVERSATION HANDLER
+        // Recognition results
         this.recognition.onresult = (event) => {
             this.handleRecognitionResult(event);
         };
@@ -216,6 +226,14 @@ class VoiceHandler {
         this.recognition.onspeechstart = () => {
             console.log('🗣️ Speech detected');
             this.lastSpeechTime = Date.now();
+            
+            // CRITICAL: Stop any playing audio when user starts speaking
+            if (this.isAudioPlaying) {
+                console.log('⚡ User interrupted AI - stopping audio');
+                this.stopAllAudio();
+                this.setAITurn(false);
+                this.setUserTurn(true);
+            }
             
             // Reset hang-up silence timer
             this.total_silence_start = null;
@@ -235,6 +253,12 @@ class VoiceHandler {
     }
 
     handleRecognitionResult(event) {
+        // Only process if it's user's turn
+        if (!this.isUserTurn) {
+            console.log('🚫 Ignoring speech - not user turn');
+            return;
+        }
+        
         let interimTranscript = '';
         let finalTranscript = '';
         
@@ -284,11 +308,163 @@ class VoiceHandler {
             this.handlePermissionDenied();
         } else if (event.error === 'network') {
             setTimeout(() => {
-                if (this.shouldRestart) {
+                if (this.shouldRestart && this.isUserTurn) {
                     console.log('🔄 Retrying after network error...');
                     this.startListening(this.isAutoListening);
                 }
             }, 2000);
+        }
+    }
+
+    // ===== AUDIO MANAGEMENT (CRITICAL FIX) =====
+
+    async playAudio(text, isInterruptible = true) {
+        console.log(`🔊 Playing audio: "${text.substring(0, 50)}..." (interruptible: ${isInterruptible})`);
+        
+        // CRITICAL: Stop any existing audio first
+        this.stopAllAudio();
+        
+        // Set AI turn state
+        this.setAITurn(true);
+        this.setUserTurn(false);
+        
+        try {
+            const response = await fetch('/api/roleplay/tts', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ text: text })
+            });
+            
+            if (response.ok) {
+                const audioBlob = await response.blob();
+                
+                if (audioBlob.size > 100) {
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    this.currentAudio = new Audio(audioUrl);
+                    this.isAudioPlaying = true;
+                    
+                    // Setup event handlers
+                    this.currentAudio.onended = () => {
+                        console.log('✅ Audio finished playing');
+                        this.cleanupAudio(audioUrl);
+                        
+                        // Switch to user turn after audio ends
+                        this.setAITurn(false);
+                        this.setUserTurn(true);
+                        this.startAutoListeningForUser();
+                    };
+                    
+                    this.currentAudio.onerror = () => {
+                        console.log('❌ Audio playback error');
+                        this.cleanupAudio(audioUrl);
+                        this.setAITurn(false);
+                        this.setUserTurn(true);
+                        this.startAutoListeningForUser();
+                    };
+                    
+                    // Play the audio
+                    await this.currentAudio.play();
+                    console.log('🎵 Audio playing successfully');
+                    
+                } else {
+                    console.log('📢 Audio too small, simulating speech time');
+                    await this.simulateSpeakingTime(text);
+                    this.setAITurn(false);
+                    this.setUserTurn(true);
+                    this.startAutoListeningForUser();
+                }
+            } else {
+                console.log('🎵 TTS failed, simulating speech time');
+                await this.simulateSpeakingTime(text);
+                this.setAITurn(false);
+                this.setUserTurn(true);
+                this.startAutoListeningForUser();
+            }
+        } catch (error) {
+            console.error('❌ Audio playback failed:', error);
+            await this.simulateSpeakingTime(text);
+            this.setAITurn(false);
+            this.setUserTurn(true);
+            this.startAutoListeningForUser();
+        }
+    }
+
+    stopAllAudio() {
+        console.log('🔇 Stopping all audio');
+        
+        if (this.currentAudio) {
+            try {
+                this.currentAudio.pause();
+                this.currentAudio.currentTime = 0;
+                this.currentAudio = null;
+            } catch (e) {
+                console.warn('Error stopping audio:', e);
+            }
+        }
+        
+        this.isAudioPlaying = false;
+        this.audioQueue = [];
+    }
+
+    pauseAllAudio() {
+        if (this.currentAudio && !this.currentAudio.paused) {
+            this.currentAudio.pause();
+            console.log('⏸️ Audio paused');
+        }
+    }
+
+    cleanupAudio(audioUrl) {
+        this.currentAudio = null;
+        this.isAudioPlaying = false;
+        if (audioUrl) {
+            URL.revokeObjectURL(audioUrl);
+        }
+    }
+
+    async simulateSpeakingTime(text) {
+        // Simulate natural speaking time (150 words per minute)
+        const words = text.split(' ').length;
+        const speakingTime = Math.max(1000, (words / 150) * 60 * 1000);
+        
+        console.log(`🕐 Simulating speaking time: ${speakingTime}ms for ${words} words`);
+        
+        return new Promise(resolve => {
+            setTimeout(() => {
+                console.log('✅ Simulated speaking complete');
+                resolve();
+            }, speakingTime);
+        });
+    }
+
+    // ===== TURN MANAGEMENT =====
+
+    setUserTurn(isUserTurn) {
+        this.isUserTurn = isUserTurn;
+        console.log(`👤 User turn: ${isUserTurn}`);
+        
+        if (isUserTurn) {
+            this.updateTranscript('🎤 Your turn - speak when ready...');
+        }
+    }
+
+    setAITurn(isAITurn) {
+        this.isAITurn = isAITurn;
+        console.log(`🤖 AI turn: ${isAITurn}`);
+        
+        if (isAITurn) {
+            // Stop listening when AI is speaking
+            this.stopListening();
+        }
+    }
+
+    startAutoListeningForUser() {
+        if (this.isUserTurn && !this.isAudioPlaying && !this.isAITurn) {
+            console.log('🎤 Starting auto-listening for user turn');
+            setTimeout(() => {
+                this.startAutoListening();
+            }, 500); // Small delay to ensure clean state
         }
     }
 
@@ -300,6 +476,12 @@ class VoiceHandler {
     }
 
     startListening(isAutoMode = false) {
+        // Don't start listening if AI is speaking
+        if (this.isAITurn || this.isAudioPlaying) {
+            console.log('🚫 Cannot start listening - AI is speaking');
+            return;
+        }
+        
         if (!this.isSupported || this.isListening) return;
         
         console.log(`🎤 Starting listening - Auto mode: ${isAutoMode}`);
@@ -313,7 +495,7 @@ class VoiceHandler {
             
             // Request microphone permission if needed
             this.requestMicrophonePermission().then(() => {
-                if (this.recognition) {
+                if (this.recognition && !this.isAudioPlaying) {
                     this.recognition.start();
                 }
                 
@@ -356,7 +538,7 @@ class VoiceHandler {
         console.log('🤫 Starting silence detection...');
         
         this.silenceCheckInterval = setInterval(() => {
-            if (this.lastSpeechTime) {
+            if (this.lastSpeechTime && this.isUserTurn) {
                 const silenceDuration = Date.now() - this.lastSpeechTime;
                 
                 if (silenceDuration >= this.silenceThreshold) {
@@ -382,8 +564,9 @@ class VoiceHandler {
             
             // Stop listening since we're processing
             this.stopListening();
+            this.setUserTurn(false);
             
-            // FIXED: Trigger callback properly
+            // Trigger callback
             if (this.onTranscript && typeof this.onTranscript === 'function') {
                 this.onTranscript(transcript);
             } else if (this.roleplayManager && this.roleplayManager.handleVoiceInput) {
@@ -405,7 +588,7 @@ class VoiceHandler {
         console.log('⏰ Starting hang-up silence detection');
         
         this.hangupSilenceTimer = setInterval(() => {
-            if (this.total_silence_start && this.isListening) {
+            if (this.total_silence_start && this.isListening && this.isUserTurn) {
                 const totalSilence = Date.now() - this.total_silence_start;
                 
                 // 10-second impatience trigger
@@ -471,15 +654,17 @@ class VoiceHandler {
     // ===== UI METHODS =====
 
     updateMicrophoneUI(isListening) {
-        if (this.micButton) {
+        const micButton = document.getElementById('mic-button') || document.getElementById('mic-btn');
+        
+        if (micButton) {
             if (isListening) {
-                this.micButton.classList.add('listening');
-                this.micButton.style.background = 'linear-gradient(135deg, #10b981, #059669)';
-                this.micButton.title = 'Listening - click to stop';
+                micButton.classList.add('listening');
+                micButton.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+                micButton.title = 'Listening - click to stop';
             } else {
-                this.micButton.classList.remove('listening');
-                this.micButton.style.background = 'rgba(255, 255, 255, 0.1)';
-                this.micButton.title = 'Click to start listening';
+                micButton.classList.remove('listening');
+                micButton.style.background = 'rgba(255, 255, 255, 0.1)';
+                micButton.title = 'Click to start listening';
             }
         }
     }
@@ -493,11 +678,9 @@ class VoiceHandler {
     triggerError(message) {
         console.error('❌ Voice error:', message);
         
-        // Use callback if available
         if (this.onError && typeof this.onError === 'function') {
             this.onError(message);
         } else {
-            // Fallback to direct UI update
             this.showErrorInUI(message);
         }
     }
@@ -538,9 +721,10 @@ class VoiceHandler {
         this.stopListening();
         this.shouldRestart = false;
         
-        if (this.micButton) {
-            this.micButton.disabled = true;
-            this.micButton.innerHTML = '<i class="fas fa-microphone-slash"></i>';
+        const micButton = document.getElementById('mic-button') || document.getElementById('mic-btn');
+        if (micButton) {
+            micButton.disabled = true;
+            micButton.innerHTML = '<i class="fas fa-microphone-slash"></i>';
         }
         
         this.updateTranscript('Microphone permission denied. Please refresh and allow access.');
@@ -554,7 +738,7 @@ class VoiceHandler {
     }
 
     resumeListening() {
-        if (this.wasPausedBySystem && this.shouldRestart) {
+        if (this.wasPausedBySystem && this.shouldRestart && this.isUserTurn) {
             this.wasPausedBySystem = false;
             this.startListening(this.isAutoListening);
         }
@@ -564,7 +748,10 @@ class VoiceHandler {
         return {
             isListening: this.isListening,
             isAutoListening: this.isAutoListening,
-            isSupported: this.isSupported
+            isSupported: this.isSupported,
+            isUserTurn: this.isUserTurn,
+            isAITurn: this.isAITurn,
+            isAudioPlaying: this.isAudioPlaying
         };
     }
 
@@ -572,6 +759,7 @@ class VoiceHandler {
         console.log('🧹 Destroying Voice Handler...');
         
         this.stopListening();
+        this.stopAllAudio();
         this.shouldRestart = false;
         
         if (this.recognition) {
@@ -604,4 +792,4 @@ if (typeof module !== 'undefined' && module.exports) {
     window.VoiceHandler = VoiceHandler;
 }
 
-console.log('✅ Voice Handler class loaded successfully');
+console.log('✅ Fixed Voice Handler class loaded successfully');
