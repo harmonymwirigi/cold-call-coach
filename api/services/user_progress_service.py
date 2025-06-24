@@ -1,479 +1,599 @@
-# ===== FIXED: services/user_progress_service.py - Supabase Compatible =====
+# ===== services/user_progress_service.py =====
 
 import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
-from services.supabase_client import SupabaseService
+import json
 
 logger = logging.getLogger(__name__)
 
 class UserProgressService:
-    """Service for tracking user progress across roleplays - Supabase Compatible"""
+    """Service for managing user roleplay progress and achievements"""
     
-    def __init__(self):
-        self.supabase = SupabaseService()
+    def __init__(self, supabase_service=None):
+        if supabase_service:
+            self.supabase = supabase_service
+        else:
+            # Import here to avoid circular imports
+            try:
+                from .supabase_client import SupabaseService
+                self.supabase = SupabaseService()
+            except ImportError as e:
+                logger.error(f"Failed to import SupabaseService: {e}")
+                self.supabase = None
         
-        # Roleplay unlock requirements
-        self.unlock_requirements = {
-            '1.1': [],  # Always available
-            '1.2': [],  # Always available
-            '1.3': ['1.2'],  # Requires Marathon completion
-            '2.1': ['1.3'],  # Requires Legend completion
-            '2.2': ['2.1'],  # Requires 2.1 completion
-            '2.3': ['2.2'],  # Requires 2.2 completion
+        # Roleplay progression rules
+        self.progression_rules = {
+            '1.1': {
+                'name': 'Practice Mode',
+                'unlocks': [],
+                'required_for': ['1.2'],
+                'always_available': True
+            },
+            '1.2': {
+                'name': 'Marathon Mode', 
+                'unlocks': ['1.3'],
+                'required_for': ['2.1'],
+                'requires_completion': False,
+                'requires_pass': False
+            },
+            '1.3': {
+                'name': 'Legend Mode',
+                'unlocks': ['2.1', '2.2'],
+                'required_for': [],
+                'requires_completion': '1.2',
+                'requires_pass': True
+            },
+            '2.1': {
+                'name': 'Advanced Practice',
+                'unlocks': ['2.2'],
+                'required_for': [],
+                'requires_completion': '1.3',
+                'requires_pass': True
+            },
+            '2.2': {
+                'name': 'Advanced Marathon',
+                'unlocks': [],
+                'required_for': [],
+                'requires_completion': '2.1',
+                'requires_pass': True
+            }
         }
         
-        # Completion criteria for each roleplay
-        self.completion_criteria = {
-            '1.1': {'min_score': 70},  # Practice mode
-            '1.2': {'min_calls_passed': 6, 'total_calls': 10},  # Marathon mode
-            '1.3': {'perfect_calls': 6, 'consecutive': True},  # Legend mode
-            '2.1': {'min_score': 75},  # Advanced practice
-            '2.2': {'min_calls_passed': 7, 'total_calls': 10},  # Advanced marathon
-            '2.3': {'perfect_calls': 8, 'consecutive': True},  # Advanced legend
-        }
-    
-    def get_user_roleplay_progress(self, user_id: str, roleplay_ids: List[str] = None) -> Dict[str, Any]:
-        """Get user's progress across all or specific roleplays"""
-        try:
-            # Get all completions for user
-            query = self.supabase.get_service_client().table('roleplay_completions').select('*').eq('user_id', user_id)
-            
-            if roleplay_ids:
-                query = query.in_('roleplay_id', roleplay_ids)
-            
-            result = query.order('completed_at', desc=True).execute()
-            completions = result.data if result.data else []
-            
-            # Process completions into progress structure
-            progress = {}
-            for completion in completions:
-                roleplay_id = completion['roleplay_id']
-                
-                if roleplay_id not in progress:
-                    progress[roleplay_id] = {
-                        'attempts': 0,
-                        'best_score': 0,
-                        'completed': False,
-                        'passed': False,
-                        'last_attempt': None,
-                        'completion_date': None,
-                        'statistics': {
-                            'total_attempts': 0,
-                            'average_score': 0,
-                            'best_performance': None
-                        }
-                    }
-                
-                # Update statistics
-                progress[roleplay_id]['attempts'] += 1
-                progress[roleplay_id]['statistics']['total_attempts'] += 1
-                
-                # Track best score
-                if completion['score'] > progress[roleplay_id]['best_score']:
-                    progress[roleplay_id]['best_score'] = completion['score']
-                    progress[roleplay_id]['statistics']['best_performance'] = completion
-                
-                # Check if this completion meets criteria
-                if self._meets_completion_criteria(roleplay_id, completion):
-                    progress[roleplay_id]['completed'] = True
-                    progress[roleplay_id]['passed'] = True
-                    if not progress[roleplay_id]['completion_date']:
-                        progress[roleplay_id]['completion_date'] = completion['completed_at']
-                
-                # Track latest attempt
-                if not progress[roleplay_id]['last_attempt'] or completion['completed_at'] > progress[roleplay_id]['last_attempt']:
-                    progress[roleplay_id]['last_attempt'] = completion['completed_at']
-                
-                # Marathon-specific data
-                if roleplay_id in ['1.2', '2.2'] and completion.get('marathon_results'):
-                    marathon = completion['marathon_results']
-                    progress[roleplay_id]['calls_passed'] = marathon.get('calls_passed', 0)
-                    progress[roleplay_id]['total_calls'] = marathon.get('total_calls', 10)
-                    progress[roleplay_id]['marathon_results'] = marathon
-            
-            # Calculate average scores
-            for roleplay_id in progress:
-                scores = [c['score'] for c in completions if c['roleplay_id'] == roleplay_id]
-                if scores:
-                    progress[roleplay_id]['statistics']['average_score'] = sum(scores) / len(scores)
-            
-            return progress
-            
-        except Exception as e:
-            logger.error(f"Error getting user progress: {e}")
-            return {}
-    
-    def _meets_completion_criteria(self, roleplay_id: str, completion: Dict) -> bool:
-        """Check if a completion meets the criteria for the roleplay"""
-        criteria = self.completion_criteria.get(roleplay_id, {})
-        
-        # Score-based completion (Practice modes)
-        if 'min_score' in criteria:
-            return completion['score'] >= criteria['min_score']
-        
-        # Marathon-based completion
-        if 'min_calls_passed' in criteria:
-            marathon_results = completion.get('marathon_results', {})
-            calls_passed = marathon_results.get('calls_passed', 0)
-            return calls_passed >= criteria['min_calls_passed']
-        
-        # Legend-based completion (consecutive perfect calls)
-        if 'perfect_calls' in criteria:
-            marathon_results = completion.get('marathon_results', {})
-            if criteria.get('consecutive'):
-                # For legend mode, need consecutive perfect calls
-                return marathon_results.get('consecutive_perfects', 0) >= criteria['perfect_calls']
-            else:
-                return marathon_results.get('perfect_calls', 0) >= criteria['perfect_calls']
-        
-        return False
+        logger.info("UserProgressService initialized")
     
     def check_roleplay_access(self, user_id: str, roleplay_id: str) -> Dict[str, Any]:
         """Check if user has access to a specific roleplay"""
         try:
-            # Always allow 1.1 and 1.2
-            if roleplay_id in ['1.1', '1.2']:
-                return {'allowed': True}
+            if not self.supabase:
+                return {'allowed': True, 'reason': 'Service unavailable'}
             
-            # Check requirements
-            requirements = self.unlock_requirements.get(roleplay_id, [])
-            if not requirements:
-                return {'allowed': True}
+            # Always allow Practice Mode (1.1)
+            if roleplay_id == '1.1':
+                return {'allowed': True, 'reason': 'Always available'}
             
-            # Get user progress
-            progress = self.get_user_roleplay_progress(user_id, requirements)
+            rules = self.progression_rules.get(roleplay_id)
+            if not rules:
+                return {'allowed': False, 'reason': f'Unknown roleplay: {roleplay_id}'}
             
-            # Check each requirement
-            missing_requirements = []
-            for req_roleplay in requirements:
-                if req_roleplay not in progress or not progress[req_roleplay]['completed']:
-                    missing_requirements.append(req_roleplay)
+            # Check if requires completion of another roleplay
+            if 'requires_completion' in rules:
+                required_roleplay = rules['requires_completion']
+                requires_pass = rules.get('requires_pass', False)
+                
+                progress = self.get_user_roleplay_progress(user_id, [required_roleplay])
+                required_progress = progress.get(required_roleplay)
+                
+                if not required_progress:
+                    return {
+                        'allowed': False,
+                        'reason': f'Must complete {self.progression_rules[required_roleplay]["name"]} first',
+                        'requirements': [required_roleplay]
+                    }
+                
+                if requires_pass and not required_progress.get('completed'):
+                    return {
+                        'allowed': False,
+                        'reason': f'Must pass {self.progression_rules[required_roleplay]["name"]} first',
+                        'requirements': [required_roleplay]
+                    }
             
-            if missing_requirements:
-                return {
-                    'allowed': False,
-                    'reason': f'Must complete {", ".join(missing_requirements)} first',
-                    'requirements': missing_requirements
-                }
-            
-            return {'allowed': True}
+            return {'allowed': True, 'reason': 'Access granted'}
             
         except Exception as e:
             logger.error(f"Error checking roleplay access: {e}")
-            return {'allowed': False, 'reason': 'Error checking access'}
+            return {'allowed': True, 'reason': 'Error checking access'}
     
-    def save_roleplay_completion(self, completion_data: Dict) -> str:
-        """Save roleplay completion to database"""
+    def get_user_roleplay_progress(self, user_id: str, roleplay_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Get user's progress for specific roleplays or all roleplays"""
         try:
-            # Prepare data for database
-            db_data = {
-                'user_id': completion_data['user_id'],
-                'roleplay_id': completion_data['roleplay_id'],
-                'session_id': completion_data['session_id'],
-                'mode': completion_data['mode'],
-                'score': completion_data['score'],
-                'success': completion_data['success'],
-                'duration_minutes': completion_data['duration_minutes'],
-                'started_at': completion_data['started_at'],
-                'completed_at': completion_data.get('ended_at', datetime.now(timezone.utc).isoformat()),
-                'conversation_data': completion_data.get('conversation_data', {}),
-                'coaching_feedback': completion_data.get('coaching_feedback', {}),
-                'ai_evaluation': completion_data.get('ai_evaluation'),
-                'marathon_results': completion_data.get('marathon_results'),
-                'rubric_scores': completion_data.get('rubric_scores', {}),
-                'forced_end': completion_data.get('forced_end', False)
-            }
+            if not self.supabase:
+                return {}
             
-            # Insert into database
-            result = self.supabase.get_service_client().table('roleplay_completions').insert(db_data).execute()
-            
-            if result.data:
-                completion_id = result.data[0]['id']
-                logger.info(f"Roleplay completion saved: {completion_id}")
-                return completion_id
+            # Get progress records
+            if roleplay_ids:
+                progress_records = []
+                for roleplay_id in roleplay_ids:
+                    records = self.supabase.get_data_with_filter(
+                        'user_roleplay_progress',
+                        'user_id',
+                        user_id,
+                        additional_filters={'roleplay_id': roleplay_id}
+                    )
+                    progress_records.extend(records)
             else:
-                raise Exception("No data returned from insert")
-                
-        except Exception as e:
-            logger.error(f"Error saving roleplay completion: {e}")
-            raise
-    
-    def log_roleplay_attempt(self, user_id: str, roleplay_id: str, session_id: str):
-        """Log when user starts a roleplay attempt"""
-        try:
-            attempt_data = {
-                'user_id': user_id,
-                'roleplay_id': roleplay_id,
-                'session_id': session_id,
-                'started_at': datetime.now(timezone.utc).isoformat(),
-                'status': 'started'
-            }
+                progress_records = self.supabase.get_data_with_filter(
+                    'user_roleplay_progress',
+                    'user_id',
+                    user_id
+                )
             
-            self.supabase.get_service_client().table('roleplay_attempts').insert(attempt_data).execute()
-            logger.info(f"Roleplay attempt logged: {session_id}")
+            # Get recent completions for additional context
+            completions = self.supabase.get_data_with_filter(
+                'roleplay_completions',
+                'user_id',
+                user_id,
+                limit=50,
+                order_by='created_at',
+                ascending=False
+            )
+            
+            # Build progress dictionary
+            progress = {}
+            
+            for record in progress_records:
+                roleplay_id = record['roleplay_id']
+                
+                # Get recent completions for this roleplay
+                roleplay_completions = [c for c in completions if c['roleplay_id'] == roleplay_id]
+                
+                progress[roleplay_id] = {
+                    'best_score': record.get('best_score', 0),
+                    'total_attempts': record.get('total_attempts', 0),
+                    'successful_attempts': record.get('successful_attempts', 0),
+                    'marathon_best_run': record.get('marathon_best_run', 0),
+                    'marathon_completed': record.get('marathon_completed', False),
+                    'marathon_passed': record.get('marathon_passed', False),
+                    'legend_streak': record.get('legend_streak', 0),
+                    'legend_completed': record.get('legend_completed', False),
+                    'is_unlocked': record.get('is_unlocked', True),
+                    'first_attempt_at': record.get('first_attempt_at'),
+                    'last_attempt_at': record.get('last_attempt_at'),
+                    'recent_completions': roleplay_completions[:5],  # Last 5 attempts
+                    'completed': self._determine_completion_status(roleplay_id, record, roleplay_completions),
+                    'passed': self._determine_pass_status(roleplay_id, record, roleplay_completions)
+                }
+            
+            return progress
+            
+        except Exception as e:
+            logger.error(f"Error getting user roleplay progress: {e}")
+            return {}
+    
+    def _determine_completion_status(self, roleplay_id: str, progress_record: Dict, completions: List[Dict]) -> bool:
+        """Determine if user has completed a roleplay based on type"""
+        if roleplay_id.endswith('.1'):  # Practice modes
+            return progress_record.get('best_score', 0) >= 70
+        elif roleplay_id.endswith('.2'):  # Marathon modes
+            return progress_record.get('marathon_completed', False) and progress_record.get('marathon_passed', False)
+        elif roleplay_id.endswith('.3'):  # Legend modes
+            return progress_record.get('legend_completed', False)
+        else:
+            return len(completions) > 0 and any(c.get('success', False) for c in completions)
+    
+    def _determine_pass_status(self, roleplay_id: str, progress_record: Dict, completions: List[Dict]) -> bool:
+        """Determine if user has passed a roleplay"""
+        if roleplay_id.endswith('.1'):  # Practice modes
+            return progress_record.get('best_score', 0) >= 70
+        elif roleplay_id.endswith('.2'):  # Marathon modes
+            return progress_record.get('marathon_passed', False)
+        elif roleplay_id.endswith('.3'):  # Legend modes
+            return progress_record.get('legend_completed', False)
+        else:
+            return progress_record.get('best_score', 0) >= 70
+    
+    def log_roleplay_attempt(self, user_id: str, roleplay_id: str, session_id: str) -> bool:
+        """Log that a user started a roleplay attempt"""
+        try:
+            if not self.supabase:
+                return False
+            
+            # Create or update progress record
+            now = datetime.now(timezone.utc).isoformat()
+            
+            existing_progress = self.supabase.get_data_with_filter(
+                'user_roleplay_progress',
+                'user_id',
+                user_id,
+                additional_filters={'roleplay_id': roleplay_id}
+            )
+            
+            if existing_progress:
+                # Update existing record
+                progress_id = existing_progress[0]['id']
+                updates = {
+                    'total_attempts': (existing_progress[0].get('total_attempts', 0) + 1),
+                    'last_attempt_at': now,
+                    'updated_at': now
+                }
+                
+                if not existing_progress[0].get('first_attempt_at'):
+                    updates['first_attempt_at'] = now
+                
+                self.supabase.update_data_by_id('user_roleplay_progress', {'id': progress_id}, updates)
+            else:
+                # Create new progress record
+                self.supabase.insert_data('user_roleplay_progress', {
+                    'user_id': user_id,
+                    'roleplay_id': roleplay_id,
+                    'total_attempts': 1,
+                    'first_attempt_at': now,
+                    'last_attempt_at': now,
+                    'is_unlocked': True,
+                    'created_at': now
+                })
+            
+            logger.info(f"Logged roleplay attempt: {user_id} -> {roleplay_id}")
+            return True
             
         except Exception as e:
             logger.error(f"Error logging roleplay attempt: {e}")
+            return False
     
-    def update_user_progress(self, user_id: str, roleplay_id: str, completion_data: Dict) -> Dict[str, Any]:
-        """Update user's overall progress and check for achievements"""
+    def save_roleplay_completion(self, completion_data: Dict[str, Any]) -> Optional[str]:
+        """Save a completed roleplay session to database"""
         try:
-            # Get current progress
-            progress = self.get_user_roleplay_progress(user_id, [roleplay_id])
-            current = progress.get(roleplay_id, {})
+            if not self.supabase:
+                return None
             
-            # Determine if this is a new best or completion
-            is_new_best = completion_data['score'] > current.get('best_score', 0)
-            is_completion = self._meets_completion_criteria(roleplay_id, completion_data)
-            is_first_completion = is_completion and not current.get('completed', False)
+            # Prepare completion record
+            completion_record = {
+                'user_id': completion_data['user_id'],
+                'session_id': completion_data['session_id'],
+                'roleplay_id': completion_data['roleplay_id'],
+                'mode': completion_data.get('mode', 'practice'),
+                'started_at': completion_data.get('started_at'),
+                'ended_at': completion_data.get('ended_at', datetime.now(timezone.utc).isoformat()),
+                'duration_minutes': completion_data.get('duration_minutes', 1),
+                'success': completion_data.get('success', False),
+                'score': completion_data.get('score', 0),
+                'ai_evaluation': completion_data.get('ai_evaluation'),
+                'coaching_feedback': completion_data.get('coaching_feedback'),
+                'conversation_data': completion_data.get('conversation_data'),
+                'rubric_scores': completion_data.get('rubric_scores'),
+                'marathon_results': completion_data.get('marathon_results'),
+                'forced_end': completion_data.get('forced_end', False),
+                'created_at': datetime.now(timezone.utc).isoformat()
+            }
             
-            # Update user stats table
-            self._update_user_stats(user_id, roleplay_id, completion_data, is_new_best, is_first_completion)
+            # Insert completion record
+            result = self.supabase.insert_data('roleplay_completions', completion_record)
+            
+            if result:
+                completion_id = result.get('id') if isinstance(result, dict) else str(result)
+                logger.info(f"Saved roleplay completion: {completion_id}")
+                return completion_id
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error saving roleplay completion: {e}")
+            return None
+    
+    def update_user_progress(self, user_id: str, roleplay_id: str, completion_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Update user's overall progress based on a completion"""
+        try:
+            if not self.supabase:
+                return {'updated': False, 'error': 'Service unavailable'}
+            
+            score = completion_data.get('score', 0)
+            success = completion_data.get('success', False)
+            marathon_results = completion_data.get('marathon_results')
+            
+            # Get existing progress
+            existing_progress = self.supabase.get_data_with_filter(
+                'user_roleplay_progress',
+                'user_id',
+                user_id,
+                additional_filters={'roleplay_id': roleplay_id}
+            )
+            
+            if not existing_progress:
+                # Create initial progress record
+                progress_data = {
+                    'user_id': user_id,
+                    'roleplay_id': roleplay_id,
+                    'best_score': score,
+                    'total_attempts': 1,
+                    'successful_attempts': 1 if success else 0,
+                    'is_unlocked': True,
+                    'first_attempt_at': completion_data.get('started_at'),
+                    'last_attempt_at': completion_data.get('ended_at'),
+                    'created_at': datetime.now(timezone.utc).isoformat()
+                }
+                
+                # Handle mode-specific data
+                if roleplay_id.endswith('.2') and marathon_results:  # Marathon mode
+                    progress_data.update({
+                        'marathon_best_run': marathon_results.get('calls_passed', 0),
+                        'marathon_completed': marathon_results.get('marathon_complete', False),
+                        'marathon_passed': marathon_results.get('marathon_passed', False)
+                    })
+                elif roleplay_id.endswith('.3'):  # Legend mode
+                    progress_data.update({
+                        'legend_streak': score // 10,  # Simplified calculation
+                        'legend_completed': success
+                    })
+                
+                self.supabase.insert_data('user_roleplay_progress', progress_data)
+                
+            else:
+                # Update existing progress
+                current_progress = existing_progress[0]
+                progress_id = current_progress['id']
+                
+                updates = {
+                    'last_attempt_at': completion_data.get('ended_at'),
+                    'updated_at': datetime.now(timezone.utc).isoformat()
+                }
+                
+                # Update best score if this is better
+                if score > current_progress.get('best_score', 0):
+                    updates['best_score'] = score
+                
+                # Update successful attempts
+                if success:
+                    updates['successful_attempts'] = current_progress.get('successful_attempts', 0) + 1
+                
+                # Handle mode-specific updates
+                if roleplay_id.endswith('.2') and marathon_results:  # Marathon mode
+                    calls_passed = marathon_results.get('calls_passed', 0)
+                    if calls_passed > current_progress.get('marathon_best_run', 0):
+                        updates['marathon_best_run'] = calls_passed
+                    
+                    if marathon_results.get('marathon_complete', False):
+                        updates['marathon_completed'] = True
+                        
+                    if marathon_results.get('marathon_passed', False):
+                        updates['marathon_passed'] = True
+                        
+                elif roleplay_id.endswith('.3') and success:  # Legend mode
+                    updates['legend_completed'] = True
+                    updates['legend_streak'] = max(current_progress.get('legend_streak', 0), score // 10)
+                
+                self.supabase.update_data_by_id('user_roleplay_progress', {'id': progress_id}, updates)
+            
+            logger.info(f"Updated user progress: {user_id} -> {roleplay_id} (score: {score})")
             
             return {
-                'is_new_best': is_new_best,
-                'is_completion': is_completion,
-                'is_first_completion': is_first_completion,
-                'score': completion_data['score'],
-                'previous_best': current.get('best_score', 0)
+                'updated': True,
+                'best_score': score,
+                'completion_recorded': True
             }
             
         except Exception as e:
             logger.error(f"Error updating user progress: {e}")
-            return {}
-    
-    def _update_user_stats(self, user_id: str, roleplay_id: str, completion_data: Dict, is_new_best: bool, is_first_completion: bool):
-        """Update user_roleplay_stats table"""
-        try:
-            # Check if record exists
-            existing = self.supabase.get_service_client().table('user_roleplay_stats').select('*').eq('user_id', user_id).eq('roleplay_id', roleplay_id).execute()
-            
-            now = datetime.now(timezone.utc).isoformat()
-            
-            if existing.data:
-                # Update existing record
-                stats = existing.data[0]
-                update_data = {
-                    'total_attempts': stats['total_attempts'] + 1,
-                    'last_attempt_at': now,
-                    'last_score': completion_data['score']
-                }
-                
-                if is_new_best:
-                    update_data['best_score'] = completion_data['score']
-                    update_data['best_score_at'] = now
-                
-                if is_first_completion:
-                    update_data['completed'] = True
-                    update_data['completed_at'] = now
-                
-                self.supabase.get_service_client().table('user_roleplay_stats').update(update_data).eq('user_id', user_id).eq('roleplay_id', roleplay_id).execute()
-                
-            else:
-                # Create new record
-                stats_data = {
-                    'user_id': user_id,
-                    'roleplay_id': roleplay_id,
-                    'total_attempts': 1,
-                    'best_score': completion_data['score'],
-                    'last_score': completion_data['score'],
-                    'completed': is_first_completion,
-                    'last_attempt_at': now,
-                    'best_score_at': now,
-                    'completed_at': now if is_first_completion else None
-                }
-                
-                self.supabase.get_service_client().table('user_roleplay_stats').insert(stats_data).execute()
-                
-        except Exception as e:
-            logger.error(f"Error updating user stats: {e}")
+            return {'updated': False, 'error': str(e)}
     
     def check_new_unlocks(self, user_id: str) -> List[str]:
-        """Check for newly unlocked roleplays"""
+        """Check for new roleplay unlocks based on current progress"""
         try:
-            # Get user's current progress
+            if not self.supabase:
+                return []
+            
+            unlocked_roleplays = []
             progress = self.get_user_roleplay_progress(user_id)
             
-            # Check each roleplay for unlock status
-            newly_unlocked = []
-            
-            for roleplay_id, requirements in self.unlock_requirements.items():
-                if not requirements:  # Always available
+            for roleplay_id, rules in self.progression_rules.items():
+                if 'unlocks' not in rules or not rules['unlocks']:
                     continue
                 
-                # Check if all requirements are met
-                all_requirements_met = True
-                for req_roleplay in requirements:
-                    if req_roleplay not in progress or not progress[req_roleplay]['completed']:
-                        all_requirements_met = False
-                        break
+                # Check if this roleplay was just completed
+                roleplay_progress = progress.get(roleplay_id)
+                if not roleplay_progress or not roleplay_progress.get('completed'):
+                    continue
                 
-                if all_requirements_met:
-                    # Check if this is newly unlocked (not previously attempted)
-                    if roleplay_id not in progress:
-                        newly_unlocked.append(roleplay_id)
+                # Check what this roleplay unlocks
+                for unlock_id in rules['unlocks']:
+                    unlock_progress = progress.get(unlock_id)
+                    
+                    # If not yet unlocked, add to unlocks list
+                    if not unlock_progress or not unlock_progress.get('is_unlocked'):
+                        unlocked_roleplays.append(unlock_id)
+                        
+                        # Update database to mark as unlocked
+                        try:
+                            existing = self.supabase.get_data_with_filter(
+                                'user_roleplay_progress',
+                                'user_id',
+                                user_id,
+                                additional_filters={'roleplay_id': unlock_id}
+                            )
+                            
+                            now = datetime.now(timezone.utc).isoformat()
+                            
+                            if existing:
+                                self.supabase.update_data_by_id(
+                                    'user_roleplay_progress',
+                                    {'id': existing[0]['id']},
+                                    {'is_unlocked': True, 'unlocked_at': now, 'updated_at': now}
+                                )
+                            else:
+                                self.supabase.insert_data('user_roleplay_progress', {
+                                    'user_id': user_id,
+                                    'roleplay_id': unlock_id,
+                                    'is_unlocked': True,
+                                    'unlocked_at': now,
+                                    'created_at': now
+                                })
+                                
+                        except Exception as unlock_error:
+                            logger.error(f"Error updating unlock status: {unlock_error}")
             
-            return newly_unlocked
+            if unlocked_roleplays:
+                logger.info(f"New unlocks for {user_id}: {unlocked_roleplays}")
+            
+            return unlocked_roleplays
             
         except Exception as e:
             logger.error(f"Error checking new unlocks: {e}")
             return []
     
     def get_available_roleplays(self, user_id: str) -> List[str]:
-        """Get list of all available roleplays for user"""
-        available = []
-        
-        for roleplay_id in self.unlock_requirements.keys():
-            access = self.check_roleplay_access(user_id, roleplay_id)
-            if access['allowed']:
-                available.append(roleplay_id)
-        
-        return available
-    
-    def get_completion_stats(self, user_id: str) -> Dict[str, Any]:
-        """Get overall completion statistics for user"""
+        """Get list of roleplays available to the user"""
         try:
             progress = self.get_user_roleplay_progress(user_id)
+            available = []
             
-            total_roleplays = len(self.unlock_requirements)
-            completed_roleplays = len([rp for rp in progress.values() if rp['completed']])
-            total_attempts = sum(rp['attempts'] for rp in progress.values())
-            average_score = sum(rp['best_score'] for rp in progress.values()) / len(progress) if progress else 0
+            for roleplay_id, rules in self.progression_rules.items():
+                access_check = self.check_roleplay_access(user_id, roleplay_id)
+                if access_check['allowed']:
+                    available.append(roleplay_id)
+            
+            return available
+            
+        except Exception as e:
+            logger.error(f"Error getting available roleplays: {e}")
+            return ['1.1']  # Always return at least Practice Mode
+    
+    def get_completion_stats(self, user_id: str) -> Dict[str, Any]:
+        """Get user's overall completion statistics"""
+        try:
+            if not self.supabase:
+                return {}
+            
+            completions = self.supabase.get_data_with_filter(
+                'roleplay_completions',
+                'user_id',
+                user_id
+            )
+            
+            if not completions:
+                return {
+                    'total_sessions': 0,
+                    'successful_sessions': 0,
+                    'average_score': 0,
+                    'total_time_minutes': 0,
+                    'completion_rate': 0
+                }
+            
+            total_sessions = len(completions)
+            successful_sessions = len([c for c in completions if c.get('success', False)])
+            scores = [c.get('score', 0) for c in completions if c.get('score', 0) > 0]
+            total_time = sum(c.get('duration_minutes', 0) for c in completions)
             
             return {
-                'total_roleplays_available': total_roleplays,
-                'completed_roleplays': completed_roleplays,
-                'completion_percentage': (completed_roleplays / total_roleplays) * 100,
-                'total_attempts': total_attempts,
-                'average_best_score': round(average_score, 1),
-                'current_level': self._calculate_user_level(progress),
-                'next_unlock': self._get_next_unlock(user_id)
+                'total_sessions': total_sessions,
+                'successful_sessions': successful_sessions,
+                'average_score': sum(scores) / len(scores) if scores else 0,
+                'best_score': max(scores) if scores else 0,
+                'total_time_minutes': total_time,
+                'completion_rate': (successful_sessions / total_sessions * 100) if total_sessions > 0 else 0,
+                'roleplays_completed': len(set(c['roleplay_id'] for c in completions if c.get('success', False)))
             }
             
         except Exception as e:
             logger.error(f"Error getting completion stats: {e}")
             return {}
     
-    def _calculate_user_level(self, progress: Dict) -> str:
-        """Calculate user's current level based on completions"""
-        if not progress:
-            return "Beginner"
-        
-        completed = [rp for rp in progress.values() if rp['completed']]
-        
-        if len(completed) >= 6:
-            return "Master"
-        elif len(completed) >= 4:
-            return "Advanced"
-        elif len(completed) >= 2:
-            return "Intermediate"
-        else:
-            return "Beginner"
-    
-    def _get_next_unlock(self, user_id: str) -> Optional[str]:
-        """Get the next roleplay that could be unlocked"""
-        progress = self.get_user_roleplay_progress(user_id)
-        
-        for roleplay_id, requirements in self.unlock_requirements.items():
-            if roleplay_id in progress and progress[roleplay_id]['completed']:
-                continue  # Already completed
-            
-            access = self.check_roleplay_access(user_id, roleplay_id)
-            if not access['allowed'] and requirements:
-                # This is the next one that needs requirements
-                return roleplay_id
-        
-        return None
-    
-    def get_next_recommendations(self, user_id: str) -> List[Dict[str, Any]]:
-        """Get personalized recommendations for user's next steps"""
-        try:
-            progress = self.get_user_roleplay_progress(user_id)
-            recommendations = []
-            
-            # Check current status and recommend next steps
-            if '1.1' not in progress:
-                recommendations.append({
-                    'type': 'start',
-                    'roleplay_id': '1.1',
-                    'message': 'Start with Practice Mode to learn the basics',
-                    'priority': 'high'
-                })
-            elif not progress['1.1']['completed']:
-                recommendations.append({
-                    'type': 'improve',
-                    'roleplay_id': '1.1',
-                    'message': f"Keep practicing! Your best score is {progress['1.1']['best_score']}/100. Need 70+ to master.",
-                    'priority': 'high'
-                })
-            elif '1.2' not in progress:
-                recommendations.append({
-                    'type': 'advance',
-                    'roleplay_id': '1.2',
-                    'message': 'Ready for Marathon Mode! Test your consistency across 10 calls.',
-                    'priority': 'medium'
-                })
-            elif not progress['1.2']['completed']:
-                calls_passed = progress['1.2'].get('calls_passed', 0)
-                recommendations.append({
-                    'type': 'complete',
-                    'roleplay_id': '1.2',
-                    'message': f"You've passed {calls_passed}/10 calls. Need 6+ to unlock Legend Mode.",
-                    'priority': 'medium'
-                })
-            else:
-                # User has completed Marathon, suggest Legend
-                if '1.3' not in progress:
-                    recommendations.append({
-                        'type': 'master',
-                        'roleplay_id': '1.3',
-                        'message': 'Unlock Legend Mode! 6 perfect calls in a row to master Roleplay 1.',
-                        'priority': 'high'
-                    })
-            
-            return recommendations
-            
-        except Exception as e:
-            logger.error(f"Error getting recommendations: {e}")
-            return []
-    
     def get_leaderboard(self, roleplay_id: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """Get leaderboard for a specific roleplay - Fixed for Supabase"""
+        """Get leaderboard for a specific roleplay"""
         try:
-            # Modified to work with your existing user_profiles table
-            result = self.supabase.get_service_client().table('user_roleplay_stats').select(
-                'user_id, best_score, completed_at'
-            ).eq('roleplay_id', roleplay_id).eq('completed', True).order(
-                'best_score', desc=True
-            ).limit(limit).execute()
+            if not self.supabase:
+                return []
+            
+            # Get top scores for this roleplay
+            progress_records = self.supabase.get_data_with_filter(
+                'user_roleplay_progress',
+                'roleplay_id',
+                roleplay_id,
+                limit=limit,
+                order_by='best_score',
+                ascending=False
+            )
             
             leaderboard = []
-            for i, record in enumerate(result.data if result.data else []):
-                # Get user profile for display name
-                try:
-                    profile_result = self.supabase.get_service_client().table('user_profiles').select(
-                        'first_name'
-                    ).eq('id', record['user_id']).execute()
+            
+            for i, record in enumerate(progress_records):
+                if record.get('best_score', 0) > 0:
+                    # Get user info (anonymized for privacy)
+                    user_id = record['user_id']
                     
-                    if profile_result.data:
-                        first_name = profile_result.data[0].get('first_name', 'Anonymous')
-                        display_name = first_name[:10] + "..." if len(first_name) > 10 else first_name
-                    else:
-                        display_name = 'Anonymous'
-                except:
-                    display_name = 'Anonymous'
-                
-                leaderboard.append({
-                    'rank': i + 1,
-                    'user_id': record['user_id'],
-                    'name': display_name,
-                    'score': record['best_score'],
-                    'completed_at': record['completed_at']
-                })
+                    leaderboard.append({
+                        'rank': i + 1,
+                        'user_id': user_id[:8] + '...',  # Anonymized
+                        'score': record.get('best_score', 0),
+                        'total_attempts': record.get('total_attempts', 0),
+                        'successful_attempts': record.get('successful_attempts', 0),
+                        'completion_rate': (record.get('successful_attempts', 0) / max(record.get('total_attempts', 1), 1)) * 100,
+                        'last_attempt': record.get('last_attempt_at')
+                    })
             
             return leaderboard
             
         except Exception as e:
             logger.error(f"Error getting leaderboard: {e}")
             return []
+    
+    def get_next_recommendations(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get recommended next steps for the user"""
+        try:
+            progress = self.get_user_roleplay_progress(user_id)
+            recommendations = []
+            
+            # Check what's available and not completed
+            for roleplay_id, rules in self.progression_rules.items():
+                access_check = self.check_roleplay_access(user_id, roleplay_id)
+                
+                if access_check['allowed']:
+                    user_progress = progress.get(roleplay_id, {})
+                    
+                    if not user_progress.get('completed'):
+                        priority = 'high' if roleplay_id == '1.1' else 'medium'
+                        
+                        recommendations.append({
+                            'roleplay_id': roleplay_id,
+                            'name': rules['name'],
+                            'priority': priority,
+                            'reason': self._get_recommendation_reason(roleplay_id, user_progress),
+                            'best_score': user_progress.get('best_score', 0),
+                            'attempts': user_progress.get('total_attempts', 0)
+                        })
+            
+            # Sort by priority and attempts
+            recommendations.sort(key=lambda x: (
+                0 if x['priority'] == 'high' else 1,
+                x['attempts']
+            ))
+            
+            return recommendations[:3]  # Return top 3 recommendations
+            
+        except Exception as e:
+            logger.error(f"Error getting recommendations: {e}")
+            return []
+    
+    def _get_recommendation_reason(self, roleplay_id: str, progress: Dict[str, Any]) -> str:
+        """Get reason for recommending a specific roleplay"""
+        attempts = progress.get('total_attempts', 0)
+        best_score = progress.get('best_score', 0)
+        
+        if attempts == 0:
+            return "Not yet attempted"
+        elif best_score < 70:
+            return f"Best score: {best_score}% - keep practicing!"
+        elif roleplay_id.endswith('.2'):
+            return "Ready for marathon challenge"
+        elif roleplay_id.endswith('.3'):
+            return "Ready for legend challenge"
+        else:
+            return "Continue improving"
+
+# Global instance
+_user_progress_service = None
+
+def get_user_progress_service():
+    """Get global user progress service instance"""
+    global _user_progress_service
+    if _user_progress_service is None:
+        _user_progress_service = UserProgressService()
+    return _user_progress_service
