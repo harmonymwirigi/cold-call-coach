@@ -1,4 +1,4 @@
-# ===== services/openai_service.py (FIXED FOR ROLEPLAY 1.1) =====
+# ===== FIXED: services/openai_service.py =====
 
 import openai
 import os

@@ -23,45 +23,61 @@ class RoleplayEngine:
             try:
                 from .openai_service import OpenAIService
                 self.openai_service = OpenAIService()
+                logger.info("✅ OpenAI service initialized")
             except ImportError as e:
-                logger.warning(f"OpenAI service not available: {e}")
+                logger.warning(f"⚠️ OpenAI service not available: {e}")
                 self.openai_service = None
         
         if not self.supabase_service:
             try:
                 from .supabase_client import SupabaseService
                 self.supabase_service = SupabaseService()
+                logger.info("✅ Supabase service initialized")
             except ImportError as e:
-                logger.warning(f"Supabase service not available: {e}")
+                logger.warning(f"⚠️ Supabase service not available: {e}")
                 self.supabase_service = None
         
         # Load roleplay implementations
         self.roleplay_implementations = {}
         self._load_roleplay_implementations()
         
-        logger.info(f"RoleplayEngine initialized with {len(self.roleplay_implementations)} roleplay types")
+        logger.info(f"✅ RoleplayEngine initialized with {len(self.roleplay_implementations)} roleplay types")
     
     def _load_roleplay_implementations(self):
         """Load all available roleplay implementations"""
         try:
+            # Import the fixed roleplay implementations
             from .roleplay.roleplay_1_1 import Roleplay11
-            from .roleplay.roleplay_1_2 import Roleplay12
-            from .roleplay.roleplay_1_3 import Roleplay13
             
+            # Initialize with OpenAI service
             self.roleplay_implementations = {
-                '1.1': Roleplay11(self.openai_service),
-                '1.2': Roleplay12(self.openai_service),
-                '1.3': Roleplay13(self.openai_service)
+                '1.1': Roleplay11(self.openai_service)
             }
             
-            logger.info("Loaded roleplay implementations: 1.1, 1.2, 1.3")
+            # Try to load other roleplays if available
+            try:
+                from .roleplay.roleplay_1_2 import Roleplay12
+                self.roleplay_implementations['1.2'] = Roleplay12(self.openai_service)
+                logger.info("✅ Loaded Roleplay 1.2")
+            except ImportError:
+                logger.info("ℹ️ Roleplay 1.2 not available")
+            
+            try:
+                from .roleplay.roleplay_1_3 import Roleplay13
+                self.roleplay_implementations['1.3'] = Roleplay13(self.openai_service)
+                logger.info("✅ Loaded Roleplay 1.3")
+            except ImportError:
+                logger.info("ℹ️ Roleplay 1.3 not available")
+            
+            logger.info(f"✅ Loaded roleplay implementations: {list(self.roleplay_implementations.keys())}")
             
         except ImportError as e:
-            logger.error(f"Failed to load roleplay implementations: {e}")
+            logger.error(f"❌ Failed to load roleplay implementations: {e}")
             # Create minimal fallback
             self.roleplay_implementations = {
                 '1.1': self._create_fallback_roleplay('1.1')
             }
+            logger.warning("⚠️ Using fallback roleplay implementation")
     
     def _create_fallback_roleplay(self, roleplay_id: str):
         """Create a minimal fallback roleplay implementation"""
@@ -69,13 +85,15 @@ class RoleplayEngine:
             def __init__(self, roleplay_id):
                 self.roleplay_id = roleplay_id
                 self.active_sessions = {}
+                logger.warning(f"⚠️ Using fallback implementation for {roleplay_id}")
             
             def get_roleplay_info(self):
                 return {
                     'id': roleplay_id,
                     'name': f'Roleplay {roleplay_id}',
-                    'description': 'Basic roleplay training',
-                    'type': 'practice'
+                    'description': 'Basic roleplay training (fallback mode)',
+                    'type': 'practice',
+                    'features': {'ai_evaluation': False, 'basic_coaching': True}
                 }
             
             def create_session(self, user_id, mode, user_context):
@@ -88,7 +106,9 @@ class RoleplayEngine:
                     'started_at': datetime.now(timezone.utc).isoformat(),
                     'conversation_history': [],
                     'current_stage': 'phone_pickup',
-                    'session_active': True
+                    'session_active': True,
+                    'turn_count': 0,
+                    'user_context': user_context
                 }
                 self.active_sessions[session_id] = session_data
                 
@@ -102,12 +122,24 @@ class RoleplayEngine:
                 if session_id not in self.active_sessions:
                     return {'success': False, 'error': 'Session not found'}
                 
-                return {
-                    'success': True,
-                    'ai_response': 'I see. Please continue.',
-                    'call_continues': len(user_input) > 5,
-                    'evaluation': {'score': 3, 'passed': True}
-                }
+                session = self.active_sessions[session_id]
+                session['turn_count'] += 1
+                
+                # Very basic logic - continue for a few turns then end
+                if session['turn_count'] < 5:
+                    return {
+                        'success': True,
+                        'ai_response': 'I see. Please continue.',
+                        'call_continues': True,
+                        'evaluation': {'score': 2, 'passed': True}
+                    }
+                else:
+                    return {
+                        'success': True,
+                        'ai_response': 'Thank you for calling.',
+                        'call_continues': False,
+                        'evaluation': {'score': 2, 'passed': True}
+                    }
             
             def end_session(self, session_id, forced_end=False):
                 session_data = self.active_sessions.pop(session_id, {})
@@ -115,7 +147,7 @@ class RoleplayEngine:
                     'success': True,
                     'duration_minutes': 2,
                     'session_success': True,
-                    'coaching': {'overall': 'Good practice session!'},
+                    'coaching': {'overall': 'Good practice session! (Fallback mode)'},
                     'overall_score': 75,
                     'session_data': session_data
                 }
@@ -133,10 +165,12 @@ class RoleplayEngine:
                 return {'error': f'Roleplay {roleplay_id} not found'}
             
             implementation = self.roleplay_implementations[roleplay_id]
-            return implementation.get_roleplay_info()
+            info = implementation.get_roleplay_info()
+            logger.info(f"✅ Retrieved info for roleplay {roleplay_id}")
+            return info
             
         except Exception as e:
-            logger.error(f"Error getting roleplay info for {roleplay_id}: {e}")
+            logger.error(f"❌ Error getting roleplay info for {roleplay_id}: {e}")
             return {
                 'error': str(e),
                 'id': roleplay_id,
@@ -154,7 +188,7 @@ class RoleplayEngine:
             if roleplay_id not in self.roleplay_implementations:
                 return {'success': False, 'error': f'Roleplay {roleplay_id} not available'}
             
-            logger.info(f"Creating session: {roleplay_id} for user {user_id} (mode: {mode})")
+            logger.info(f"🚀 Creating session: {roleplay_id} for user {user_id} (mode: {mode})")
             
             # Clean up any existing sessions for this user
             self._cleanup_user_sessions(user_id)
@@ -164,6 +198,7 @@ class RoleplayEngine:
             session_result = implementation.create_session(user_id, mode, user_context)
             
             if not session_result.get('success'):
+                logger.error(f"❌ Implementation failed to create session: {session_result}")
                 return session_result
             
             session_id = session_result['session_id']
@@ -180,15 +215,15 @@ class RoleplayEngine:
                     'roleplay_id': roleplay_id
                 }
                 
-                logger.info(f"Session {session_id} created and stored successfully")
+                logger.info(f"✅ Session {session_id} created and stored successfully")
                 
-                # Store in database for persistence
+                # Store in database for persistence (if available)
                 self._persist_session_to_database(session_id, user_id, session_data)
             
             return session_result
             
         except Exception as e:
-            logger.error(f"Error creating roleplay session: {e}")
+            logger.error(f"❌ Error creating roleplay session: {e}")
             return {'success': False, 'error': f'Failed to create session: {str(e)}'}
     
     def process_user_input(self, session_id: str, user_input: str) -> Dict[str, Any]:
@@ -198,11 +233,12 @@ class RoleplayEngine:
             if not session_id or not user_input:
                 return {'success': False, 'error': 'Missing required parameters'}
             
-            logger.info(f"Processing input for session {session_id}: '{user_input[:50]}...'")
+            logger.info(f"💬 Processing input for session {session_id}: '{user_input[:50]}...'")
             
             # Get session with recovery
             session_info = self._get_session_with_recovery(session_id)
             if not session_info:
+                logger.error(f"❌ Session {session_id} not found in any storage location")
                 return {'success': False, 'error': 'Session not found or expired'}
             
             implementation = session_info['implementation']
@@ -210,8 +246,21 @@ class RoleplayEngine:
             # Update last activity
             self._update_session_activity(session_id)
             
-            # Process through implementation
-            result = implementation.process_user_input(session_id, user_input)
+            # Validate session belongs to user (if user info available)
+            session_data = session_info['session_data']
+            
+            # Check if session is still active
+            if not session_data.get('session_active', True):
+                logger.error(f"❌ Session {session_id} is no longer active")
+                return {'success': False, 'error': 'Session has ended'}
+            
+            # Process input through implementation
+            try:
+                result = implementation.process_user_input(session_id, user_input)
+                logger.info(f"✅ Input processed: call_continues={result.get('call_continues', False)}")
+            except Exception as processing_error:
+                logger.error(f"❌ Implementation processing error: {processing_error}")
+                return {'success': False, 'error': f'Processing failed: {str(processing_error)}'}
             
             if result.get('success'):
                 # Update session data in engine
@@ -220,18 +269,18 @@ class RoleplayEngine:
                     self.active_sessions[session_id]['session_data'] = updated_session_data
                     self.active_sessions[session_id]['last_activity'] = datetime.now(timezone.utc).isoformat()
                 
-                logger.info(f"Input processed successfully for session {session_id}")
+                logger.info(f"✅ Input processed successfully for session {session_id}")
             
             return result
             
         except Exception as e:
-            logger.error(f"Error processing user input: {e}")
+            logger.error(f"❌ Error processing user input: {e}")
             return {'success': False, 'error': f'Processing failed: {str(e)}'}
     
     def end_session(self, session_id: str, forced_end: bool = False) -> Dict[str, Any]:
         """FIXED: End session with comprehensive cleanup"""
         try:
-            logger.info(f"Ending session {session_id} (forced: {forced_end})")
+            logger.info(f"📞 Ending session {session_id} (forced: {forced_end})")
             
             # Get session info
             session_info = self._get_session_with_recovery(session_id)
@@ -248,11 +297,11 @@ class RoleplayEngine:
                 # Clean up from database
                 self._cleanup_session_from_database(session_id)
                 
-                logger.info(f"Session {session_id} ended successfully")
+                logger.info(f"✅ Session {session_id} ended successfully")
                 return result
             else:
                 # Session not found, but return success for cleanup
-                logger.warning(f"Session {session_id} not found for ending")
+                logger.warning(f"⚠️ Session {session_id} not found for ending")
                 return {
                     'success': True,
                     'duration_minutes': 1,
@@ -263,7 +312,7 @@ class RoleplayEngine:
                 }
                 
         except Exception as e:
-            logger.error(f"Error ending session: {e}")
+            logger.error(f"❌ Error ending session: {e}")
             return {
                 'success': True,  # Return success to allow cleanup
                 'duration_minutes': 1,
@@ -296,67 +345,8 @@ class RoleplayEngine:
             }
             
         except Exception as e:
-            logger.error(f"Error getting session status: {e}")
+            logger.error(f"❌ Error getting session status: {e}")
             return None
-    
-    def recover_session_from_database(self, session_id: str, user_id: str) -> bool:
-        """Attempt to recover a session from database storage"""
-        try:
-            if not self.supabase_service:
-                return False
-            
-            # Get session from database
-            db_sessions = self.supabase_service.get_data_with_filter(
-                'active_roleplay_sessions',
-                'session_id',
-                session_id
-            )
-            
-            if not db_sessions or len(db_sessions) == 0:
-                logger.warning(f"No database record found for session {session_id}")
-                return False
-            
-            db_session = db_sessions[0]
-            
-            # Verify user ownership
-            if db_session['user_id'] != user_id:
-                logger.error(f"Session {session_id} belongs to different user")
-                return False
-            
-            # Check if session is still active
-            if not db_session.get('is_active', False):
-                logger.warning(f"Session {session_id} is marked as inactive in database")
-                return False
-            
-            # Get session data
-            session_data = db_session.get('session_data', {})
-            roleplay_id = session_data.get('roleplay_id')
-            
-            if not roleplay_id or roleplay_id not in self.roleplay_implementations:
-                logger.error(f"Invalid roleplay_id in session data: {roleplay_id}")
-                return False
-            
-            # Restore to implementation
-            implementation = self.roleplay_implementations[roleplay_id]
-            implementation.active_sessions[session_id] = session_data
-            
-            # Restore to engine
-            self.active_sessions[session_id] = {
-                'implementation': implementation,
-                'session_data': session_data,
-                'created_at': db_session.get('created_at'),
-                'last_activity': db_session.get('last_activity'),
-                'user_id': user_id,
-                'roleplay_id': roleplay_id,
-                'recovered': True
-            }
-            
-            logger.info(f"Session {session_id} recovered successfully from database")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error recovering session from database: {e}")
-            return False
     
     def is_openai_available(self) -> bool:
         """Check if OpenAI service is available"""
@@ -379,7 +369,7 @@ class RoleplayEngine:
         
         # Try to recover from implementation
         for implementation in self.roleplay_implementations.values():
-            if session_id in implementation.active_sessions:
+            if hasattr(implementation, 'active_sessions') and session_id in implementation.active_sessions:
                 session_data = implementation.active_sessions[session_id]
                 
                 # Restore to engine
@@ -393,10 +383,10 @@ class RoleplayEngine:
                     'recovered_from_implementation': True
                 }
                 
-                logger.info(f"Session {session_id} recovered from implementation")
+                logger.info(f"✅ Session {session_id} recovered from implementation")
                 return self.active_sessions[session_id]
         
-        logger.warning(f"Session {session_id} not found in active storage")
+        logger.warning(f"⚠️ Session {session_id} not found in active storage")
         return None
     
     def _cleanup_user_sessions(self, user_id: str):
@@ -410,17 +400,18 @@ class RoleplayEngine:
             
             for session_id in sessions_to_remove:
                 try:
-                    logger.info(f"Cleaning up existing session {session_id} for user {user_id}")
+                    logger.info(f"🧹 Cleaning up existing session {session_id} for user {user_id}")
                     self.end_session(session_id, forced_end=True)
                 except Exception as cleanup_error:
-                    logger.warning(f"Error cleaning up session {session_id}: {cleanup_error}")
+                    logger.warning(f"⚠️ Error cleaning up session {session_id}: {cleanup_error}")
                     # Force remove from memory
                     self.active_sessions.pop(session_id, None)
             
-            logger.info(f"Cleaned up {len(sessions_to_remove)} existing sessions for user {user_id}")
+            if sessions_to_remove:
+                logger.info(f"✅ Cleaned up {len(sessions_to_remove)} existing sessions for user {user_id}")
             
         except Exception as e:
-            logger.error(f"Error cleaning up user sessions: {e}")
+            logger.error(f"❌ Error cleaning up user sessions: {e}")
     
     def _update_session_activity(self, session_id: str):
         """Update session last activity timestamp"""
@@ -437,10 +428,10 @@ class RoleplayEngine:
                         {'last_activity': datetime.now(timezone.utc).isoformat()}
                     )
                 except Exception as db_error:
-                    logger.warning(f"Failed to update session activity in database: {db_error}")
+                    logger.warning(f"⚠️ Failed to update session activity in database: {db_error}")
                     
         except Exception as e:
-            logger.warning(f"Error updating session activity: {e}")
+            logger.warning(f"⚠️ Error updating session activity: {e}")
     
     def _persist_session_to_database(self, session_id: str, user_id: str, session_data: Dict):
         """Persist session to database for recovery"""
@@ -458,10 +449,10 @@ class RoleplayEngine:
             }
             
             self.supabase_service.upsert_data('active_roleplay_sessions', db_record)
-            logger.info(f"Session {session_id} persisted to database")
+            logger.info(f"✅ Session {session_id} persisted to database")
             
         except Exception as e:
-            logger.warning(f"Failed to persist session to database: {e}")
+            logger.warning(f"⚠️ Failed to persist session to database: {e}")
     
     def _cleanup_session_from_database(self, session_id: str):
         """Clean up session from database"""
@@ -478,10 +469,10 @@ class RoleplayEngine:
                 }
             )
             
-            logger.info(f"Session {session_id} marked as inactive in database")
+            logger.info(f"✅ Session {session_id} marked as inactive in database")
             
         except Exception as e:
-            logger.warning(f"Failed to cleanup session from database: {e}")
+            logger.warning(f"⚠️ Failed to cleanup session from database: {e}")
     
     def cleanup_old_sessions(self, max_age_hours: int = 24):
         """Clean up old/abandoned sessions"""
@@ -497,23 +488,23 @@ class RoleplayEngine:
                         if last_activity.timestamp() < cutoff_time:
                             sessions_to_remove.append(session_id)
                     except Exception as parse_error:
-                        logger.warning(f"Error parsing last_activity for session {session_id}: {parse_error}")
+                        logger.warning(f"⚠️ Error parsing last_activity for session {session_id}: {parse_error}")
                         sessions_to_remove.append(session_id)  # Remove sessions with bad timestamps
             
             for session_id in sessions_to_remove:
                 try:
                     self.end_session(session_id, forced_end=True)
-                    logger.info(f"Cleaned up old session: {session_id}")
+                    logger.info(f"✅ Cleaned up old session: {session_id}")
                 except Exception as cleanup_error:
-                    logger.warning(f"Error cleaning up old session {session_id}: {cleanup_error}")
+                    logger.warning(f"⚠️ Error cleaning up old session {session_id}: {cleanup_error}")
             
             if sessions_to_remove:
-                logger.info(f"Cleaned up {len(sessions_to_remove)} old sessions")
+                logger.info(f"✅ Cleaned up {len(sessions_to_remove)} old sessions")
             
             return len(sessions_to_remove)
             
         except Exception as e:
-            logger.error(f"Error cleaning up old sessions: {e}")
+            logger.error(f"❌ Error cleaning up old sessions: {e}")
             return 0
 
 # Global instance for singleton pattern

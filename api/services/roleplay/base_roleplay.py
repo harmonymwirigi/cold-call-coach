@@ -307,3 +307,90 @@ class BaseRoleplay:
                 
         except:
             return 50.0
+    
+    # ===== SHARED HELPER METHODS FOR SUBCLASSES =====
+    
+    def _get_contextual_initial_response(self, user_context: Dict) -> str:
+        """Generate contextual initial response"""
+        import random
+        
+        responses = [
+            "Hello?",
+            f"{user_context.get('first_name', 'Alex')} speaking.",
+            "Good morning.",
+            "Yes?",
+            "Hi there."
+        ]
+        
+        return random.choice(responses)
+    
+    def _get_evaluation_stage(self, current_stage: str) -> str:
+        """Map current stage to evaluation stage"""
+        stage_mapping = {
+            'phone_pickup': 'opener',
+            'opener_evaluation': 'opener',
+            'early_objection': 'objection_handling',
+            'objection_handling': 'objection_handling',
+            'mini_pitch': 'mini_pitch',
+            'soft_discovery': 'soft_discovery',
+            'extended_conversation': 'soft_discovery'
+        }
+        
+        return stage_mapping.get(current_stage, 'opener')
+    
+    def _apply_weighted_scoring(self, evaluation: Dict, stage: str) -> Dict[str, Any]:
+        """Apply weighted scoring to evaluation results"""
+        try:
+            base_score = evaluation.get('score', 2)
+            
+            # Apply stage-specific weights
+            stage_weights = {
+                'opener': 1.2,
+                'objection_handling': 1.1, 
+                'mini_pitch': 1.0,
+                'soft_discovery': 0.9
+            }
+            
+            weight = stage_weights.get(stage, 1.0)
+            weighted_score = base_score * weight
+            
+            evaluation['weighted_score'] = round(weighted_score, 1)
+            evaluation['weight_applied'] = weight
+            
+            return evaluation
+            
+        except Exception as e:
+            logger.error(f"Error applying weighted scoring: {e}")
+            evaluation['weighted_score'] = evaluation.get('score', 2)
+            return evaluation
+    
+    def _generate_comprehensive_coaching(self, session: Dict) -> Dict[str, Any]:
+        """Generate comprehensive coaching feedback"""
+        try:
+            if self.is_openai_available():
+                return self.openai_service.generate_coaching_feedback(
+                    session.get('conversation_history', []),
+                    session.get('rubric_scores', {}),
+                    session.get('user_context', {})
+                )
+            else:
+                # Fallback coaching
+                return {
+                    'success': True,
+                    'coaching': {
+                        'sales_coaching': 'Good effort on your cold calling approach.',
+                        'grammar_coaching': 'Your grammar and structure were clear.',
+                        'vocabulary_coaching': 'Good vocabulary usage.',
+                        'pronunciation_coaching': 'Speak clearly for better impact.',
+                        'rapport_assertiveness': 'Keep building confidence!'
+                    }
+                }
+                
+        except Exception as e:
+            logger.error(f"Error generating coaching: {e}")
+            return {
+                'success': False,
+                'coaching': {
+                    'error': 'Unable to generate coaching feedback'
+                }
+            }
