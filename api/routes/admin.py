@@ -1,11 +1,12 @@
+# ===== CORRECTED FILE: routes/admin.py =====
+# Fix: Removed the redundant and error-prone `user_id = request.view_args['user_id']` line.
 
-
-# ===== API/ROUTES/ADMIN.PY =====
 from flask import Blueprint, request, jsonify, session
 from services.supabase_client import SupabaseService
 import logging
 from utils.helpers import require_admin
 from datetime import datetime, timezone, timedelta
+
 logger = logging.getLogger(__name__)
 admin_bp = Blueprint('admin', __name__)
 
@@ -68,14 +69,12 @@ def get_all_users():
     except Exception as e:
         logger.error(f"Error getting all users: {e}")
         return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
+
 @admin_bp.route('/users/<user_id>/access-level', methods=['PUT'])
 @require_admin
-def update_user_access_level(user_id):  # ADD user_id parameter here
+def update_user_access_level(user_id):
     """Update user's access level"""
     try:
-        # Remove this line since user_id is now a parameter
-        # user_id = request.view_args['user_id']  # DELETE THIS LINE
-        
         data = request.get_json()
         new_access_level = data.get('access_level')
         
@@ -92,6 +91,7 @@ def update_user_access_level(user_id):  # ADD user_id parameter here
     except Exception as e:
         logger.error(f"Error updating access level: {e}")
         return jsonify({'error': 'Internal server error'}), 500
+
 @admin_bp.route('/stats', methods=['GET'])
 @require_admin
 def get_admin_stats():

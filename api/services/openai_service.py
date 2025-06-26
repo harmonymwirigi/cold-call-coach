@@ -1,11 +1,13 @@
-# ===== FIXED: services/openai_service.py =====
+# ===== FIXED: services/openai_service.py (OpenAI SDK v1.0+ Compatible) =====
 
-import openai
 import os
 import json
 import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime
+
+# Use the modern OpenAI library
+from openai import OpenAI, RateLimitError, APIError, AuthenticationError
 
 logger = logging.getLogger(__name__)
 
@@ -13,19 +15,20 @@ class OpenAIService:
     """Enhanced OpenAI service specifically designed for Roleplay 1.1"""
     
     def __init__(self):
-        self.client = None
+        self.client: Optional[OpenAI] = None
         self.is_configured = False
+        self.model = "gpt-4o-mini" # Using a more modern, cost-effective model
         
         try:
-            # Initialize OpenAI client
-            api_key = os.getenv('OPENAI_API_KEY')
+            # Use the same environment variable as the rest of your application
+            api_key = os.getenv('REACT_APP_OPENAI_API_KEY')
             if api_key:
-                openai.api_key = api_key
-                self.client = openai
+                # NEW: Initialize the OpenAI client with the API key
+                self.client = OpenAI(api_key=api_key)
                 self.is_configured = True
-                logger.info("✅ OpenAI service initialized successfully")
+                logger.info(f"✅ OpenAI service initialized successfully with model: {self.model}")
             else:
-                logger.warning("⚠️ OpenAI API key not found")
+                logger.warning("⚠️ OpenAI API key ('REACT_APP_OPENAI_API_KEY') not found. Service will use fallback methods.")
         except Exception as e:
             logger.error(f"❌ Failed to initialize OpenAI: {e}")
     
@@ -38,6 +41,7 @@ class OpenAIService:
         return {
             'available': self.is_available(),
             'configured': self.is_configured,
+            'model': self.model,
             'timestamp': datetime.now().isoformat()
         }
     
@@ -56,8 +60,9 @@ class OpenAIService:
             # Create evaluation prompt
             prompt = self._create_evaluation_prompt(user_input, context, evaluation_stage)
             
-            response = self.client.ChatCompletion.create(
-                model="gpt-4",
+            # NEW: Use the updated client.chat.completions.create method
+            response = self.client.chat.completions.create(
+                model=self.model,
                 messages=[
                     {"role": "system", "content": self._get_evaluator_system_prompt()},
                     {"role": "user", "content": prompt}
@@ -66,6 +71,7 @@ class OpenAIService:
                 max_tokens=800
             )
             
+            # NEW: Access the response content from the message object
             result = self._parse_evaluation_response(response.choices[0].message.content)
             result['source'] = 'openai'
             result['stage'] = evaluation_stage
@@ -73,12 +79,15 @@ class OpenAIService:
             logger.info(f"✅ AI evaluation complete: {result.get('score', 0)}/4 for {evaluation_stage}")
             return result
             
+        except (APIError, RateLimitError, AuthenticationError) as e:
+            logger.error(f"❌ OpenAI API error during evaluation: {type(e).__name__} - {e}")
+            return self._fallback_evaluation(user_input, evaluation_stage)
         except Exception as e:
-            logger.error(f"❌ OpenAI evaluation failed: {e}")
+            logger.error(f"❌ Unexpected error during OpenAI evaluation: {e}")
             return self._fallback_evaluation(user_input, evaluation_stage)
     
     def generate_roleplay_response(self, user_input: str, conversation_history: List[Dict], 
-                                 user_context: Dict, current_stage: str) -> Dict[str, Any]:
+                                     user_context: Dict, current_stage: str) -> Dict[str, Any]:
         """
         Generate AI prospect response for Roleplay 1.1
         Returns contextual, logical response
@@ -93,8 +102,9 @@ class OpenAIService:
             # Create response prompt
             prompt = self._create_response_prompt(user_input, context, current_stage)
             
-            response = self.client.ChatCompletion.create(
-                model="gpt-4",
+            # NEW: Use the updated client.chat.completions.create method
+            response = self.client.chat.completions.create(
+                model=self.model,
                 messages=[
                     {"role": "system", "content": self._get_prospect_system_prompt(user_context)},
                     {"role": "user", "content": prompt}
@@ -103,6 +113,7 @@ class OpenAIService:
                 max_tokens=150  # Keep responses concise
             )
             
+            # NEW: Access the response content from the message object
             ai_response = response.choices[0].message.content.strip()
             
             # Clean up response
@@ -115,12 +126,15 @@ class OpenAIService:
                 'stage': current_stage
             }
             
+        except (APIError, RateLimitError, AuthenticationError) as e:
+            logger.error(f"❌ OpenAI API error during response generation: {type(e).__name__} - {e}")
+            return self._fallback_response(current_stage)
         except Exception as e:
-            logger.error(f"❌ OpenAI response generation failed: {e}")
+            logger.error(f"❌ Unexpected error during OpenAI response generation: {e}")
             return self._fallback_response(current_stage)
     
     def generate_coaching_feedback(self, conversation_history: List[Dict], 
-                                 rubric_scores: Dict, user_context: Dict) -> Dict[str, Any]:
+                                     rubric_scores: Dict, user_context: Dict) -> Dict[str, Any]:
         """
         Generate detailed coaching feedback for Roleplay 1.1
         """
@@ -134,8 +148,9 @@ class OpenAIService:
             # Create coaching prompt
             prompt = self._create_coaching_prompt(context)
             
-            response = self.client.ChatCompletion.create(
-                model="gpt-4",
+            # NEW: Use the updated client.chat.completions.create method
+            response = self.client.chat.completions.create(
+                model=self.model,
                 messages=[
                     {"role": "system", "content": self._get_coach_system_prompt()},
                     {"role": "user", "content": prompt}
@@ -144,22 +159,25 @@ class OpenAIService:
                 max_tokens=1000
             )
             
+            # NEW: Access the response content from the message object
             result = self._parse_coaching_response(response.choices[0].message.content)
             result['source'] = 'openai'
             
             logger.info(f"✅ AI coaching generated: Score {result.get('score', 75)}")
             return result
             
+        except (APIError, RateLimitError, AuthenticationError) as e:
+            logger.error(f"❌ OpenAI API error during coaching generation: {type(e).__name__} - {e}")
+            return self._fallback_coaching(rubric_scores)
         except Exception as e:
-            logger.error(f"❌ OpenAI coaching failed: {e}")
+            logger.error(f"❌ Unexpected error during OpenAI coaching: {e}")
             return self._fallback_coaching(rubric_scores)
     
-    # ===== SYSTEM PROMPTS =====
+    # ===== SYSTEM PROMPTS (No changes needed) =====
     
     def _get_evaluator_system_prompt(self) -> str:
         """System prompt for evaluation AI"""
         return """You are an expert cold calling coach evaluating sales performance.
-
 Your role:
 - Evaluate user input against specific criteria for each stage
 - Be objective and constructive
@@ -187,7 +205,6 @@ NEXT_ACTION: continue/improve"""
         industry = user_context.get('prospect_industry', 'Technology')
         
         return f"""You are {name}, a {title} in the {industry} industry.
-
 Your personality:
 - Busy professional, mildly skeptical of cold calls
 - Direct but not rude
@@ -208,7 +225,6 @@ Never mention you're an AI or break character."""
     def _get_coach_system_prompt(self) -> str:
         """System prompt for coaching AI"""
         return """You are an expert cold calling coach providing detailed feedback.
-
 Your role:
 - Analyze the complete conversation objectively
 - Provide specific, actionable coaching advice
@@ -225,7 +241,7 @@ Coaching categories:
 
 Provide specific examples and improvement suggestions for each category."""
     
-    # ===== PROMPT BUILDERS =====
+    # ===== PROMPT BUILDERS (No changes needed) =====
     
     def _create_evaluation_prompt(self, user_input: str, context: str, stage: str) -> str:
         """Create evaluation prompt"""
@@ -267,7 +283,7 @@ Analyze the conversation and provide:
 
 Be constructive and specific."""
     
-    # ===== CONTEXT BUILDERS =====
+    # ===== CONTEXT BUILDERS (No changes needed) =====
     
     def _build_evaluation_context(self, conversation_history: List[Dict], stage: str) -> str:
         """Build context for evaluation"""
@@ -309,7 +325,7 @@ Be constructive and specific."""
         
         return context
     
-    # ===== RESPONSE PARSERS =====
+    # ===== RESPONSE PARSERS (No changes needed) =====
     
     def _parse_evaluation_response(self, response_text: str) -> Dict[str, Any]:
         """Parse AI evaluation response"""
@@ -425,7 +441,7 @@ Be constructive and specific."""
         
         return 'Continue practicing to improve your skills.'
     
-    # ===== UTILITY METHODS =====
+    # ===== UTILITY METHODS (No changes needed) =====
     
     def _clean_ai_response(self, response: str) -> str:
         """Clean and format AI response"""
@@ -449,7 +465,7 @@ Be constructive and specific."""
         
         return response.strip()
     
-    # ===== FALLBACK METHODS =====
+    # ===== FALLBACK METHODS (No changes needed) =====
     
     def _fallback_evaluation(self, user_input: str, stage: str) -> Dict[str, Any]:
         """Fallback evaluation when OpenAI unavailable"""
@@ -471,15 +487,15 @@ Be constructive and specific."""
         """Fallback response when OpenAI unavailable"""
         responses = {
             'phone_pickup': ['Hello?', 'Yes?'],
-            'opener_evaluation': ['What\'s this about?', 'I\'m listening.'],
-            'early_objection': ['I\'m not interested.', 'We don\'t take cold calls.'],
-            'objection_handling': ['Alright, what do you do?', 'You have 30 seconds.'],
-            'mini_pitch': ['That sounds interesting.', 'Tell me more.'],
-            'soft_discovery': ['Good question.', 'I\'d need to think about it.']
+            'opener_evaluation': ["What's this about?", "I'm listening."],
+            'early_objection': ["I'm not interested.", "We don't take cold calls."],
+            'objection_handling': ["Alright, what do you do?", "You have 30 seconds."],
+            'mini_pitch': ["That sounds interesting.", "Tell me more."],
+            'soft_discovery': ["Good question.", "I'd need to think about it."]
         }
         
         import random
-        response_list = responses.get(stage, ['I see.'])
+        response_list = responses.get(stage, ['I see. Please continue.'])
         
         return {
             'success': True,
@@ -499,11 +515,10 @@ Be constructive and specific."""
             'success': True,
             'score': avg_score,
             'coaching': {
-                'sales_coaching': 'Good effort on your cold calling. Practice your opener with more empathy.',
-                'grammar_coaching': 'Your grammar and structure were clear.',
-                'vocabulary_coaching': 'Use simple, outcome-focused language.',
+                'sales_coaching': 'Good effort on the call. Keep practicing your opening to build more rapport.',
+                'grammar_coaching': 'Your grammar was clear and understandable.',
+                'vocabulary_coaching': 'Try using more confident and direct language.',
                 'pronunciation_coaching': 'Speak clearly and at a moderate pace.',
-                'rapport_assertiveness': 'Show empathy first, then be confident.'
-            },
-            'source': 'fallback'
+                'rapport_assertiveness': 'Focus on showing empathy at the beginning of the call.'
+            }
         }

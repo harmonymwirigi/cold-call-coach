@@ -61,7 +61,7 @@ class PhoneRoleplayManager {
     loadRoleplayData() {
         const roleplayData = document.getElementById('roleplay-data');
         if (roleplayData) {
-            // FIXED: Don't use parseInt() - keep roleplay ID as string
+            // CRITICAL FIX: Do not use parseInt(). Roleplay IDs are strings like "1.1".
             const roleplayId = roleplayData.dataset.roleplayId || '1.1';
             const isAuthenticated = roleplayData.dataset.userAuthenticated === 'true';
             
@@ -172,7 +172,7 @@ class PhoneRoleplayManager {
             option.addEventListener('click', (e) => {
                 e.preventDefault();
                 const mode = option.dataset.mode;
-                console.log('📋 Mode selected:', mode);
+                console.log('🔘 Mode selected:', mode);
                 this.selectMode(mode);
             });
         });
@@ -194,7 +194,7 @@ class PhoneRoleplayManager {
         if (micBtn) {
             micBtn.addEventListener('click', (e) => {
                 e.preventDefault();
-                console.log('🎤 Mic button clicked (natural mode)');
+                console.log('🎙️ Mic button clicked (natural mode)');
                 
                 if (this.voiceHandler) {
                     if (this.voiceHandler.isListening) {
@@ -245,7 +245,7 @@ class PhoneRoleplayManager {
                     console.log('⚡ Space pressed - interrupting AI');
                     this.handleUserInterruption();
                 } else if (this.voiceHandler && !this.voiceHandler.isListening) {
-                    console.log('🎤 Space pressed - manual start listening');
+                    console.log('🎙️ Space pressed - manual start listening');
                     this.voiceHandler.startListening(false);
                 }
             }
@@ -253,7 +253,7 @@ class PhoneRoleplayManager {
             // Escape to end call
             if (e.code === 'Escape' && this.callState === 'connected') {
                 e.preventDefault();
-                console.log('⌨️ Escape key pressed - end call');
+                console.log('ESC key pressed - end call');
                 this.endCall();
             }
         });
