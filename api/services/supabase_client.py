@@ -1,7 +1,7 @@
 # ===== UPDATED API/SERVICES/SUPABASE_CLIENT.PY (FIXED) =====
 from supabase import create_client, Client
 import os
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 import logging
 import json
 
