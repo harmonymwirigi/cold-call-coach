@@ -305,17 +305,17 @@ class BaseRoleplayManager {
     }
     
     async startPhoneCallSequence(initialResponse) {
-        console.log('📞 Starting phone call sequence...');
+        console.log('ðŸ“ž Starting phone call sequence...');
         
         // Hide mode selection, show call interface
         document.getElementById('mode-selection').style.display = 'none';
+        document.getElementById('phone-container').style.display = 'block'; // Show the phone
         document.getElementById('call-interface').style.display = 'flex';
         
         await this.dialingState();
         await this.ringingState();
         await this.connectedState(initialResponse);
     }
-    
     async dialingState() {
         console.log('📱 Dialing state...');
         this.callState = 'dialing';
@@ -465,21 +465,20 @@ class BaseRoleplayManager {
     }
     
     tryAgain() {
-        console.log('🔄 Trying again');
+        console.log('ðŸ”„ Trying again');
         this.showModeSelection();
-        
-        if (this.selectedMode) {
-            setTimeout(() => {
-                this.selectMode(this.selectedMode);
-            }, 100);
-        }
     }
+
     
     showModeSelection() {
-        console.log('🎯 Showing mode selection');
+        console.log('ðŸŽ¯ Showing mode selection');
         
+        // Hide phone and feedback, show mode selection
+        document.getElementById('phone-container').style.display = 'none';
         document.getElementById('feedback-section').style.display = 'none';
-        this.initializeModeSelection();
+        document.getElementById('mode-selection').style.display = 'flex';
+        
+        this.initializeModeSelection(); // Re-initialize the selection state
         
         this.selectedMode = null;
         this.currentSession = null;
@@ -590,7 +589,26 @@ class BaseRoleplayManager {
     async endCall(success = false) {
         throw new Error('endCall must be implemented by subclass');
     }
-    
+    createModeSelectionUI(modes) {
+        const modeGrid = document.getElementById('mode-grid');
+        if (!modeGrid) return;
+
+        modeGrid.innerHTML = ''; // Clear loading spinner
+
+        modes.forEach(mode => {
+            const modeCard = document.createElement('div');
+            modeCard.className = 'mode-option';
+            modeCard.dataset.mode = mode.id;
+
+            modeCard.innerHTML = `
+                <h5><i class="fas fa-${mode.icon} me-2"></i>${mode.name}</h5>
+                <small>${mode.description}</small>
+            `;
+            
+            modeCard.addEventListener('click', () => this.selectMode(mode.id));
+            modeGrid.appendChild(modeCard);
+        });
+    }
     showFeedback(coaching, score = 75) {
         throw new Error('showFeedback must be implemented by subclass');
     }

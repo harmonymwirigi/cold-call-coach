@@ -1683,16 +1683,17 @@
       (Empty file)
 
 📁 routes/
-  📄 admin.py (8KB)
+  📄 admin.py (7.9KB)
       Content:
+        # ===== CORRECTED FILE: routes/admin.py =====
+        # Fix: Removed the redundant and error-prone `user_id = request.view_args['user_id']` line.
         
-        
-        # ===== API/ROUTES/ADMIN.PY =====
         from flask import Blueprint, request, jsonify, session
         from services.supabase_client import SupabaseService
         import logging
         from utils.helpers import require_admin
         from datetime import datetime, timezone, timedelta
+        
         logger = logging.getLogger(__name__)
         admin_bp = Blueprint('admin', __name__)
         
@@ -1755,14 +1756,12 @@
             except Exception as e:
                 logger.error(f"Error getting all users: {e}")
                 return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
+        
         @admin_bp.route('/users/<user_id>/access-level', methods=['PUT'])
         @require_admin
-        def update_user_access_level(user_id):  # ADD user_id parameter here
+        def update_user_access_level(user_id):
             """Update user's access level"""
             try:
-                # Remove this line since user_id is now a parameter
-                # user_id = request.view_args['user_id']  # DELETE THIS LINE
-                
                 data = request.get_json()
                 new_access_level = data.get('access_level')
                 
@@ -1779,6 +1778,7 @@
             except Exception as e:
                 logger.error(f"Error updating access level: {e}")
                 return jsonify({'error': 'Internal server error'}), 500
+        
         @admin_bp.route('/stats', methods=['GET'])
         @require_admin
         def get_admin_stats():
@@ -3968,16 +3968,18 @@
                     logger.error(f"Error validating voice settings: {e}")
                     return False
 
-  📄 openai_service.py (20.5KB)
+  📄 openai_service.py (22.3KB)
       Content:
-        # ===== FIXED: services/openai_service.py =====
+        # ===== FIXED: services/openai_service.py (OpenAI SDK v1.0+ Compatible) =====
         
-        import openai
         import os
         import json
         import logging
         from typing import Dict, List, Any, Optional
         from datetime import datetime
+        
+        # Use the modern OpenAI library
+        from openai import OpenAI, RateLimitError, APIError, AuthenticationError
         
         logger = logging.getLogger(__name__)
         
@@ -3985,19 +3987,20 @@
             """Enhanced OpenAI service specifically designed for Roleplay 1.1"""
             
             def __init__(self):
-                self.client = None
+                self.client: Optional[OpenAI] = None
                 self.is_configured = False
+                self.model = "gpt-4o-mini" # Using a more modern, cost-effective model
                 
                 try:
-                    # Initialize OpenAI client
-                    api_key = os.getenv('OPENAI_API_KEY')
+                    # Use the same environment variable as the rest of your application
+                    api_key = os.getenv('REACT_APP_OPENAI_API_KEY')
                     if api_key:
-                        openai.api_key = api_key
-                        self.client = openai
+                        # NEW: Initialize the OpenAI client with the API key
+                        self.client = OpenAI(api_key=api_key)
                         self.is_configured = True
-                        logger.info("âœ… OpenAI service initialized successfully")
+                        logger.info(f"âœ… OpenAI service initialized successfully with model: {self.model}")
                     else:
-                        logger.warning("âš ï¸ OpenAI API key not found")
+                        logger.warning("âš ï¸ OpenAI API key ('REACT_APP_OPENAI_API_KEY') not found. Service will use fallback methods.")
                 except Exception as e:
                     logger.error(f"âŒ Failed to initialize OpenAI: {e}")
             
@@ -4010,6 +4013,7 @@
                 return {
                     'available': self.is_available(),
                     'configured': self.is_configured,
+                    'model': self.model,
                     'timestamp': datetime.now().isoformat()
                 }
             
@@ -4028,8 +4032,9 @@
                     # Create evaluation prompt
                     prompt = self._create_evaluation_prompt(user_input, context, evaluation_stage)
                     
-                    response = self.client.ChatCompletion.create(
-                        model="gpt-4",
+                    # NEW: Use the updated client.chat.completions.create method
+                    response = self.client.chat.completions.create(
+                        model=self.model,
                         messages=[
                             {"role": "system", "content": self._get_evaluator_system_prompt()},
                             {"role": "user", "content": prompt}
@@ -4038,6 +4043,7 @@
                         max_tokens=800
                     )
                     
+                    # NEW: Access the response content from the message object
                     result = self._parse_evaluation_response(response.choices[0].message.content)
                     result['source'] = 'openai'
                     result['stage'] = evaluation_stage
@@ -4045,12 +4051,15 @@
                     logger.info(f"âœ… AI evaluation complete: {result.get('score', 0)}/4 for {evaluation_stage}")
                     return result
                     
+                except (APIError, RateLimitError, AuthenticationError) as e:
+                    logger.error(f"âŒ OpenAI API error during evaluation: {type(e).__name__} - {e}")
+                    return self._fallback_evaluation(user_input, evaluation_stage)
                 except Exception as e:
-                    logger.error(f"âŒ OpenAI evaluation failed: {e}")
+                    logger.error(f"âŒ Unexpected error during OpenAI evaluation: {e}")
                     return self._fallback_evaluation(user_input, evaluation_stage)
             
             def generate_roleplay_response(self, user_input: str, conversation_history: List[Dict], 
-                                         user_context: Dict, current_stage: str) -> Dict[str, Any]:
+                                             user_context: Dict, current_stage: str) -> Dict[str, Any]:
                 """
                 Generate AI prospect response for Roleplay 1.1
                 Returns contextual, logical response
@@ -4065,8 +4074,9 @@
                     # Create response prompt
                     prompt = self._create_response_prompt(user_input, context, current_stage)
                     
-                    response = self.client.ChatCompletion.create(
-                        model="gpt-4",
+                    # NEW: Use the updated client.chat.completions.create method
+                    response = self.client.chat.completions.create(
+                        model=self.model,
                         messages=[
                             {"role": "system", "content": self._get_prospect_system_prompt(user_context)},
                             {"role": "user", "content": prompt}
@@ -4075,6 +4085,7 @@
                         max_tokens=150  # Keep responses concise
                     )
                     
+                    # NEW: Access the response content from the message object
                     ai_response = response.choices[0].message.content.strip()
                     
                     # Clean up response
@@ -4087,12 +4098,15 @@
                         'stage': current_stage
                     }
                     
+                except (APIError, RateLimitError, AuthenticationError) as e:
+                    logger.error(f"âŒ OpenAI API error during response generation: {type(e).__name__} - {e}")
+                    return self._fallback_response(current_stage)
                 except Exception as e:
-                    logger.error(f"âŒ OpenAI response generation failed: {e}")
+                    logger.error(f"âŒ Unexpected error during OpenAI response generation: {e}")
                     return self._fallback_response(current_stage)
             
             def generate_coaching_feedback(self, conversation_history: List[Dict], 
-                                         rubric_scores: Dict, user_context: Dict) -> Dict[str, Any]:
+                                             rubric_scores: Dict, user_context: Dict) -> Dict[str, Any]:
                 """
                 Generate detailed coaching feedback for Roleplay 1.1
                 """
@@ -4106,8 +4120,9 @@
                     # Create coaching prompt
                     prompt = self._create_coaching_prompt(context)
                     
-                    response = self.client.ChatCompletion.create(
-                        model="gpt-4",
+                    # NEW: Use the updated client.chat.completions.create method
+                    response = self.client.chat.completions.create(
+                        model=self.model,
                         messages=[
                             {"role": "system", "content": self._get_coach_system_prompt()},
                             {"role": "user", "content": prompt}
@@ -4116,22 +4131,25 @@
                         max_tokens=1000
                     )
                     
+                    # NEW: Access the response content from the message object
                     result = self._parse_coaching_response(response.choices[0].message.content)
                     result['source'] = 'openai'
                     
                     logger.info(f"âœ… AI coaching generated: Score {result.get('score', 75)}")
                     return result
                     
+                except (APIError, RateLimitError, AuthenticationError) as e:
+                    logger.error(f"âŒ OpenAI API error during coaching generation: {type(e).__name__} - {e}")
+                    return self._fallback_coaching(rubric_scores)
                 except Exception as e:
-                    logger.error(f"âŒ OpenAI coaching failed: {e}")
+                    logger.error(f"âŒ Unexpected error during OpenAI coaching: {e}")
                     return self._fallback_coaching(rubric_scores)
             
-            # ===== SYSTEM PROMPTS =====
+            # ===== SYSTEM PROMPTS (No changes needed) =====
             
             def _get_evaluator_system_prompt(self) -> str:
                 """System prompt for evaluation AI"""
                 return """You are an expert cold calling coach evaluating sales performance.
-        
         Your role:
         - Evaluate user input against specific criteria for each stage
         - Be objective and constructive
@@ -4159,7 +4177,6 @@
                 industry = user_context.get('prospect_industry', 'Technology')
                 
                 return f"""You are {name}, a {title} in the {industry} industry.
-        
         Your personality:
         - Busy professional, mildly skeptical of cold calls
         - Direct but not rude
@@ -4180,7 +4197,6 @@
             def _get_coach_system_prompt(self) -> str:
                 """System prompt for coaching AI"""
                 return """You are an expert cold calling coach providing detailed feedback.
-        
         Your role:
         - Analyze the complete conversation objectively
         - Provide specific, actionable coaching advice
@@ -4197,7 +4213,7 @@
         
         Provide specific examples and improvement suggestions for each category."""
             
-            # ===== PROMPT BUILDERS =====
+            # ===== PROMPT BUILDERS (No changes needed) =====
             
             def _create_evaluation_prompt(self, user_input: str, context: str, stage: str) -> str:
                 """Create evaluation prompt"""
@@ -4239,7 +4255,7 @@
         
         Be constructive and specific."""
             
-            # ===== CONTEXT BUILDERS =====
+            # ===== CONTEXT BUILDERS (No changes needed) =====
             
             def _build_evaluation_context(self, conversation_history: List[Dict], stage: str) -> str:
                 """Build context for evaluation"""
@@ -4281,7 +4297,7 @@
                 
                 return context
             
-            # ===== RESPONSE PARSERS =====
+            # ===== RESPONSE PARSERS (No changes needed) =====
             
             def _parse_evaluation_response(self, response_text: str) -> Dict[str, Any]:
                 """Parse AI evaluation response"""
@@ -4397,7 +4413,7 @@
                 
                 return 'Continue practicing to improve your skills.'
             
-            # ===== UTILITY METHODS =====
+            # ===== UTILITY METHODS (No changes needed) =====
             
             def _clean_ai_response(self, response: str) -> str:
                 """Clean and format AI response"""
@@ -4421,7 +4437,7 @@
                 
                 return response.strip()
             
-            # ===== FALLBACK METHODS =====
+            # ===== FALLBACK METHODS (No changes needed) =====
             
             def _fallback_evaluation(self, user_input: str, stage: str) -> Dict[str, Any]:
                 """Fallback evaluation when OpenAI unavailable"""
@@ -4443,34 +4459,18 @@
                 """Fallback response when OpenAI unavailable"""
                 responses = {
                     'phone_pickup': ['Hello?', 'Yes?'],
-                    'opener_evaluation': ['What\'s this about?', 'I\'m listening.'],
-                    'early_objection': ['I\'m not interested.', 'We don\'t take cold calls.'],
-                    'objection_handling': ['Alright, what do you do?', 'You have 30 seconds.'],
-                    'mini_pitch': ['That sounds interesting.', 'Tell me more.'],
-                    'soft_discovery': ['Good question.', 'I\'d need to think about it.']
+                    'opener_evaluation': ["What's this about?", "I'm listening."],
+                    'early_objection': ["I'm not interested.", "We don't take cold calls."],
+                    'objection_handling': ["Alright, what do you do?", "You have 30 seconds."],
+                    'mini_pitch': ["That sounds interesting.", "Tell me more."],
+                    'soft_discovery': ["Good question.", "I'd need to think about it."]
                 }
                 
                 import random
-                response_list = responses.get(stage, ['I see.'])
+                response_list = responses.get(stage, ['I see. Please continue.'])
                 
                 return {
                     'success': True,
-                    'response': random.choice(response_list),
-                    'stage': stage
-                }
-            
-            def _fallback_coaching(self, rubric_scores: Dict) -> Dict[str, Any]:
-                """Fallback coaching when OpenAI unavailable"""
-                avg_score = 75
-                if rubric_scores:
-                    scores = [data.get('score', 0) for data in rubric_scores.values()]
-                    if scores:
-                        avg_score = int(sum(scores) / len(scores) * 25)
-                
-                return {
-                    'success': True,
-                    'score': avg_score,
-                    'coaching': {
 
   📄 resend_service.py (14KB)
       Content:
@@ -11446,7 +11446,7 @@
               loadRoleplayData() {
                   const roleplayData = document.getElementById('roleplay-data');
                   if (roleplayData) {
-                      // FIXED: Don't use parseInt() - keep roleplay ID as string
+                      // CRITICAL FIX: Do not use parseInt(). Roleplay IDs are strings like "1.1".
                       const roleplayId = roleplayData.dataset.roleplayId || '1.1';
                       const isAuthenticated = roleplayData.dataset.userAuthenticated === 'true';
                       
@@ -11557,7 +11557,7 @@
                       option.addEventListener('click', (e) => {
                           e.preventDefault();
                           const mode = option.dataset.mode;
-                          console.log('ðŸ“‹ Mode selected:', mode);
+                          console.log('ðŸ”˜ Mode selected:', mode);
                           this.selectMode(mode);
                       });
                   });
@@ -11579,7 +11579,7 @@
                   if (micBtn) {
                       micBtn.addEventListener('click', (e) => {
                           e.preventDefault();
-                          console.log('ðŸŽ¤ Mic button clicked (natural mode)');
+                          console.log('ðŸŽ™ï¸ Mic button clicked (natural mode)');
                           
                           if (this.voiceHandler) {
                               if (this.voiceHandler.isListening) {
@@ -11630,7 +11630,7 @@
                               console.log('âš¡ Space pressed - interrupting AI');
                               this.handleUserInterruption();
                           } else if (this.voiceHandler && !this.voiceHandler.isListening) {
-                              console.log('ðŸŽ¤ Space pressed - manual start listening');
+                              console.log('ðŸŽ™ï¸ Space pressed - manual start listening');
                               this.voiceHandler.startListening(false);
                           }
                       }
@@ -11638,7 +11638,7 @@
                       // Escape to end call
                       if (e.code === 'Escape' && this.callState === 'connected') {
                           e.preventDefault();
-                          console.log('âŒ¨ï¸ Escape key pressed - end call');
+                          console.log('ESC key pressed - end call');
                           this.endCall();
                       }
                   });
@@ -12389,7 +12389,10 @@
                       }
                   }
 
-    📄 voice-handler.js (28.9KB)
+    📄 todelete.js (0KB)
+        (Empty file)
+
+    📄 voice-handler.js (29.9KB)
         Content:
           // ===== SIMPLE & RELIABLE: voice-handler.js (Mobile-First Design) =====
           
@@ -12411,6 +12414,7 @@
                   // Conversation state
                   this.isUserTurn = false;
                   this.isAITurn = false;
+                  this.isInterruptible = false; // ADDED: Flag for enabling interruptions
                   
                   // Callback interface
                   this.onTranscript = null;
@@ -12450,10 +12454,32 @@
                   this.hangupSilenceTimer = null;
                   this.hangupDetectionEnabled = !this.isMobile; // MOBILE: Disabled
                   
-                  console.log(`ðŸŽ¤ Simple Voice Handler - Mobile: ${this.isMobile}, Auto-restart: ${this.autoRestartEnabled}`);
+                  console.log(`Ã°Å¸Å½Â¤ Simple Voice Handler - Mobile: ${this.isMobile}, Auto-restart: ${this.autoRestartEnabled}`);
                   this.init();
               }
           
+              enableInterruption() {
+                  console.log('Ã¢Å¡Â¡Ã¯Â¸  Interruptions enabled for AI speech.');
+                  this.isInterruptible = true;
+              }
+          
+              setAITurn(isAITurn) {
+                  this.isAITurn = isAITurn;
+                  if (isAITurn) {
+                      this.isUserTurn = false;
+                      // Stop listening if AI is about to speak
+                      if (this.isListening) {
+                          this.stopListening(false); // don't trigger restart
+                      }
+                  }
+              }
+          
+              setUserTurn(isUserTurn) {
+                  this.isUserTurn = isUserTurn;
+                  if (isUserTurn) {
+                      this.isAITurn = false;
+                  }
+              }
               detectMobile() {
                   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
                          (window.innerWidth <= 768 && 'ontouchstart' in window);
@@ -12601,16 +12627,16 @@
               setupRecognitionEventHandlers() {
                   if (!this.recognition) return;
                   
-                  // Recognition starts
+                  // ... (keep onstart, onend handlers)
+                  
                   this.recognition.onstart = () => {
-                      console.log('ðŸŽ¤ Voice recognition started');
+                      console.log('Ã°Å¸Å½Â¤ Voice recognition started');
                       this.isListening = true;
                       this.updateMicrophoneUI(true);
                       this.clearError();
                       this.lastSuccessfulStart = Date.now();
                       this.consecutiveFailures = 0; // Reset on successful start
                       
-                      // Start hang-up detection (desktop only)
                       if (this.hangupDetectionEnabled && this.isUserTurn) {
                           this.total_silence_start = Date.now();
                           this.impatience_triggered = false;
@@ -12618,54 +12644,54 @@
                       }
                   };
                   
-                  // Recognition ends
                   this.recognition.onend = () => {
-                      console.log('ðŸ›‘ Voice recognition ended');
+                      console.log('Ã°Å¸â€ºâ€˜ Voice recognition ended');
                       this.isListening = false;
                       this.updateMicrophoneUI(false);
                       this.stopSilenceDetection();
                       this.stopHangupSilenceDetection();
                       
-                      // SIMPLE RESTART LOGIC: Only restart in very safe conditions
                       this.handleSimpleRestart();
                   };
-                  
-                  // Recognition results
+          
                   this.recognition.onresult = (event) => {
                       this.handleRecognitionResult(event);
                   };
                   
-                  // Recognition errors
                   this.recognition.onerror = (event) => {
                       this.handleRecognitionError(event);
                   };
-                  
-                  // Speech events
+          
+                  // ===== MODIFIED onspeechstart HANDLER =====
                   this.recognition.onspeechstart = () => {
-                      console.log('ðŸ—£ï¸ Speech detected');
+                      console.log('Ã°Å¸â€”Â£Ã¯Â¸  Speech detected');
                       this.lastSpeechTime = Date.now();
                       
-                      // Stop AI audio if user interrupts
-                      if (this.isAudioPlaying) {
-                          console.log('âš¡ User interrupted - stopping AI audio');
+                      // Use the new flag to check if interruption is allowed
+                      if (this.isInterruptible && this.isAudioPlaying) {
+                          console.log('Ã¢Å¡Â¡ User interrupted - stopping AI audio');
                           this.stopAllAudio();
-                          this.setAITurn(false);
-                          this.setUserTurn(true);
+                          
+                          // Let the roleplay manager handle the turn change
+                          if (this.roleplayManager && typeof this.roleplayManager.handleUserInterruption === 'function') {
+                              this.roleplayManager.handleUserInterruption();
+                          } else {
+                              // Fallback if the manager doesn't have the specific handler
+                              this.setAITurn(false);
+                              this.setUserTurn(true);
+                          }
                       }
                       
                       // Reset hang-up timer
                       this.total_silence_start = null;
                       this.impatience_triggered = false;
                   };
+                  // ===== END OF MODIFICATION =====
                   
                   this.recognition.onspeechend = () => {
-                      console.log('ðŸ¤ Speech ended');
+                      console.log('Ã°Å¸Â¤  Speech ended');
                       this.lastSpeechTime = Date.now();
-                      
-                      // Start silence detection
                       this.startSilenceDetection();
-                      
-                      // Restart hang-up detection
                       if (this.hangupDetectionEnabled) {
                           this.total_silence_start = Date.now();
                       }
@@ -12869,29 +12895,6 @@
                           this.currentAudio.currentTime = 0;
                           this.currentAudio = null;
                       } catch (e) {
-                          console.warn('Error stopping audio:', e);
-                      }
-                  }
-                  this.isAudioPlaying = false;
-              }
-          
-              cleanupAudio(audioUrl) {
-                  this.currentAudio = null;
-                  this.isAudioPlaying = false;
-                  if (audioUrl) {
-                      URL.revokeObjectURL(audioUrl);
-                  }
-              }
-          
-              async simulateSpeakingTime(text) {
-                  const words = text.split(' ').length;
-                  const speakingTime = Math.max(1000, (words / 150) * 60 * 1000);
-                  
-                  return new Promise(resolve => {
-                      setTimeout(resolve, speakingTime);
-                  });
-              }
-          
 
     📁 roleplay/
       📄 base-roleplay-manager.js (20.8KB)
@@ -13398,9 +13401,9 @@
                     // FIXED: Don't use parseInt() - return string directly
                     return roleplayData ? (roleplayData.dataset.roleplayId || '1.1') : '1.1';
 
-      📄 roleplay-1-1-manager.js (12.7KB)
+      📄 roleplay-1-1-manager.js (13.6KB)
           Content:
-            // ===== static/js/roleplay/roleplay-1-1-manager.js (Updated for new structure) ===== 
+            // ===== FIXED: static/js/roleplay/roleplay-1-1-manager.js =====
             
             class Roleplay11Manager extends BaseRoleplayManager {
                 constructor(options = {}) {
@@ -13414,7 +13417,7 @@
                 }
                 
                 init() {
-                    console.log('ðŸš€ Initializing Roleplay 1.1 Manager...');
+                    console.log('Ã°Å¸Å¡â‚¬ Initializing Roleplay 1.1 Manager...');
                     super.init();
                     this.setupPracticeSpecificFeatures();
                 }
@@ -13429,9 +13432,26 @@
                     // Setup interruption handling
                     this.setupInterruptionHandling();
                 }
+            
+                // ===== ADD THESE TWO MISSING METHODS =====
+                setupProgressTracking() {
+                    console.log('Ã°Å¸â€œÅ  Practice Mode: Progress tracking setup.');
+                    // This method makes the conversation quality indicator visible for practice mode.
+                    const qualityElement = document.getElementById('conversation-quality');
+                    if (qualityElement) {
+                        qualityElement.style.display = 'block';
+                    }
+                }
+            
+                setupInterruptionHandling() {
+                    console.log('Ã¢Å¡Â¡Ã¯Â¸  Practice Mode: Interruption handling setup confirmed.');
+                    // The core logic is in the voice handler and handleUserInterruption method.
+                    // This method is here to complete the initialization sequence.
+                }
+                // ===== END OF ADDED METHODS =====
                 
                 enableNaturalConversation() {
-                    console.log('ðŸ¤– Enabling natural conversation features...');
+                    console.log('Ã°Å¸Â¤â€“ Enabling natural conversation features...');
                     
                     if (this.voiceHandler) {
                         this.voiceHandler.enableInterruption();
@@ -13442,10 +13462,10 @@
                 }
                 
                 async startCall() {
-                    console.log('ðŸš€ Starting Practice Mode call...');
+                    console.log('Ã°Å¸Å¡â‚¬ Starting Practice Mode call...');
                     
                     if (!this.selectedMode || this.isProcessing) {
-                        console.log('âŒ Cannot start call: missing mode or already processing');
+                        console.log('Ã¢ Å’ Cannot start call: missing mode or already processing');
                         return;
                     }
                     
@@ -13463,7 +13483,7 @@
                         
                         if (response.ok) {
                             const data = await response.json();
-                            console.log('âœ… Practice Mode started successfully:', data);
+                            console.log('Ã¢Å“â€¦ Practice Mode started successfully:', data);
                             
                             this.currentSession = data;
                             this.isActive = true;
@@ -13472,11 +13492,11 @@
                             
                         } else {
                             const errorData = await response.json();
-                            console.error('âŒ Failed to start Practice Mode:', errorData);
+                            console.error('Ã¢ Å’ Failed to start Practice Mode:', errorData);
                             this.showError(errorData.error || 'Failed to start Practice Mode call');
                         }
                     } catch (error) {
-                        console.error('âŒ Error starting Practice Mode:', error);
+                        console.error('Ã¢ Å’ Error starting Practice Mode:', error);
                         this.showError('Network error. Please try again.');
                     } finally {
                         this.isProcessing = false;
@@ -13488,15 +13508,15 @@
                 
                 async processUserInput(transcript) {
                     if (!this.isActive || !this.currentSession || this.isProcessing) {
-                        console.log('âŒ Cannot process user input - invalid state');
+                        console.log('Ã¢ Å’ Cannot process user input - invalid state');
                         return;
                     }
                     
-                    console.log('ðŸ’¬ Processing Practice Mode input:', transcript);
+                    console.log('Ã°Å¸â€™Â¬ Processing Practice Mode input:', transcript);
                     this.isProcessing = true;
                     
                     this.addToConversationHistory('user', transcript);
-                    this.updateTranscript('ðŸ¤– Processing your response...');
+                    this.updateTranscript('Ã°Å¸Â¤â€“ Processing your response...');
                     
                     try {
                         const response = await this.apiCall('/api/roleplay/respond', {
@@ -13508,7 +13528,7 @@
                         
                         if (response.ok) {
                             const data = await response.json();
-                            console.log('âœ… AI response received:', data);
+                            console.log('Ã¢Å“â€¦ AI response received:', data);
                             
                             // Update conversation quality indicator
                             if (data.conversation_quality !== undefined) {
@@ -13517,10 +13537,8 @@
                             
                             // Check if call should end
                             if (!data.call_continues) {
-                                console.log('ðŸ“ž Call ending...');
-                                setTimeout(() => {
-                                    this.endCall(data.session_success);
-                                }, 2000);
+                                console.log('Ã°Å¸â€œÅ¾ Call ending...');
+                                this.endCall(); // Let endCall handle the final data
                                 return;
                             }
                             
@@ -13529,12 +13547,12 @@
                             
                         } else {
                             const errorData = await response.json();
-                            console.error('âŒ API error:', errorData);
+                            console.error('Ã¢ Å’ API error:', errorData);
                             this.showError(errorData.error || 'Failed to process input');
                             this.startUserTurn(); // Resume user turn on error
                         }
                     } catch (error) {
-                        console.error('âŒ Error processing user input:', error);
+                        console.error('Ã¢ Å’ Error processing user input:', error);
                         this.showError('Network error during call');
                         this.startUserTurn(); // Resume user turn on error
                     } finally {
@@ -13544,11 +13562,11 @@
                 
                 async playAIResponseAndWaitForUser(text) {
                     try {
-                        console.log('ðŸŽ­ Playing AI response (interruptible):', text.substring(0, 50) + '...');
+                        console.log('Ã°Å¸Å½Â­ Playing AI response (interruptible):', text.substring(0, 50) + '...');
                         this.aiIsSpeaking = true;
                         
                         this.addToConversationHistory('ai', text);
-                        this.updateTranscript(`ðŸ¤– Prospect: "${text}"`);
+                        this.updateTranscript(`Ã°Å¸Â¤â€“ Prospect: "${text}"`);
                         
                         // Try to play TTS audio (interruptible)
                         try {
@@ -13561,13 +13579,13 @@
                                 const audioBlob = await response.blob();
                                 
                                 if (audioBlob.size > 100) {
-                                    console.log('ðŸ”Š Playing interruptible AI audio');
+                                    console.log('Ã°Å¸â€Å  Playing interruptible AI audio');
                                     const audioUrl = URL.createObjectURL(audioBlob);
                                     this.currentAudio = new Audio(audioUrl);
                                     
                                     // Setup audio event handlers
                                     this.currentAudio.onended = () => {
-                                        console.log('âœ… AI audio finished - starting user turn');
+                                        console.log('Ã¢Å“â€¦ AI audio finished - starting user turn');
                                         URL.revokeObjectURL(audioUrl);
                                         this.currentAudio = null;
                                         
@@ -13578,7 +13596,7 @@
                                     };
                                     
                                     this.currentAudio.onerror = () => {
-                                        console.log('âŒ AI audio error - starting user turn');
+                                        console.log('Ã¢ Å’ AI audio error - starting user turn');
                                         URL.revokeObjectURL(audioUrl);
                                         this.currentAudio = null;
                                         
@@ -13591,21 +13609,21 @@
                                     await this.currentAudio.play();
                                     
                                 } else {
-                                    console.log('ðŸ“¢ Audio too small, simulating speech time');
+                                    console.log('Ã°Å¸â€œÂ¢ Audio too small, simulating speech time');
                                     await this.simulateSpeakingTime(text);
                                     if (this.aiIsSpeaking) {
                                         this.startUserTurn();
                                     }
                                 }
                             } else {
-                                console.log('ðŸŽµ TTS failed, simulating speech time');
+                                console.log('Ã°Å¸Å½Âµ TTS failed, simulating speech time');
                                 await this.simulateSpeakingTime(text);
                                 if (this.aiIsSpeaking) {
                                     this.startUserTurn();
                                 }
                             }
                         } catch (ttsError) {
-                            console.log('ðŸ”Š TTS error:', ttsError);
+                            console.log('Ã°Å¸â€Å  TTS error:', ttsError);
                             await this.simulateSpeakingTime(text);
                             if (this.aiIsSpeaking) {
                                 this.startUserTurn();
@@ -13613,7 +13631,7 @@
                         }
                         
                     } catch (error) {
-                        console.error('âŒ Error playing AI response:', error);
+                        console.error('Ã¢ Å’ Error playing AI response:', error);
                         this.aiIsSpeaking = false;
                         await this.simulateSpeakingTime(text);
                         this.startUserTurn();
@@ -13621,22 +13639,23 @@
                 }
                 
                 startUserTurn() {
-                    console.log('ðŸ‘¤ Starting user turn - auto-listening activated');
+                    console.log('Ã°Å¸â€˜Â¤ Starting user turn - auto-listening activated');
                     
                     this.aiIsSpeaking = false;
                     
                     // Start auto-listening for natural conversation
                     if (this.voiceHandler) {
+                        this.voiceHandler.setUserTurn(true);
                         this.voiceHandler.startAutoListening();
                     }
                     
                     // Update UI
-                    this.updateTranscript('ðŸŽ¤ Your turn - speak naturally...');
+                    this.updateTranscript('Ã°Å¸Å½Â¤ Your turn - speak naturally...');
                     this.addPulseToMicButton();
                 }
                 
                 handleUserInterruption() {
-                    console.log('âš¡ User interrupted AI - switching to user turn');
+                    console.log('Ã¢Å¡Â¡ User interrupted AI - switching to user turn');
                     
                     // Stop AI audio immediately
                     this.stopCurrentAudio();
@@ -13646,16 +13665,17 @@
                     
                     // If voice handler not already listening, start it
                     if (this.voiceHandler && !this.voiceHandler.isListening) {
+                        this.voiceHandler.setUserTurn(true);
                         this.voiceHandler.startAutoListening();
                     }
                     
                     // Update UI
-                    this.updateTranscript('âš¡ You interrupted - keep speaking...');
+                    this.updateTranscript('Ã¢Å¡Â¡ You interrupted - keep speaking...');
                 }
                 
                 stopCurrentAudio() {
                     if (this.currentAudio) {
-                        console.log('ðŸ”‡ Stopping current AI audio');
+                        console.log('Ã°Å¸â€â€¡ Stopping current AI audio');
                         this.currentAudio.pause();
                         this.currentAudio.currentTime = 0;
                         this.currentAudio = null;
@@ -13679,7 +13699,7 @@
                 }
                 
                 showFeedback(coaching, score = 75) {
-                    console.log('ðŸ“Š Showing Practice Mode feedback');
+                    console.log('Ã°Å¸â€œÅ  Showing Practice Mode feedback');
                     
                     document.getElementById('call-interface').style.display = 'none';
                     document.getElementById('feedback-section').style.display = 'flex';
@@ -15959,9 +15979,11 @@
         </script>
         {% endblock %}
 
-  📄 roleplay.html (19.2KB)
+  📄 roleplay.html (18.3KB)
       Content:
-        <!-- ===== ENHANCED API/TEMPLATES/ROLEPLAY.HTML TEMPLATE - MARATHON MODE SUPPORT ===== -->
+        <!-- ===== CORRECTED FILE: templates/roleplay.html ===== -->
+        <!-- This version uses the RoleplayFactory to load the correct JS manager dynamically -->
+        
         {% extends "base.html" %}
         
         {% block title %}{{ roleplay_info.name if roleplay_info else 'Roleplay Training' }} - Cold Calling Coach{% endblock %}
@@ -16460,8 +16482,6 @@
             }
             
             .phone-screen {
-                padding: 12px;
-                border-radius: 20px;
 
   📄 verify-email.html (0KB)
       (Empty file)
@@ -16750,9 +16770,9 @@
               <span id="voice-error-text"></span>
           </div>
           {% endblock %}
-          
           {% block extra_js %}
-          <script src="{{ url_for('static', filename='js/roleplay/voice-handler.js') }}?v={{ get_file_version('js/voice-handler.js') }}"></script>
+          <!-- CORRECTED THE PATH in the line below -->
+          <script src="{{ url_for('static', filename='js/voice-handler.js') }}?v={{ get_file_version('js/voice-handler.js') }}"></script>
           <script src="{{ url_for('static', filename='js/roleplay/base-roleplay-manager.js') }}?v={{ get_file_version('js/roleplay/base-roleplay-manager.js') }}"></script>
           <script src="{{ url_for('static', filename='js/roleplay/roleplay-1-1-manager.js') }}?v={{ get_file_version('js/roleplay/roleplay-1-1-manager.js') }}"></script>
           <script src="{{ url_for('static', filename='js/roleplay/roleplay-1-2-manager.js') }}?v={{ get_file_version('js/roleplay/roleplay-1-2-manager.js') }}"></script>

@@ -1,6 +1,4 @@
-<!-- ===== CORRECTED FILE: templates/roleplay.html ===== -->
-<!-- This version uses the RoleplayFactory to load the correct JS manager dynamically -->
-
+<!-- ===== FIXED: templates/roleplay.html ===== -->
 {% extends "base.html" %}
 
 {% block title %}{{ roleplay_info.name if roleplay_info else 'Roleplay Training' }} - Cold Calling Coach{% endblock %}
@@ -8,524 +6,39 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/roleplay.css') }}">
 <style>
-/* Enhanced roleplay-specific styles */
-.training-container {
-    min-height: 100vh;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 20px;
-    position: relative;
-}
-
-.back-to-dashboard {
-    position: absolute;
-    top: 20px;
-    left: 20px;
-    color: rgba(255, 255, 255, 0.8);
-    text-decoration: none;
-    font-size: 16px;
-    display: flex;
-    align-items: center;
-    z-index: 10;
-    transition: color 0.3s ease;
-}
-
-.back-to-dashboard:hover {
-    color: white;
-    text-decoration: none;
-}
-
-.phone-container {
-    width: 100%;
-    max-width: 400px;
-    margin: 60px auto 20px auto;
-    perspective: 1000px;
-}
-
-.phone-screen {
-    background: linear-gradient(135deg, #1e3c72, #2a5298);
-    border-radius: 25px;
-    padding: 20px;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-    min-height: 600px;
-    display: flex;
-    flex-direction: column;
-    position: relative;
-    border: 3px solid rgba(255, 255, 255, 0.1);
-}
-
-.status-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    color: white;
-    font-size: 16px;
-    font-weight: 600;
-    padding: 10px 0 20px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    margin-bottom: 20px;
-}
-
-.status-icons {
-    display: flex;
-    gap: 8px;
-    font-size: 14px;
-}
-
-.mode-selection {
-    text-align: center;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-}
-
-.mode-selection h3 {
-    color: white;
-    margin-bottom: 10px;
-    font-size: 24px;
-    font-weight: 700;
-}
-
-.roleplay-version {
-    color: rgba(255, 255, 255, 0.8);
-    margin-bottom: 30px;
-    font-size: 16px;
-}
-
-.mode-grid {
-    margin: 20px 0;
-}
-
-.mode-option {
-    background: rgba(255, 255, 255, 0.1);
-    border: 2px solid transparent;
-    border-radius: 16px;
-    padding: 24px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    margin: 12px 0;
-    backdrop-filter: blur(10px);
-}
-
-.mode-option:hover {
-    background: rgba(255, 255, 255, 0.2);
-    border-color: #60a5fa;
-    transform: translateY(-2px);
-}
-
-.mode-option.selected {
-    background: rgba(96, 165, 250, 0.3);
-    border-color: #60a5fa;
-    box-shadow: 0 8px 25px rgba(96, 165, 250, 0.4);
-}
-
-.mode-option h5 {
-    margin: 16px 0 8px 0;
-    color: white;
-    font-size: 20px;
-    font-weight: 600;
-}
-
-.mode-option small {
-    color: rgba(255, 255, 255, 0.8);
-    font-size: 14px;
-    line-height: 1.4;
-}
-
-.start-call-btn {
-    width: 100%;
-    padding: 16px 24px;
-    background: linear-gradient(135deg, #10b981, #059669);
-    color: white;
-    border: none;
-    border-radius: 12px;
-    font-size: 18px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    margin-top: 20px;
-    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
-}
-
-.start-call-btn:hover:not(:disabled) {
-    background: linear-gradient(135deg, #059669, #047857);
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.6);
-}
-
-.start-call-btn:disabled {
-    background: #6b7280;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-}
-
-.call-interface {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    text-align: center;
-}
-
-.call-status {
-    text-align: center;
-    margin-bottom: 20px;
-}
-
-.contact-avatar {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    margin: 0 auto 12px auto;
-    display: block;
-    border: 3px solid rgba(255, 255, 255, 0.3);
-}
-
-.contact-name {
-    color: white;
-    font-size: 22px;
-    font-weight: 600;
-    margin-bottom: 4px;
-}
-
-.contact-info {
-    color: rgba(255, 255, 255, 0.8);
-    font-size: 14px;
-    margin-bottom: 8px;
-}
-
-.call-status-text {
-    color: #10b981;
-    font-size: 16px;
-    font-weight: 500;
-    margin-bottom: 4px;
-}
-
-.call-duration {
-    color: white;
-    font-size: 18px;
-    font-weight: 600;
-    font-family: 'Courier New', monospace;
-}
-
-.live-transcript {
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: 12px;
-    padding: 16px;
-    margin: 20px 0;
-    flex: 1;
-    overflow-y: auto;
-    max-height: 300px;
-    min-height: 150px;
-    text-align: left;
-}
-
-.transcript-message {
-    margin: 8px 0;
-    padding: 10px 12px;
-    border-radius: 8px;
-    word-wrap: break-word;
-    animation: slideIn 0.3s ease-out;
-}
-
-@keyframes slideIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
+    /* Add this style to ensure the phone container is initially hidden */
+    #phone-container {
+        display: none; 
     }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.transcript-message.user {
-    background: #1e40af;
-    margin-left: 20px;
-    border-top-right-radius: 4px;
-}
-
-.transcript-message.ai {
-    background: #7c3aed;
-    margin-right: 20px;
-    border-top-left-radius: 4px;
-}
-
-.transcript-message .speaker {
-    font-weight: bold;
-    font-size: 12px;
-    margin-bottom: 4px;
-    color: rgba(255, 255, 255, 0.8);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.transcript-message .message {
-    font-size: 14px;
-    line-height: 1.4;
-    color: white;
-}
-
-.call-controls {
-    display: flex;
-    justify-content: center;
-    gap: 20px;
-    padding: 20px 0;
-}
-
-.control-btn {
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    border: none;
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
-    font-size: 24px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    backdrop-filter: blur(10px);
-}
-
-.control-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
-    transform: scale(1.1);
-}
-
-.control-btn.mic {
-    background: linear-gradient(135deg, #10b981, #059669);
-}
-
-.control-btn.mic:hover {
-    background: linear-gradient(135deg, #059669, #047857);
-}
-
-.end-call-container {
-    margin-top: 10px;
-}
-
-.end-call-btn {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #ef4444, #dc2626);
-    border: none;
-    color: white;
-    font-size: 32px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    margin: 0 auto;
-    display: block;
-    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
-}
-
-.end-call-btn:hover {
-    background: linear-gradient(135deg, #dc2626, #b91c1c);
-    transform: scale(1.1);
-    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.6);
-}
-
-.feedback-section {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    text-align: center;
-}
-
-.feedback-header {
-    text-align: center;
-    margin-bottom: 20px;
-}
-
-.roleplay-badge {
-    background: linear-gradient(135deg, #10b981, #059669);
-    color: white;
-    padding: 6px 12px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
-    display: inline-block;
-    margin-bottom: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.score-circle {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #10b981, #059669);
-    color: white;
-    font-size: 24px;
-    font-weight: bold;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 16px auto;
-    border: 3px solid rgba(255, 255, 255, 0.3);
-    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
-}
-
-.score-circle.excellent {
-    background: linear-gradient(135deg, #10b981, #059669);
-}
-
-.score-circle.good {
-    background: linear-gradient(135deg, #f59e0b, #d97706);
-}
-
-.score-circle.needs-improvement {
-    background: linear-gradient(135deg, #ef4444, #dc2626);
-}
-
-.feedback-category {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    padding: 16px;
-    margin: 8px 0;
-    text-align: left;
-    backdrop-filter: blur(10px);
-}
-
-.feedback-category h5 {
-    color: white;
-    margin-bottom: 8px;
-    font-size: 16px;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-}
-
-.feedback-category p {
-    color: rgba(255, 255, 255, 0.9);
-    margin: 0;
-    line-height: 1.5;
-    font-size: 14px;
-}
-
-.feedback-actions {
-    display: flex;
-    gap: 12px;
-    margin-top: 20px;
-}
-
-.feedback-btn {
-    flex: 1;
-    padding: 12px 20px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    font-weight: 500;
-    backdrop-filter: blur(10px);
-}
-
-.feedback-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
-    border-color: rgba(255, 255, 255, 0.5);
-    transform: translateY(-1px);
-}
-
-.feedback-btn.primary {
-    background: linear-gradient(135deg, #3b82f6, #2563eb);
-    border-color: #3b82f6;
-}
-
-.feedback-btn.primary:hover {
-    background: linear-gradient(135deg, #2563eb, #1d4ed8);
-}
-
-/* Voice error styling */
-#voice-error {
-    background: rgba(239, 68, 68, 0.9);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    padding: 12px 16px;
-    font-weight: 500;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-}
-
-/* Responsive design */
-@media (max-width: 768px) {
-    .training-container {
-        padding: 10px;
-    }
-    
-    .phone-container {
-        max-width: 350px;
-        margin: 40px auto 10px auto;
-    }
-    
-    .phone-screen {
-        padding: 16px;
-        min-height: 500px;
-    }
-    
-    .mode-option {
-        padding: 20px 16px;
-    }
-    
-    .mode-option h5 {
-        font-size: 18px;
-    }
-    
-    .start-call-btn {
-        padding: 14px 20px;
-        font-size: 16px;
-    }
-    
-    .feedback-actions {
-        flex-direction: column;
-    }
-    
-    .back-to-dashboard {
-        position: relative;
-        top: auto;
-        left: auto;
-        margin-bottom: 20px;
-        align-self: flex-start;
-    }
-}
-
-@media (max-width: 480px) {
-    .phone-container {
-        max-width: 320px;
-    }
-    
-    .phone-screen {
-        padding: 12px;
-        border-radius: 20px;
-    }
-    
-    .control-btn {
-        width: 50px;
-        height: 50px;
-        font-size: 20px;
-    }
-    
-    .end-call-btn {
-        width: 70px;
-        height: 70px;
-        font-size: 28px;
-    }
-}
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="training-container">
-    <!-- Back to Dashboard -->
+    <!-- Back to Dashboard Link -->
     <a href="/dashboard" class="back-to-dashboard">
         <i class="fas fa-arrow-left me-2"></i>Dashboard
     </a>
 
-    <!-- Phone Container -->
+    <!-- Mode Selection Screen (Now outside the phone) -->
+    <div class="mode-selection" id="mode-selection" style="position: static; max-width: 800px; background: none;">
+        <h3 id="roleplay-title">Choose Training Mode</h3>
+        <div class="roleplay-version" id="roleplay-version">Loading...</div>
+        <div class="mode-grid" id="mode-grid">
+            <!-- Mode options will be populated by JavaScript -->
+            <div class="text-center text-white py-5">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2">Loading Modes...</p>
+            </div>
+        </div>
+        <button class="start-call-btn" id="start-call-btn" disabled>
+            Select a mode to start
+        </button>
+    </div>
+
+    <!-- Phone Interface Container (Initially hidden) -->
     <div class="phone-container" id="phone-container">
         <div class="phone-screen">
             <!-- Status Bar -->
@@ -538,130 +51,85 @@
                 </div>
             </div>
 
-            <!-- This container will be managed by JS -->
-            <div id="roleplay-content-container" style="flex: 1; display: flex; flex-direction: column;">
-                <!-- Mode Selection, Call Interface, or Feedback will be rendered here by JS -->
-                <div class="mode-selection" id="mode-selection">
-                    <!-- This content will be dynamically generated by the manager -->
-                    <h3 id="roleplay-title">Loading...</h3>
-                    <div class="roleplay-version" id="roleplay-version">Initializing...</div>
-                    <div class="mode-grid" id="mode-grid">
-                        <div class="mode-option" style="opacity: 0.5;">
-                            <i class="fas fa-spinner fa-spin fa-2x" style="color: #60a5fa; margin-bottom: 12px;"></i>
-                            <h5>Loading Modes...</h5>
-                        </div>
-                    </div>
-                    <button class="start-call-btn" id="start-call-btn" disabled>
-                        Select a Mode
-                    </button>
+            <!-- Conversation Quality Indicator -->
+            <div class="conversation-quality" id="conversation-quality" style="display: none;">50%</div>
+
+            <!-- Marathon Progress -->
+            <div class="marathon-progress" id="marathon-progress" style="display: none;">
+                <!-- Marathon stats will be populated here -->
+            </div>
+
+            <!-- Call Interface -->
+            <div class="call-interface" id="call-interface" style="display: none;">
+                <div class="call-status">
+                    <img src="" alt="Contact" class="contact-avatar" id="contact-avatar">
+                    <div class="contact-name" id="contact-name">...</div>
+                    <div class="contact-info" id="contact-info">...</div>
+                    <div class="call-status-text" id="call-status-text">...</div>
+                    <div class="call-duration" id="call-duration">00:00</div>
                 </div>
-    
-                <div class="call-interface" id="call-interface" style="display: none;">
-                    <!-- Call Status -->
-                    <div class="call-status">
-                        <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face" 
-                             alt="Contact" class="contact-avatar" id="contact-avatar">
-                        <div class="contact-name" id="contact-name">Alex Morgan</div>
-                        <div class="contact-info" id="contact-info">CTO • TechCorp</div>
-                        <div class="call-status-text" id="call-status-text">Calling...</div>
-                        <div class="call-duration" id="call-duration">00:00</div>
-                    </div>
-                    <!-- Live Transcript -->
-                    <div class="live-transcript" id="live-transcript">
-                        <div style="text-align: center; color: rgba(255, 255, 255, 0.6); padding: 20px;">
-                            <i class="fas fa-microphone fa-2x" style="margin-bottom: 10px;"></i>
-                            <div>Waiting for conversation...</div>
-                        </div>
-                    </div>
-                    <!-- Call Controls -->
-                    <div style="margin-top: auto;">
-                        <div class="call-controls">
-                            <button class="control-btn mute" id="mute-btn" title="Mute"><i class="fas fa-microphone-slash"></i></button>
-                            <button class="control-btn mic" id="mic-btn" title="Speak"><i class="fas fa-microphone"></i></button>
-                            <button class="control-btn speaker" id="speaker-btn" title="Speaker"><i class="fas fa-volume-up"></i></button>
-                        </div>
-                        <div class="end-call-container">
-                            <button class="end-call-btn" id="end-call-btn" title="End call"><i class="fas fa-phone"></i></button>
-                        </div>
+                <div class="live-transcript" id="live-transcript">...</div>
+                <div style="margin-top: auto;">
+                    <div class="end-call-container">
+                        <button class="end-call-btn" id="end-call-btn" title="End call"><i class="fas fa-phone"></i></button>
                     </div>
                 </div>
-    
-                <div class="feedback-section" id="feedback-section" style="display: none;">
-                    <!-- Feedback content will be dynamically generated by the manager -->
-                </div>
+            </div>
+
+            <!-- Feedback Section -->
+            <div class="feedback-section" id="feedback-section" style="display: none;">
+                 <div class="feedback-header">
+                    <div class="roleplay-badge" id="roleplay-badge">Roleplay</div>
+                    <div class="score-circle" id="score-circle">0</div>
+                    <h4 style="color: white; margin: 0;">Training Complete!</h4>
+                 </div>
+                 <div id="feedback-content" style="overflow-y: auto; flex: 1;"></div>
+                 <div class="feedback-actions">
+                     <button class="feedback-btn" id="try-again-btn"><i class="fas fa-redo me-2"></i>Try Again</button>
+                     <button class="feedback-btn primary" id="new-mode-btn"><i class="fas fa-arrow-left me-2"></i>Change Roleplay</button>
+                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Hidden Data -->
 <div id="roleplay-data" 
      data-roleplay-id="{{ roleplay_id if roleplay_id else '1.1' }}"
      data-user-authenticated="{{ 'true' if session.get('user_id') else 'false' }}"
      style="display: none;">
 </div>
 
-<!-- Voice Error Display -->
-<div id="voice-error" class="alert alert-warning position-fixed" 
-     style="top: 20px; right: 20px; z-index: 9999; max-width: 300px; display: none;">
-    <span id="voice-error-text"></span>
-</div>
+<div id="voice-error" class="alert alert-warning position-fixed" style="display: none;"></div>
 {% endblock %}
 
 {% block extra_js %}
-<!-- CORE, SHARED SCRIPTS -->
+<!-- CORRECTED PATH for voice-handler.js -->
 <script src="{{ url_for('static', filename='js/voice-handler.js') }}?v={{ get_file_version('js/voice-handler.js') }}"></script>
 <script src="{{ url_for('static', filename='js/roleplay/base-roleplay-manager.js') }}?v={{ get_file_version('js/roleplay/base-roleplay-manager.js') }}"></script>
-
-<!-- SPECIFIC ROLEPLAY MANAGER SCRIPTS -->
 <script src="{{ url_for('static', filename='js/roleplay/roleplay-1-1-manager.js') }}?v={{ get_file_version('js/roleplay/roleplay-1-1-manager.js') }}"></script>
 <script src="{{ url_for('static', filename='js/roleplay/roleplay-1-2-manager.js') }}?v={{ get_file_version('js/roleplay/roleplay-1-2-manager.js') }}"></script>
-<!-- Add other managers here like roleplay-1-3.js when you create them -->
-
-<!-- FACTORY SCRIPT -->
 <script src="{{ url_for('static', filename='js/roleplay/roleplay-factory.js') }}?v={{ get_file_version('js/roleplay/roleplay-factory.js') }}"></script>
-
-<!-- CORRECT INITIALIZATION LOGIC -->
 <script>
+    // Factory-based initialization
     document.addEventListener('DOMContentLoaded', () => {
         try {
-            console.log('🎬 Initializing Roleplay Page...');
-
-            const roleplayData = document.getElementById('roleplay-data');
-            const roleplayId = roleplayData.dataset.roleplayId;
-
-            if (!roleplayId) {
-                throw new Error("Roleplay ID not found in the DOM.");
-            }
-
-            console.log(`🏭 Using RoleplayFactory to create manager for ID: "${roleplayId}"`);
-
-            // Use the factory to create the correct manager instance
-            window.roleplayManager = RoleplayFactory.createManager(roleplayId, {
-                containerId: 'roleplay-content-container',
-                debugMode: true
-            });
-
-            if (!window.roleplayManager) {
-                throw new Error(`Failed to create manager for roleplay ID: ${roleplayId}`);
-            }
-
-            console.log(`✅ Successfully initialized ${window.roleplayManager.constructor.name}.`);
-
+            const roleplayId = document.getElementById('roleplay-data').dataset.roleplayId;
+            console.log(`Initializing manager for roleplay ID: ${roleplayId}`);
+            
+            // This global instance `currentRoleplayManager` will be used by the page
+            window.currentRoleplayManager = RoleplayFactory.createManager(roleplayId);
+            
+            console.log('✅ Roleplay successfully initialized via factory.');
         } catch (error) {
             console.error('🚨 CRITICAL ERROR: Roleplay initialization failed.', error);
-            // Display an error message to the user
-            const container = document.getElementById('roleplay-content-container');
+            const container = document.querySelector('.training-container');
             if (container) {
                 container.innerHTML = `
-                    <div style="text-align: center; color: white; padding: 40px;">
-                        <i class="fas fa-exclamation-triangle fa-3x" style="color: #ef4444; margin-bottom: 20px;"></i>
-                        <h3>Initialization Failed</h3>
+                    <div class="text-center text-white">
+                        <h2>Initialization Failed</h2>
                         <p>Could not load the roleplay module. Please try again or go back to the dashboard.</p>
-                        <p style="font-size: 12px; color: rgba(255,255,255,0.6);">Error: ${error.message}</p>
-                        <a href="/dashboard" class="feedback-btn primary" style="text-decoration: none; display: inline-block; margin-top: 20px;">
-                            Go to Dashboard
-                        </a>
+                        <p class="text-danger small">Error: ${error.message}</p>
+                        <a href="/dashboard" class="btn btn-light mt-3">Back to Dashboard</a>
                     </div>
                 `;
             }

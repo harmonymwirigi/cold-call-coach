@@ -10,7 +10,25 @@ class Roleplay11Manager extends BaseRoleplayManager {
         this.currentAudio = null;
         this.aiIsSpeaking = false;
     }
-    
+    initializeModeSelection() {
+        console.log('ðŸŽ¯ Roleplay 1.1: Initializing specific mode selection.');
+        
+        // Define the modes for this specific roleplay
+        const modes = [
+            {
+                id: 'practice',
+                name: 'Practice Mode',
+                description: 'A single, detailed call with full AI coaching and feedback.',
+                icon: 'user-graduate'
+            }
+        ];
+        
+        // Use the helper from the base class to create the UI
+        this.createModeSelectionUI(modes);
+        
+        // Since there's only one mode, auto-select it
+        this.selectMode('practice');
+    }
     init() {
         console.log('ðŸš€ Initializing Roleplay 1.1 Manager...');
         super.init();
