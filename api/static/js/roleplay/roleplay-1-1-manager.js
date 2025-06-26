@@ -1,4 +1,4 @@
-// ===== static/js/roleplay/roleplay-1-1-manager.js (Updated for new structure) ===== 
+// ===== FIXED: static/js/roleplay/roleplay-1-1-manager.js =====
 
 class Roleplay11Manager extends BaseRoleplayManager {
     constructor(options = {}) {
@@ -12,7 +12,7 @@ class Roleplay11Manager extends BaseRoleplayManager {
     }
     
     init() {
-        console.log('🚀 Initializing Roleplay 1.1 Manager...');
+        console.log('ðŸš€ Initializing Roleplay 1.1 Manager...');
         super.init();
         this.setupPracticeSpecificFeatures();
     }
@@ -27,9 +27,26 @@ class Roleplay11Manager extends BaseRoleplayManager {
         // Setup interruption handling
         this.setupInterruptionHandling();
     }
+
+    // ===== ADD THESE TWO MISSING METHODS =====
+    setupProgressTracking() {
+        console.log('ðŸ“Š Practice Mode: Progress tracking setup.');
+        // This method makes the conversation quality indicator visible for practice mode.
+        const qualityElement = document.getElementById('conversation-quality');
+        if (qualityElement) {
+            qualityElement.style.display = 'block';
+        }
+    }
+
+    setupInterruptionHandling() {
+        console.log('âš¡ï¸  Practice Mode: Interruption handling setup confirmed.');
+        // The core logic is in the voice handler and handleUserInterruption method.
+        // This method is here to complete the initialization sequence.
+    }
+    // ===== END OF ADDED METHODS =====
     
     enableNaturalConversation() {
-        console.log('🤖 Enabling natural conversation features...');
+        console.log('ðŸ¤– Enabling natural conversation features...');
         
         if (this.voiceHandler) {
             this.voiceHandler.enableInterruption();
@@ -40,10 +57,10 @@ class Roleplay11Manager extends BaseRoleplayManager {
     }
     
     async startCall() {
-        console.log('🚀 Starting Practice Mode call...');
+        console.log('ðŸš€ Starting Practice Mode call...');
         
         if (!this.selectedMode || this.isProcessing) {
-            console.log('❌ Cannot start call: missing mode or already processing');
+            console.log('â Œ Cannot start call: missing mode or already processing');
             return;
         }
         
@@ -61,7 +78,7 @@ class Roleplay11Manager extends BaseRoleplayManager {
             
             if (response.ok) {
                 const data = await response.json();
-                console.log('✅ Practice Mode started successfully:', data);
+                console.log('âœ… Practice Mode started successfully:', data);
                 
                 this.currentSession = data;
                 this.isActive = true;
@@ -70,11 +87,11 @@ class Roleplay11Manager extends BaseRoleplayManager {
                 
             } else {
                 const errorData = await response.json();
-                console.error('❌ Failed to start Practice Mode:', errorData);
+                console.error('â Œ Failed to start Practice Mode:', errorData);
                 this.showError(errorData.error || 'Failed to start Practice Mode call');
             }
         } catch (error) {
-            console.error('❌ Error starting Practice Mode:', error);
+            console.error('â Œ Error starting Practice Mode:', error);
             this.showError('Network error. Please try again.');
         } finally {
             this.isProcessing = false;
@@ -86,15 +103,15 @@ class Roleplay11Manager extends BaseRoleplayManager {
     
     async processUserInput(transcript) {
         if (!this.isActive || !this.currentSession || this.isProcessing) {
-            console.log('❌ Cannot process user input - invalid state');
+            console.log('â Œ Cannot process user input - invalid state');
             return;
         }
         
-        console.log('💬 Processing Practice Mode input:', transcript);
+        console.log('ðŸ’¬ Processing Practice Mode input:', transcript);
         this.isProcessing = true;
         
         this.addToConversationHistory('user', transcript);
-        this.updateTranscript('🤖 Processing your response...');
+        this.updateTranscript('ðŸ¤– Processing your response...');
         
         try {
             const response = await this.apiCall('/api/roleplay/respond', {
@@ -106,7 +123,7 @@ class Roleplay11Manager extends BaseRoleplayManager {
             
             if (response.ok) {
                 const data = await response.json();
-                console.log('✅ AI response received:', data);
+                console.log('âœ… AI response received:', data);
                 
                 // Update conversation quality indicator
                 if (data.conversation_quality !== undefined) {
@@ -115,10 +132,8 @@ class Roleplay11Manager extends BaseRoleplayManager {
                 
                 // Check if call should end
                 if (!data.call_continues) {
-                    console.log('📞 Call ending...');
-                    setTimeout(() => {
-                        this.endCall(data.session_success);
-                    }, 2000);
+                    console.log('ðŸ“ž Call ending...');
+                    this.endCall(); // Let endCall handle the final data
                     return;
                 }
                 
@@ -127,12 +142,12 @@ class Roleplay11Manager extends BaseRoleplayManager {
                 
             } else {
                 const errorData = await response.json();
-                console.error('❌ API error:', errorData);
+                console.error('â Œ API error:', errorData);
                 this.showError(errorData.error || 'Failed to process input');
                 this.startUserTurn(); // Resume user turn on error
             }
         } catch (error) {
-            console.error('❌ Error processing user input:', error);
+            console.error('â Œ Error processing user input:', error);
             this.showError('Network error during call');
             this.startUserTurn(); // Resume user turn on error
         } finally {
@@ -142,11 +157,11 @@ class Roleplay11Manager extends BaseRoleplayManager {
     
     async playAIResponseAndWaitForUser(text) {
         try {
-            console.log('🎭 Playing AI response (interruptible):', text.substring(0, 50) + '...');
+            console.log('ðŸŽ­ Playing AI response (interruptible):', text.substring(0, 50) + '...');
             this.aiIsSpeaking = true;
             
             this.addToConversationHistory('ai', text);
-            this.updateTranscript(`🤖 Prospect: "${text}"`);
+            this.updateTranscript(`ðŸ¤– Prospect: "${text}"`);
             
             // Try to play TTS audio (interruptible)
             try {
@@ -159,13 +174,13 @@ class Roleplay11Manager extends BaseRoleplayManager {
                     const audioBlob = await response.blob();
                     
                     if (audioBlob.size > 100) {
-                        console.log('🔊 Playing interruptible AI audio');
+                        console.log('ðŸ”Š Playing interruptible AI audio');
                         const audioUrl = URL.createObjectURL(audioBlob);
                         this.currentAudio = new Audio(audioUrl);
                         
                         // Setup audio event handlers
                         this.currentAudio.onended = () => {
-                            console.log('✅ AI audio finished - starting user turn');
+                            console.log('âœ… AI audio finished - starting user turn');
                             URL.revokeObjectURL(audioUrl);
                             this.currentAudio = null;
                             
@@ -176,7 +191,7 @@ class Roleplay11Manager extends BaseRoleplayManager {
                         };
                         
                         this.currentAudio.onerror = () => {
-                            console.log('❌ AI audio error - starting user turn');
+                            console.log('â Œ AI audio error - starting user turn');
                             URL.revokeObjectURL(audioUrl);
                             this.currentAudio = null;
                             
@@ -189,21 +204,21 @@ class Roleplay11Manager extends BaseRoleplayManager {
                         await this.currentAudio.play();
                         
                     } else {
-                        console.log('📢 Audio too small, simulating speech time');
+                        console.log('ðŸ“¢ Audio too small, simulating speech time');
                         await this.simulateSpeakingTime(text);
                         if (this.aiIsSpeaking) {
                             this.startUserTurn();
                         }
                     }
                 } else {
-                    console.log('🎵 TTS failed, simulating speech time');
+                    console.log('ðŸŽµ TTS failed, simulating speech time');
                     await this.simulateSpeakingTime(text);
                     if (this.aiIsSpeaking) {
                         this.startUserTurn();
                     }
                 }
             } catch (ttsError) {
-                console.log('🔊 TTS error:', ttsError);
+                console.log('ðŸ”Š TTS error:', ttsError);
                 await this.simulateSpeakingTime(text);
                 if (this.aiIsSpeaking) {
                     this.startUserTurn();
@@ -211,7 +226,7 @@ class Roleplay11Manager extends BaseRoleplayManager {
             }
             
         } catch (error) {
-            console.error('❌ Error playing AI response:', error);
+            console.error('â Œ Error playing AI response:', error);
             this.aiIsSpeaking = false;
             await this.simulateSpeakingTime(text);
             this.startUserTurn();
@@ -219,22 +234,23 @@ class Roleplay11Manager extends BaseRoleplayManager {
     }
     
     startUserTurn() {
-        console.log('👤 Starting user turn - auto-listening activated');
+        console.log('ðŸ‘¤ Starting user turn - auto-listening activated');
         
         this.aiIsSpeaking = false;
         
         // Start auto-listening for natural conversation
         if (this.voiceHandler) {
+            this.voiceHandler.setUserTurn(true);
             this.voiceHandler.startAutoListening();
         }
         
         // Update UI
-        this.updateTranscript('🎤 Your turn - speak naturally...');
+        this.updateTranscript('ðŸŽ¤ Your turn - speak naturally...');
         this.addPulseToMicButton();
     }
     
     handleUserInterruption() {
-        console.log('⚡ User interrupted AI - switching to user turn');
+        console.log('âš¡ User interrupted AI - switching to user turn');
         
         // Stop AI audio immediately
         this.stopCurrentAudio();
@@ -244,16 +260,17 @@ class Roleplay11Manager extends BaseRoleplayManager {
         
         // If voice handler not already listening, start it
         if (this.voiceHandler && !this.voiceHandler.isListening) {
+            this.voiceHandler.setUserTurn(true);
             this.voiceHandler.startAutoListening();
         }
         
         // Update UI
-        this.updateTranscript('⚡ You interrupted - keep speaking...');
+        this.updateTranscript('âš¡ You interrupted - keep speaking...');
     }
     
     stopCurrentAudio() {
         if (this.currentAudio) {
-            console.log('🔇 Stopping current AI audio');
+            console.log('ðŸ”‡ Stopping current AI audio');
             this.currentAudio.pause();
             this.currentAudio.currentTime = 0;
             this.currentAudio = null;
@@ -277,7 +294,7 @@ class Roleplay11Manager extends BaseRoleplayManager {
     }
     
     showFeedback(coaching, score = 75) {
-        console.log('📊 Showing Practice Mode feedback');
+        console.log('ðŸ“Š Showing Practice Mode feedback');
         
         document.getElementById('call-interface').style.display = 'none';
         document.getElementById('feedback-section').style.display = 'flex';
