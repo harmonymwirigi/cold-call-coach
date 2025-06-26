@@ -18,6 +18,7 @@ class VoiceHandler {
         // Conversation state
         this.isUserTurn = false;
         this.isAITurn = false;
+        this.isInterruptible = false; // ADDED: Flag for enabling interruptions
         
         // Callback interface
         this.onTranscript = null;
@@ -57,10 +58,32 @@ class VoiceHandler {
         this.hangupSilenceTimer = null;
         this.hangupDetectionEnabled = !this.isMobile; // MOBILE: Disabled
         
-        console.log(`🎤 Simple Voice Handler - Mobile: ${this.isMobile}, Auto-restart: ${this.autoRestartEnabled}`);
+        console.log(`ðŸŽ¤ Simple Voice Handler - Mobile: ${this.isMobile}, Auto-restart: ${this.autoRestartEnabled}`);
         this.init();
     }
 
+    enableInterruption() {
+        console.log('âš¡ï¸  Interruptions enabled for AI speech.');
+        this.isInterruptible = true;
+    }
+
+    setAITurn(isAITurn) {
+        this.isAITurn = isAITurn;
+        if (isAITurn) {
+            this.isUserTurn = false;
+            // Stop listening if AI is about to speak
+            if (this.isListening) {
+                this.stopListening(false); // don't trigger restart
+            }
+        }
+    }
+
+    setUserTurn(isUserTurn) {
+        this.isUserTurn = isUserTurn;
+        if (isUserTurn) {
+            this.isAITurn = false;
+        }
+    }
     detectMobile() {
         return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
                (window.innerWidth <= 768 && 'ontouchstart' in window);
@@ -208,16 +231,16 @@ class VoiceHandler {
     setupRecognitionEventHandlers() {
         if (!this.recognition) return;
         
-        // Recognition starts
+        // ... (keep onstart, onend handlers)
+        
         this.recognition.onstart = () => {
-            console.log('🎤 Voice recognition started');
+            console.log('ðŸŽ¤ Voice recognition started');
             this.isListening = true;
             this.updateMicrophoneUI(true);
             this.clearError();
             this.lastSuccessfulStart = Date.now();
             this.consecutiveFailures = 0; // Reset on successful start
             
-            // Start hang-up detection (desktop only)
             if (this.hangupDetectionEnabled && this.isUserTurn) {
                 this.total_silence_start = Date.now();
                 this.impatience_triggered = false;
@@ -225,54 +248,54 @@ class VoiceHandler {
             }
         };
         
-        // Recognition ends
         this.recognition.onend = () => {
-            console.log('🛑 Voice recognition ended');
+            console.log('ðŸ›‘ Voice recognition ended');
             this.isListening = false;
             this.updateMicrophoneUI(false);
             this.stopSilenceDetection();
             this.stopHangupSilenceDetection();
             
-            // SIMPLE RESTART LOGIC: Only restart in very safe conditions
             this.handleSimpleRestart();
         };
-        
-        // Recognition results
+
         this.recognition.onresult = (event) => {
             this.handleRecognitionResult(event);
         };
         
-        // Recognition errors
         this.recognition.onerror = (event) => {
             this.handleRecognitionError(event);
         };
-        
-        // Speech events
+
+        // ===== MODIFIED onspeechstart HANDLER =====
         this.recognition.onspeechstart = () => {
-            console.log('🗣️ Speech detected');
+            console.log('ðŸ—£ï¸  Speech detected');
             this.lastSpeechTime = Date.now();
             
-            // Stop AI audio if user interrupts
-            if (this.isAudioPlaying) {
-                console.log('⚡ User interrupted - stopping AI audio');
+            // Use the new flag to check if interruption is allowed
+            if (this.isInterruptible && this.isAudioPlaying) {
+                console.log('âš¡ User interrupted - stopping AI audio');
                 this.stopAllAudio();
-                this.setAITurn(false);
-                this.setUserTurn(true);
+                
+                // Let the roleplay manager handle the turn change
+                if (this.roleplayManager && typeof this.roleplayManager.handleUserInterruption === 'function') {
+                    this.roleplayManager.handleUserInterruption();
+                } else {
+                    // Fallback if the manager doesn't have the specific handler
+                    this.setAITurn(false);
+                    this.setUserTurn(true);
+                }
             }
             
             // Reset hang-up timer
             this.total_silence_start = null;
             this.impatience_triggered = false;
         };
+        // ===== END OF MODIFICATION =====
         
         this.recognition.onspeechend = () => {
-            console.log('🤐 Speech ended');
+            console.log('ðŸ¤  Speech ended');
             this.lastSpeechTime = Date.now();
-            
-            // Start silence detection
             this.startSilenceDetection();
-            
-            // Restart hang-up detection
             if (this.hangupDetectionEnabled) {
                 this.total_silence_start = Date.now();
             }
