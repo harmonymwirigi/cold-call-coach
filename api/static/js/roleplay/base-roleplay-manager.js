@@ -50,7 +50,20 @@ class BaseRoleplayManager {
             timeElement.textContent = time;
         }
     }
-    
+    async apiCall(endpoint, options = {}) {
+        const defaultOptions = {
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`
+            },
+            ...options
+        };
+        const response = await fetch(endpoint, defaultOptions);
+        if (!response.ok && response.status === 401) {
+            window.location.href = '/login';
+        }
+        return response;
+    }
     loadRoleplayData() {
         const roleplayData = document.getElementById('roleplay-data');
         if (roleplayData) {
@@ -586,8 +599,43 @@ class BaseRoleplayManager {
         throw new Error('processUserInput must be implemented by subclass');
     }
     
-    async endCall(success = false) {
-        throw new Error('endCall must be implemented by subclass');
+    async endCall(forcedEnd = false) {
+        if (!this.isActive) return;
+
+        console.log('ðŸ“ž Ending call. Forced:', forcedEnd);
+        this.isProcessing = true;
+        this.isActive = false;
+
+        // Stop timer and voice recognition
+        clearInterval(this.durationInterval);
+        if (this.voiceHandler) {
+            this.voiceHandler.stopListening();
+        }
+
+        this.updateCallStatus('Call Ended', 'ended');
+
+        try {
+            const response = await this.apiCall('/api/roleplay/end', {
+                method: 'POST',
+                body: JSON.stringify({ forced_end: forcedEnd })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log('ðŸ“Š Final session data received:', data);
+                this.showFeedback(data.coaching, data.overall_score);
+            } else {
+                console.error('â Œ Failed to end session gracefully.');
+                this.showError('Could not retrieve final feedback.');
+                this.showFeedback({}, 50); // Show generic feedback
+            }
+        } catch (error) {
+            console.error('â Œ Error during endCall API request:', error);
+            this.showError('An error occurred while ending the call.');
+            this.showFeedback({}, 50); // Show generic feedback
+        } finally {
+            this.isProcessing = false;
+        }
     }
     createModeSelectionUI(modes) {
         const modeGrid = document.getElementById('mode-grid');

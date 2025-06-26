@@ -9,6 +9,7 @@ class Roleplay11Manager extends BaseRoleplayManager {
         this.conversationHistory = [];
         this.currentAudio = null;
         this.aiIsSpeaking = false;
+        
     }
     initializeModeSelection() {
         console.log('ðŸŽ¯ Roleplay 1.1: Initializing specific mode selection.');
