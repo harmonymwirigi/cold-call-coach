@@ -179,55 +179,51 @@ class RoleplayEngine:
             }
     
     def create_session(self, user_id: str, roleplay_id: str, mode: str, user_context: Dict) -> Dict[str, Any]:
-        """FIXED: Create roleplay session with enhanced error handling and persistence"""
+        """FIXED: Create roleplay session with serializable data"""
         try:
             # Validate inputs
+            
             if not user_id or not roleplay_id:
                 return {'success': False, 'error': 'Missing required parameters'}
             
             if roleplay_id not in self.roleplay_implementations:
                 return {'success': False, 'error': f'Roleplay {roleplay_id} not available'}
             
-            logger.info(f"🚀 Creating session: {roleplay_id} for user {user_id} (mode: {mode})")
+            logger.info(f"ðŸš€ Creating session: {roleplay_id} for user {user_id} (mode: {mode})")
             
-            # Clean up any existing sessions for this user
             self._cleanup_user_sessions(user_id)
             
-            # Create session through implementation
             implementation = self.roleplay_implementations[roleplay_id]
             session_result = implementation.create_session(user_id, mode, user_context)
             
             if not session_result.get('success'):
-                logger.error(f"❌ Implementation failed to create session: {session_result}")
+                logger.error(f"â Œ Implementation failed to create session: {session_result}")
                 return session_result
             
             session_id = session_result['session_id']
-            
-            # Store session in engine's active sessions
             session_data = implementation.active_sessions.get(session_id)
+            
             if session_data:
+                # CRITICAL FIX: Store the roleplay_id string, not the implementation object
                 self.active_sessions[session_id] = {
-                    'implementation': implementation,
+                    'implementation_id': roleplay_id, # STORE ID, NOT OBJECT
                     'session_data': session_data,
                     'created_at': datetime.now(timezone.utc).isoformat(),
                     'last_activity': datetime.now(timezone.utc).isoformat(),
                     'user_id': user_id,
                     'roleplay_id': roleplay_id
                 }
-                
-                logger.info(f"✅ Session {session_id} created and stored successfully")
-                
-                # Store in database for persistence (if available)
-                self._persist_session_to_database(session_id, user_id, session_data)
+                logger.info(f"âœ… Session {session_id} created and stored successfully")
+                self._persist_session_to_database(session_id, user_id, self.active_sessions[session_id])
             
             return session_result
             
         except Exception as e:
-            logger.error(f"❌ Error creating roleplay session: {e}")
+            logger.error(f"â Œ Error creating roleplay session: {e}", exc_info=True)
             return {'success': False, 'error': f'Failed to create session: {str(e)}'}
     
     def process_user_input(self, session_id: str, user_input: str) -> Dict[str, Any]:
-        """FIXED: Process user input with robust session recovery"""
+        """FIXED: Process user input using implementation_id"""
         try:
             # Validate inputs
             if not session_id or not user_input:
@@ -241,7 +237,8 @@ class RoleplayEngine:
                 logger.error(f"❌ Session {session_id} not found in any storage location")
                 return {'success': False, 'error': 'Session not found or expired'}
             
-            implementation = session_info['implementation']
+            implementation_id = session_info['implementation_id']
+            implementation = self.roleplay_implementations[implementation_id]
             
             # Update last activity
             self._update_session_activity(session_id)
@@ -278,26 +275,23 @@ class RoleplayEngine:
             return {'success': False, 'error': f'Processing failed: {str(e)}'}
     
     def end_session(self, session_id: str, forced_end: bool = False) -> Dict[str, Any]:
-        """FIXED: End session with comprehensive cleanup"""
+        """FIXED: End session using implementation_id"""
         try:
-            logger.info(f"📞 Ending session {session_id} (forced: {forced_end})")
+            logger.info(f"ðŸ“ž Ending session {session_id} (forced: {forced_end})")
             
-            # Get session info
             session_info = self._get_session_with_recovery(session_id)
             
             if session_info:
-                implementation = session_info['implementation']
+                # CRITICAL FIX: Retrieve implementation using its stored ID
+                implementation_id = session_info['implementation_id']
+                implementation = self.roleplay_implementations[implementation_id]
                 
-                # End through implementation
                 result = implementation.end_session(session_id, forced_end)
                 
-                # Clean up from engine
                 self.active_sessions.pop(session_id, None)
-                
-                # Clean up from database
                 self._cleanup_session_from_database(session_id)
                 
-                logger.info(f"✅ Session {session_id} ended successfully")
+                logger.info(f"âœ… Session {session_id} ended successfully")
                 return result
             else:
                 # Session not found, but return success for cleanup

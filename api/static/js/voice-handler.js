@@ -633,30 +633,29 @@ class VoiceHandler {
     }
 
     processFinalUserSpeech() {
-        const transcript = this.finalTranscript.trim();
-        
-        if (transcript.length > 0) {
-            console.log(`✅ Processing final speech: "${transcript}"`);
-            
-            this.stopListening();
-            this.setUserTurn(false);
-            
-            // Trigger callback
-            if (this.onTranscript && typeof this.onTranscript === 'function') {
-                this.onTranscript(transcript);
-            } else if (this.roleplayManager && this.roleplayManager.handleVoiceInput) {
-                this.roleplayManager.handleVoiceInput(transcript);
-            } else {
-                console.warn('⚠️ No callback available for transcript');
-            }
-            
-            this.finalTranscript = '';
-            this.currentTranscript = '';
-        } else if (this.isMobile) {
-            // Mobile: No speech detected, show instruction
-            this.showMessage('No speech detected. Tap mic to try again.', 'warning');
-            this.showMobileInstruction();
+        if (this.silenceTimer) {
+            clearTimeout(this.silenceTimer);
+            this.silenceTimer = null;
         }
+
+        const final_transcript = this.finalTranscript.trim();
+        if (final_transcript.length > 0) {
+            console.log(`✅ Processing final speech: "${final_transcript}"`);
+            this.stopListening(); // Stop listening before processing
+            
+            // CRITICAL FIX: Check if the callback exists before calling it
+            if (this.onTranscript && typeof this.onTranscript === 'function') {
+                this.onTranscript(final_transcript);
+            } else {
+                // This is the source of your "No callback" warning
+                console.warn('⚠️ No callback available for transcript');
+                this.triggerError("Could not process speech. Please try again.");
+            }
+        }
+        
+        // Reset transcripts for the next turn
+        this.finalTranscript = '';
+        this.currentTranscript = '';
     }
 
     // ===== HANG-UP DETECTION (DESKTOP ONLY) =====
