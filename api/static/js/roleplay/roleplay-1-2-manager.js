@@ -17,7 +17,46 @@ class Roleplay12Manager extends BaseRoleplayManager {
         // 3. Finally, call the init() method to run the setup sequence.
         this.init();
     }
+    async playAIResponseAndWaitForUser(text) {
+        // Marathon mode just plays the audio and immediately listens for the user's response.
+        console.log(' marathon playing AI audio and setting up user turn.');
+        this.addToConversationHistory('ai', text);
+        this.updateTranscript(`🗣️ Prospect: "${text}"`);
 
+        await this.playAIResponse(text);
+    }
+    
+    startUserTurn() {
+        console.log('👤 Marathon: Starting user turn.');
+        if (this.voiceHandler) {
+            this.voiceHandler.setUserTurn(true);
+            this.voiceHandler.startAutoListening();
+        }
+        this.updateTranscript('🎤 Your turn...');
+    }
+    
+    showFeedback(coaching, score, marathonResults) {
+        console.log('📊 Marathon: Showing final feedback.');
+        super.showFeedback(coaching, score); // Call the base method to show the feedback container
+        
+        if (!marathonResults) return;
+        
+        const feedbackContent = document.getElementById('feedback-content');
+        let message = '';
+
+        if (marathonResults.marathon_passed) {
+            message = `<div class="feedback-item" style="background: #10b98120; border-left-color: #10b981;">
+                <h5>🎉 Marathon Passed!</h5>
+                <p>Nice work—you passed ${marathonResults.calls_passed} out of 10! You've unlocked the next modules and earned one shot at Legend Mode.</p>
+            </div>`;
+        } else {
+            message = `<div class="feedback-item" style="background: #f59e0b20; border-left-color: #f59e0b;">
+                <h5>Marathon Complete</h5>
+                <p>You completed all 10 calls and scored ${marathonResults.calls_passed}/10. Keep practising—the more reps you get, the easier it becomes.</p>
+            </div>`;
+        }
+        feedbackContent.insertAdjacentHTML('afterbegin', message);
+    }
 
     initializeModeSelection() {
         console.log('🏁 Marathon Mode: Initializing single-mode selection.');

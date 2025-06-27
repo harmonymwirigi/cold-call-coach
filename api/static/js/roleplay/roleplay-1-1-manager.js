@@ -12,7 +12,19 @@ class Roleplay11Manager extends BaseRoleplayManager {
         // 3. Call init() to run the setup sequence.
         this.init();
     }
+    init() {
+        console.log('🚀 Initializing Roleplay 1.1 Manager...');
+        super.init(); // Call the base class init to set up common elements
+        
+        // CRITICAL FIX: Connect the voice handler's output (onTranscript) 
+        // to this manager's input processing method (processUserInput).
+        if (this.voiceHandler) {
+            this.voiceHandler.onTranscript = this.processUserInput.bind(this);
+            console.log('✅ Voice handler callback connected to processUserInput.');
+        }
 
+        this.setupPracticeSpecificFeatures();
+    }
 
     initializeModeSelection() {
         console.log('🎯 Roleplay 1.1: Initializing specific mode selection.');
