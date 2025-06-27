@@ -110,12 +110,14 @@ class UserProgressService:
             if not self.supabase:
                 return {}
             
+            table_to_query = 'user_roleplay_stats' # <--- CORRECT TABLE NAME
+            
             # Get progress records
             if roleplay_ids:
                 progress_records = []
                 for roleplay_id in roleplay_ids:
                     records = self.supabase.get_data_with_filter(
-                        'user_roleplay_progress',
+                        table_to_query, # <--- USE THE VARIABLE
                         'user_id',
                         user_id,
                         additional_filters={'roleplay_id': roleplay_id}
@@ -123,7 +125,7 @@ class UserProgressService:
                     progress_records.extend(records)
             else:
                 progress_records = self.supabase.get_data_with_filter(
-                    'user_roleplay_progress',
+                    table_to_query, # <--- USE THE VARIABLE
                     'user_id',
                     user_id
                 )
@@ -198,32 +200,30 @@ class UserProgressService:
             if not self.supabase:
                 return False
             
-            # Create or update progress record
             now = datetime.now(timezone.utc).isoformat()
             
+            table_to_query = 'user_roleplay_stats' # <--- CORRECT TABLE NAME
+
             existing_progress = self.supabase.get_data_with_filter(
-                'user_roleplay_progress',
+                table_to_query, # <--- USE THE VARIABLE
                 'user_id',
                 user_id,
                 additional_filters={'roleplay_id': roleplay_id}
             )
             
             if existing_progress:
-                # Update existing record
                 progress_id = existing_progress[0]['id']
                 updates = {
                     'total_attempts': (existing_progress[0].get('total_attempts', 0) + 1),
                     'last_attempt_at': now,
                     'updated_at': now
                 }
-                
                 if not existing_progress[0].get('first_attempt_at'):
                     updates['first_attempt_at'] = now
-                
-                self.supabase.update_data_by_id('user_roleplay_progress', {'id': progress_id}, updates)
+                self.supabase.update_data_by_id(table_to_query, {'id': progress_id}, updates) # <--- USE THE VARIABLE
             else:
                 # Create new progress record
-                self.supabase.insert_data('user_roleplay_progress', {
+                self.supabase.insert_data(table_to_query, { # <--- USE THE VARIABLE
                     'user_id': user_id,
                     'roleplay_id': roleplay_id,
                     'total_attempts': 1,
@@ -237,9 +237,8 @@ class UserProgressService:
             return True
             
         except Exception as e:
-            logger.error(f"Error logging roleplay attempt: {e}")
+            logger.error(f"Error logging roleplay attempt: {e}", exc_info=True)
             return False
-    
     def save_roleplay_completion(self, completion_data: Dict[str, Any]) -> Optional[str]:
         # ... this method is fine, no changes needed, but ensure it's here ...
         try:
@@ -336,9 +335,10 @@ class UserProgressService:
             success = completion_data.get('success', False)
             marathon_results = completion_data.get('marathon_results')
             
-            # Get existing progress
+            table_to_query = 'user_roleplay_stats' # <--- CORRECT TABLE NAME
+            
             existing_progress = self.supabase.get_data_with_filter(
-                'user_roleplay_progress',
+                table_to_query, # <--- USE THE VARIABLE
                 'user_id',
                 user_id,
                 additional_filters={'roleplay_id': roleplay_id}
@@ -418,7 +418,7 @@ class UserProgressService:
             }
             
         except Exception as e:
-            logger.error(f"Error updating user progress: {e}")
+            logger.error(f"Error updating user progress: {e}", exc_info=True)
             return {'updated': False, 'error': str(e)}
     
     def check_new_unlocks(self, user_id: str) -> List[str]:
