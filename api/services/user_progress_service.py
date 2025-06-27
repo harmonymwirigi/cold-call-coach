@@ -14,7 +14,6 @@ class UserProgressService:
         if supabase_service:
             self.supabase = supabase_service
         else:
-            # Import here to avoid circular imports
             try:
                 from .supabase_client import SupabaseService
                 self.supabase = SupabaseService()
@@ -22,87 +21,54 @@ class UserProgressService:
                 logger.error(f"Failed to import SupabaseService: {e}")
                 self.supabase = None
         
-        # Roleplay progression rules
+        # This defines the unlock dependencies between modules.
         self.progression_rules = {
-            '1.1': {
-                'name': 'Practice Mode',
-                'unlocks': [],
-                'required_for': ['1.2'],
-                'always_available': True
-            },
-            '1.2': {
-                'name': 'Marathon Mode', 
-                'unlocks': ['1.3'],
-                'required_for': ['2.1'],
-                'requires_completion': False,
-                'requires_pass': False
-            },
-            '1.3': {
-                'name': 'Legend Mode',
-                'unlocks': ['2.1', '2.2'],
-                'required_for': [],
-                'requires_completion': '1.2',
-                'requires_pass': True
-            },
-            '2.1': {
-                'name': 'Advanced Practice',
-                'unlocks': ['2.2'],
-                'required_for': [],
-                'requires_completion': '1.3',
-                'requires_pass': True
-            },
-            '2.2': {
-                'name': 'Advanced Marathon',
-                'unlocks': [],
-                'required_for': [],
-                'requires_completion': '2.1',
-                'requires_pass': True
-            }
+            '1.2': {'requires_completion': '1.1', 'pass_needed': True},
+            '1.3': {'requires_completion': '1.2', 'pass_needed': True},
+            '2.1': {'requires_completion': '1.3', 'pass_needed': True},
+            # Add other rules here as you create more modules
         }
-        
         logger.info("UserProgressService initialized")
-    
-    def check_roleplay_access(self, user_id: str, roleplay_id: str) -> Dict[str, Any]:
-        """Check if user has access to a specific roleplay"""
+    def get_user_roleplay_stats(self, user_id: str, roleplay_id: str = None) -> Dict[str, Any]:
+        """Gets all roleplay stats for a user, or for a specific roleplay."""
         try:
-            if not self.supabase:
-                return {'allowed': True, 'reason': 'Service unavailable'}
+            if not self.supabase: return {}
             
-            # Always allow Practice Mode (1.1)
-            if roleplay_id == '1.1':
-                return {'allowed': True, 'reason': 'Always available'}
+            client = self.supabase.get_service_client()
+            query = client.table('user_roleplay_stats').select('*').eq('user_id', user_id)
             
-            rules = self.progression_rules.get(roleplay_id)
-            if not rules:
-                return {'allowed': False, 'reason': f'Unknown roleplay: {roleplay_id}'}
-            
-            # Check if requires completion of another roleplay
-            if 'requires_completion' in rules:
-                required_roleplay = rules['requires_completion']
-                requires_pass = rules.get('requires_pass', False)
+            if roleplay_id:
+                query = query.eq('roleplay_id', roleplay_id)
                 
-                progress = self.get_user_roleplay_progress(user_id, [required_roleplay])
-                required_progress = progress.get(required_roleplay)
-                
-                if not required_progress:
-                    return {
-                        'allowed': False,
-                        'reason': f'Must complete {self.progression_rules[required_roleplay]["name"]} first',
-                        'requirements': [required_roleplay]
-                    }
-                
-                if requires_pass and not required_progress.get('completed'):
-                    return {
-                        'allowed': False,
-                        'reason': f'Must pass {self.progression_rules[required_roleplay]["name"]} first',
-                        'requirements': [required_roleplay]
-                    }
+            response = query.execute()
             
-            return {'allowed': True, 'reason': 'Access granted'}
+            stats_dict = {stat['roleplay_id']: stat for stat in response.data} if response.data else {}
+            return stats_dict
+        except Exception as e:
+            logger.error(f"Error getting user roleplay stats: {e}", exc_info=True)
+            return {}
+    def check_roleplay_access(self, user_id: str, roleplay_id: str) -> Dict[str, Any]:
+        """Check if user has access to a specific roleplay based on their stats."""
+        try:
+            if roleplay_id == '1.1':  # Always allow access to the first module
+                return {'allowed': True, 'reason': 'Practice mode is always available.'}
+            
+            rule = self.progression_rules.get(roleplay_id)
+            if not rule:
+                return {'allowed': True, 'reason': 'No unlock rule defined.'} # Default to allowed if no rule
+
+            required_rp_id = rule.get('requires_completion')
+            user_stats = self.get_user_roleplay_stats(user_id, required_rp_id)
+            required_stats = user_stats.get(required_rp_id)
+            
+            if not required_stats or not required_stats.get('completed'):
+                return {'allowed': False, 'reason': f"Complete {required_rp_id} to unlock."}
+
+            return {'allowed': True, 'reason': 'Requirement met.'}
             
         except Exception as e:
-            logger.error(f"Error checking roleplay access: {e}")
-            return {'allowed': True, 'reason': 'Error checking access'}
+            logger.error(f"Error in check_roleplay_access for {roleplay_id}: {e}", exc_info=True)
+            return {'allowed': False, 'reason': 'Error checking access.'}
     
     def get_user_roleplay_progress(self, user_id: str, roleplay_ids: Optional[List[str]] = None) -> Dict[str, Any]:
         """Get user's progress for specific roleplays or all roleplays"""
@@ -240,52 +206,47 @@ class UserProgressService:
             logger.error(f"Error logging roleplay attempt: {e}", exc_info=True)
             return False
     def save_roleplay_completion(self, completion_data: Dict[str, Any]) -> Optional[str]:
-        # ... this method is fine, no changes needed, but ensure it's here ...
+        """Save a completed roleplay session to the completions table."""
         try:
-            if not self.supabase:
-                return None
-            for key in ['ai_evaluation', 'coaching_feedback', 'conversation_data', 'rubric_scores', 'marathon_results']:
-                if key in completion_data and not isinstance(completion_data[key], (str, type(None))):
+            if not self.supabase: return None
+            
+            for key in ['ai_evaluation', 'coaching_feedback', 'conversation_data', 'rubric_scores']:
+                if key in completion_data and not isinstance(completion_data.get(key), (str, type(None))):
                     completion_data[key] = json.dumps(completion_data[key])
-            result = self.supabase.insert_data('roleplay_completions', completion_data)
-            if result:
-                completion_id = result.get('id')
-                logger.info(f"Saved roleplay completion: {completion_id}")
-                return completion_id
+            
+            response = self.supabase.insert_data('roleplay_completions', completion_data)
+            if response:
+                logger.info(f"Saved roleplay completion ID: {response.get('id')}")
+                return response.get('id')
             return None
         except Exception as e:
             logger.error(f"Error saving roleplay completion: {e}", exc_info=True)
             return None
         
     def update_user_progress_after_completion(self, completion_data: Dict[str, Any]) -> bool:
-        """
-        Updates aggregate stats in user_roleplay_stats and usage in user_profiles.
-        This is the core function for tracking user progress after a call.
-        """
+        """Updates aggregate stats and user profile usage after a session."""
         try:
-            if not self.supabase:
-                return False
+            if not self.supabase: return False
 
             user_id = completion_data.get('user_id')
             roleplay_id = completion_data.get('roleplay_id')
             score = completion_data.get('score', 0)
             duration = completion_data.get('duration_minutes', 1)
-            now = datetime.now(timezone.utc).isoformat()
-
-            if not all([user_id, roleplay_id, score is not None, duration is not None]):
-                logger.error(f"Missing data for progress update: {completion_data}")
+            
+            if not all([user_id, roleplay_id, score is not None]):
+                logger.warning(f"Insufficient data to update progress: {completion_data}")
                 return False
 
-            # --- 1. Update user_roleplay_stats ---
             client = self.supabase.get_service_client()
-            stats_query = client.table('user_roleplay_stats').select('*').eq('user_id', user_id).eq('roleplay_id', roleplay_id).maybe_single().execute()
             
-            if stats_query.data:
-                current_stats = stats_query.data
+            # 1. Update user_roleplay_stats
+            current_stats = self.get_user_roleplay_stats(user_id, roleplay_id).get(roleplay_id)
+            
+            if current_stats:
                 updates = {
                     'total_attempts': current_stats.get('total_attempts', 0) + 1,
                     'last_score': score,
-                    'last_attempt_at': now,
+                    'last_attempt_at': datetime.now(timezone.utc).isoformat(),
                     'best_score': max(current_stats.get('best_score', 0), score),
                     'completed': current_stats.get('completed') or (score >= 70)
                 }
@@ -298,31 +259,26 @@ class UserProgressService:
                     'best_score': score,
                     'last_score': score,
                     'completed': score >= 70,
-                    'last_attempt_at': now
+                    'last_attempt_at': datetime.now(timezone.utc).isoformat()
                 }
                 client.table('user_roleplay_stats').insert(new_stats).execute()
-            logger.info(f"Updated user_roleplay_stats for {user_id} on {roleplay_id}")
+            logger.info(f"Updated stats for user {user_id} on roleplay {roleplay_id}")
 
-            # --- 2. Update user_profiles for usage time ---
+            # 2. Update user_profiles for usage time
             profile_query = client.table('user_profiles').select('lifetime_usage_minutes, monthly_usage_minutes').eq('id', user_id).single().execute()
-            
             if profile_query.data:
                 profile = profile_query.data
-                new_lifetime_usage = (profile.get('lifetime_usage_minutes') or 0) + duration
-                new_monthly_usage = (profile.get('monthly_usage_minutes') or 0) + duration
-                
                 profile_updates = {
-                    'lifetime_usage_minutes': new_lifetime_usage,
-                    'monthly_usage_minutes': new_monthly_usage,
-                    'last_active_at': now
+                    'lifetime_usage_minutes': (profile.get('lifetime_usage_minutes') or 0) + duration,
+                    'monthly_usage_minutes': (profile.get('monthly_usage_minutes') or 0) + duration,
+                    'last_active_at': datetime.now(timezone.utc).isoformat()
                 }
                 client.table('user_profiles').update(profile_updates).eq('id', user_id).execute()
                 logger.info(f"Updated usage for user {user_id}: +{duration} minutes")
-
+            
             return True
-
         except Exception as e:
-            logger.error(f"Error updating user progress after completion: {e}", exc_info=True)
+            logger.error(f"Error in update_user_progress_after_completion: {e}", exc_info=True)
             return False
         
     def update_user_progress(self, user_id: str, roleplay_id: str, completion_data: Dict[str, Any]) -> Dict[str, Any]:
