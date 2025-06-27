@@ -1,9 +1,12 @@
 # ===== FIXED: services/roleplay_engine.py =====
-
 import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
 import uuid
+
+# Re-import just in case
+from .supabase_client import SupabaseService
+from .user_progress_service import UserProgressService
 
 logger = logging.getLogger(__name__)
 
@@ -11,73 +14,32 @@ class RoleplayEngine:
     """FIXED Roleplay Engine with robust session management and recovery"""
     
     def __init__(self, openai_service=None, supabase_service=None):
-        # Store active sessions in memory (primary storage)
         self.active_sessions = {}
-        
-        # Service dependencies
-        self.openai_service = openai_service
-        self.supabase_service = supabase_service
-        
-        # Initialize services if not provided
-        if not self.openai_service:
-            try:
-                from .openai_service import OpenAIService
-                self.openai_service = OpenAIService()
-                logger.info("✅ OpenAI service initialized")
-            except ImportError as e:
-                logger.warning(f"⚠️ OpenAI service not available: {e}")
-                self.openai_service = None
-        
-        if not self.supabase_service:
-            try:
-                from .supabase_client import SupabaseService
-                self.supabase_service = SupabaseService()
-                logger.info("✅ Supabase service initialized")
-            except ImportError as e:
-                logger.warning(f"⚠️ Supabase service not available: {e}")
-                self.supabase_service = None
-        
-        # Load roleplay implementations
+        if not openai_service:
+            from .openai_service import OpenAIService
+            self.openai_service = OpenAIService()
+        else:
+            self.openai_service = openai_service
+
+        if not supabase_service:
+            self.supabase_service = SupabaseService()
+        else:
+            self.supabase_service = supabase_service
+
+        # ADD a reference to the progress service here
+        self.progress_service = UserProgressService(self.supabase_service)
+
         self.roleplay_implementations = {}
         self._load_roleplay_implementations()
-        
-        logger.info(f"✅ RoleplayEngine initialized with {len(self.roleplay_implementations)} roleplay types")
+        logger.info(f"âœ… RoleplayEngine initialized with {len(self.roleplay_implementations)} roleplay types")
     
     def _load_roleplay_implementations(self):
-        """Load all available roleplay implementations"""
-        try:
-            # Import the fixed roleplay implementations
-            from .roleplay.roleplay_1_1 import Roleplay11
-            
-            # Initialize with OpenAI service
-            self.roleplay_implementations = {
-                '1.1': Roleplay11(self.openai_service)
-            }
-            
-            # Try to load other roleplays if available
-            try:
-                from .roleplay.roleplay_1_2 import Roleplay12
-                self.roleplay_implementations['1.2'] = Roleplay12(self.openai_service)
-                logger.info("✅ Loaded Roleplay 1.2")
-            except ImportError:
-                logger.info("ℹ️ Roleplay 1.2 not available")
-            
-            try:
-                from .roleplay.roleplay_1_3 import Roleplay13
-                self.roleplay_implementations['1.3'] = Roleplay13(self.openai_service)
-                logger.info("✅ Loaded Roleplay 1.3")
-            except ImportError:
-                logger.info("ℹ️ Roleplay 1.3 not available")
-            
-            logger.info(f"✅ Loaded roleplay implementations: {list(self.roleplay_implementations.keys())}")
-            
-        except ImportError as e:
-            logger.error(f"❌ Failed to load roleplay implementations: {e}")
-            # Create minimal fallback
-            self.roleplay_implementations = {
-                '1.1': self._create_fallback_roleplay('1.1')
-            }
-            logger.warning("⚠️ Using fallback roleplay implementation")
+        from .roleplay.roleplay_1_1 import Roleplay11
+        from .roleplay.roleplay_1_2 import Roleplay12
+        self.roleplay_implementations = {
+            '1.1': Roleplay11(self.openai_service),
+            '1.2': Roleplay12(self.openai_service),
+        }
     
     def _create_fallback_roleplay(self, roleplay_id: str):
         """Create a minimal fallback roleplay implementation"""
@@ -275,46 +237,67 @@ class RoleplayEngine:
             return {'success': False, 'error': f'Processing failed: {str(e)}'}
     
     def end_session(self, session_id: str, forced_end: bool = False) -> Dict[str, Any]:
-        """FIXED: End session using implementation_id"""
+        """FIXED: End session and correctly save all completion data."""
         try:
             logger.info(f"ðŸ“ž Ending session {session_id} (forced: {forced_end})")
             
             session_info = self._get_session_with_recovery(session_id)
+            if not session_info:
+                logger.warning(f"âš ï¸  Session {session_id} not found for ending")
+                return {'success': True, 'message': 'Session not found.'}
+
+            implementation_id = session_info.get('implementation_id', '1.1')
+            implementation = self.roleplay_implementations.get(implementation_id)
             
-            if session_info:
-                # CRITICAL FIX: Retrieve implementation using its stored ID
-                implementation_id = session_info['implementation_id']
-                implementation = self.roleplay_implementations[implementation_id]
+            if not implementation:
+                raise ValueError(f"Implementation for {implementation_id} not found")
+
+            # Get the final result from the specific roleplay logic
+            result = implementation.end_session(session_id, forced_end)
+            
+            # --- START OF CRITICAL FIX ---
+            if result.get('success'):
+                session_data = result.get('session_data', {})
+                user_id = session_data.get('user_id')
                 
-                result = implementation.end_session(session_id, forced_end)
-                
-                self.active_sessions.pop(session_id, None)
-                self._cleanup_session_from_database(session_id)
-                
-                logger.info(f"âœ… Session {session_id} ended successfully")
-                return result
-            else:
-                # Session not found, but return success for cleanup
-                logger.warning(f"⚠️ Session {session_id} not found for ending")
-                return {
-                    'success': True,
-                    'duration_minutes': 1,
-                    'session_success': False,
-                    'coaching': {'error': 'Session not found'},
-                    'overall_score': 0,
-                    'session_data': {}
-                }
-                
+                if user_id:
+                    completion_data = {
+                        'user_id': user_id,
+                        'session_id': session_id,
+                        'roleplay_id': session_data.get('roleplay_id'),
+                        'mode': session_data.get('mode', 'practice'),
+                        'score': result.get('overall_score'),
+                        'success': result.get('session_success'),
+                        'duration_minutes': result.get('duration_minutes'),
+                        'started_at': session_data.get('started_at'),
+                        'ended_at': session_data.get('ended_at'),
+                        'conversation_data': session_data.get('conversation_history'),
+                        'coaching_feedback': result.get('coaching'),
+                        'rubric_scores': session_data.get('rubric_scores'),
+                        'forced_end': forced_end
+                    }
+                    
+                    # 1. Save the detailed completion record
+                    self.progress_service.save_roleplay_completion(completion_data)
+                    
+                    # 2. Update the user's aggregate stats and usage
+                    self.progress_service.update_user_progress_after_completion(completion_data)
+
+                    logger.info(f"âœ… Session {session_id} completion and stats have been saved.")
+                else:
+                    logger.warning("No user_id found in session data, cannot save progress.")
+            # --- END OF CRITICAL FIX ---
+
+            # Cleanup in-memory and DB active sessions
+            self.active_sessions.pop(session_id, None)
+            self._cleanup_session_from_database(session_id)
+            
+            logger.info(f"âœ… Session {session_id} ended successfully in engine")
+            return result
+                        
         except Exception as e:
-            logger.error(f"❌ Error ending session: {e}")
-            return {
-                'success': True,  # Return success to allow cleanup
-                'duration_minutes': 1,
-                'session_success': False,
-                'coaching': {'error': f'Error ending session: {str(e)}'},
-                'overall_score': 0,
-                'session_data': {}
-            }
+            logger.error(f"â Œ Error ending session: {e}", exc_info=True)
+            return {'success': False, 'error': str(e)}
     
     def get_session_status(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Get current status of a session"""

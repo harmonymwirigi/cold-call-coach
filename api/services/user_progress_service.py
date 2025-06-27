@@ -241,49 +241,48 @@ class UserProgressService:
             return False
     
     def save_roleplay_completion(self, completion_data: Dict[str, Any]) -> Optional[str]:
-        """Save a completed roleplay session to database"""
+        # ... this method is fine, no changes needed, but ensure it's here ...
         try:
             if not self.supabase:
                 return None
-            
-            # Make sure all jsonb fields are properly formatted
             for key in ['ai_evaluation', 'coaching_feedback', 'conversation_data', 'rubric_scores', 'marathon_results']:
                 if key in completion_data and not isinstance(completion_data[key], (str, type(None))):
                     completion_data[key] = json.dumps(completion_data[key])
-
-            # Insert completion record
             result = self.supabase.insert_data('roleplay_completions', completion_data)
-            
             if result:
                 completion_id = result.get('id')
                 logger.info(f"Saved roleplay completion: {completion_id}")
                 return completion_id
-            
             return None
         except Exception as e:
-            logger.error(f"Error saving roleplay completion: {e}")
+            logger.error(f"Error saving roleplay completion: {e}", exc_info=True)
             return None
+        
     def update_user_progress_after_completion(self, completion_data: Dict[str, Any]) -> bool:
         """
         Updates aggregate stats in user_roleplay_stats and usage in user_profiles.
+        This is the core function for tracking user progress after a call.
         """
         try:
             if not self.supabase:
                 return False
 
-            user_id = completion_data['user_id']
-            roleplay_id = completion_data['roleplay_id']
+            user_id = completion_data.get('user_id')
+            roleplay_id = completion_data.get('roleplay_id')
             score = completion_data.get('score', 0)
             duration = completion_data.get('duration_minutes', 1)
             now = datetime.now(timezone.utc).isoformat()
 
+            if not all([user_id, roleplay_id, score is not None, duration is not None]):
+                logger.error(f"Missing data for progress update: {completion_data}")
+                return False
+
             # --- 1. Update user_roleplay_stats ---
-            # Get existing aggregate progress
             client = self.supabase.get_service_client()
-            stats_query = client.table('user_roleplay_stats').select('*').eq('user_id', user_id).eq('roleplay_id', roleplay_id).execute()
+            stats_query = client.table('user_roleplay_stats').select('*').eq('user_id', user_id).eq('roleplay_id', roleplay_id).maybe_single().execute()
             
             if stats_query.data:
-                current_stats = stats_query.data[0]
+                current_stats = stats_query.data
                 updates = {
                     'total_attempts': current_stats.get('total_attempts', 0) + 1,
                     'last_score': score,
@@ -303,14 +302,15 @@ class UserProgressService:
                     'last_attempt_at': now
                 }
                 client.table('user_roleplay_stats').insert(new_stats).execute()
+            logger.info(f"Updated user_roleplay_stats for {user_id} on {roleplay_id}")
 
             # --- 2. Update user_profiles for usage time ---
-            profile_query = client.table('user_profiles').select('lifetime_usage_minutes, monthly_usage_minutes').eq('id', user_id).execute()
+            profile_query = client.table('user_profiles').select('lifetime_usage_minutes, monthly_usage_minutes').eq('id', user_id).single().execute()
             
             if profile_query.data:
-                profile = profile_query.data[0]
-                new_lifetime_usage = profile.get('lifetime_usage_minutes', 0) + duration
-                new_monthly_usage = profile.get('monthly_usage_minutes', 0) + duration
+                profile = profile_query.data
+                new_lifetime_usage = (profile.get('lifetime_usage_minutes') or 0) + duration
+                new_monthly_usage = (profile.get('monthly_usage_minutes') or 0) + duration
                 
                 profile_updates = {
                     'lifetime_usage_minutes': new_lifetime_usage,
@@ -325,6 +325,7 @@ class UserProgressService:
         except Exception as e:
             logger.error(f"Error updating user progress after completion: {e}", exc_info=True)
             return False
+        
     def update_user_progress(self, user_id: str, roleplay_id: str, completion_data: Dict[str, Any]) -> Dict[str, Any]:
         """Update user's overall progress based on a completion"""
         try:
