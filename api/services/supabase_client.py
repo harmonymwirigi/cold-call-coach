@@ -62,8 +62,8 @@ class SupabaseService:
     def get_user_profile_by_service(self, user_id: str) -> Optional[Dict[str, Any]]:
         """Get user profile using service client (bypasses RLS)"""
         try:
-            response = self.service_client.table('user_profiles').select('*').eq('id', user_id).execute()
-            
+            response = self.client.table('user_progress').select('*').eq('user_id', user_id).execute() # <-- BINGO!
+            return response.data or []
             if response.data and len(response.data) > 0:
                 logger.info(f"Profile found for user_id: {user_id}")
                 return response.data[0]
