@@ -20,15 +20,13 @@ class SupabaseService:
         if not self._initialized:
             self.url = os.getenv('REACT_APP_SUPABASE_URL')
             self.anon_key = os.getenv('REACT_APP_SUPABASE_ANON_KEY')
-            self.service_key = os.getenv('SUPABASE_SERVICE_ROLE_KEY')  # Add this to your .env
+            self.service_key = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
             
             if not self.url or not self.anon_key:
                 raise ValueError("Supabase URL and anon key must be provided")
             
-            # Client for user operations (with RLS)
             self.client: Client = create_client(self.url, self.anon_key)
             
-            # Service client for admin operations (bypasses RLS)
             if self.service_key:
                 self.service_client: Client = create_client(self.url, self.service_key)
             else:
@@ -38,40 +36,23 @@ class SupabaseService:
             self._initialized = True
     
     def get_client(self) -> Client:
-        """Get client for user operations"""
         return self.client
     
     def get_service_client(self) -> Client:
-        """Get client for admin operations that bypass RLS"""
         return self.service_client
     
     def authenticate_user(self, token: str) -> Optional[Dict[str, Any]]:
-        """Verify JWT token and return user"""
         try:
-            # Create a temporary client with the user's token to verify it
-            temp_client = create_client(self.url, self.anon_key)
-            user = temp_client.auth.get_user(token)
-            
-            if user and user.user:
-                return user.user
-            else:
-                logger.warning("Invalid token or no user found")
+            user = self.client.auth.get_user(token)
+            return user.user if user else None
         except Exception as e:
             logger.error(f"Auth error: {e}")
             return None
-    def get_user_profile_by_service(self, user_id: str) -> Optional[Dict[str, Any]]:
-        """Get user profile using service client (bypasses RLS) - FIXED"""
-        try:
-            # FIX: This was incorrectly querying 'user_progress'. It should be 'user_profiles'.
-            response = self.service_client.table('user_profiles').select('*').eq('id', user_id).execute()
             
-            if response.data and len(response.data) > 0:
-                logger.info(f"Profile found for user_id: {user_id}")
-                return response.data[0]
-            else:
-                logger.warning(f"No profile found for user_id: {user_id}")
-                return None
-                
+    def get_user_profile_by_service(self, user_id: str) -> Optional[Dict[str, Any]]:
+        try:
+            response = self.service_client.table('user_profiles').select('*').eq('id', user_id).single().execute()
+            return response.data
         except Exception as e:
             logger.error(f"Error getting user profile for {user_id}: {e}")
             return None
@@ -107,18 +88,9 @@ class SupabaseService:
     
     
     def create_user_profile(self, profile_data: Dict[str, Any]) -> bool:
-        """Create new user profile using service client to bypass RLS"""
         try:
-            # Use service client to bypass RLS during registration
             response = self.service_client.table('user_profiles').insert(profile_data).execute()
-            
-            if response.data:
-                logger.info(f"User profile created successfully for user {profile_data.get('id')}")
-                return True
-            else:
-                logger.error(f"Failed to create user profile - no data returned")
-                return False
-                
+            return bool(response.data)
         except Exception as e:
             logger.error(f"Error creating user profile: {e}")
             return False
@@ -190,12 +162,7 @@ class SupabaseService:
         except Exception as e:
             logger.error(f"Error creating verification code: {e}")
             return False
-    
-    def verify_code(self, email: str, code: str) -> bool:
-        """Verify email code (legacy method)"""
-        user_data = self.verify_code_and_get_data(email, code)
-        return user_data is not None
-    
+
     def verify_code_and_get_data(self, email: str, code: str) -> Optional[Dict[str, Any]]:
         """Verify email code and return associated user data"""
         try:
@@ -233,19 +200,27 @@ class SupabaseService:
         except Exception as e:
             logger.error(f"Error verifying code: {e}")
             return None
+    
+    def verify_code(self, email: str, code: str) -> bool:
+        """Verify email code (legacy method)"""
+        user_data = self.verify_code_and_get_data(email, code)
+        return user_data is not None
+    
+    
         
     def upsert_data(self, table_name: str, data: Union[Dict, List[Dict]]) -> Optional[List[Dict]]:
         """Upsert data into a table using the service client."""
         try:
             response = self.service_client.table(table_name).upsert(data).execute()
+            # FIX: Check if response.data is not empty before returning
             if response.data:
                 logger.info(f"Upsert successful for table '{table_name}'")
                 return response.data
             else:
-                logger.warning(f"Upsert to '{table_name}' returned no data.")
+                logger.error(f"Upsert to '{table_name}' failed. Response: {response}")
                 return None
         except Exception as e:
-            logger.error(f"Error upserting data to '{table_name}': {e}")
+            logger.error(f"Exception during upsert to '{table_name}': {e}", exc_info=True)
             return None
 
     def get_data_with_filter(self, table_name: str, filter_column: str, filter_value: Any, additional_filters: Dict = None, limit: int = None, order_by: str = None, ascending: bool = True) -> List[Dict[str, Any]]:
@@ -270,12 +245,16 @@ class SupabaseService:
         """Insert a single record into a table using the service client."""
         try:
             response = self.service_client.table(table_name).insert(data).execute()
+            # FIX: Check if response.data is not empty before accessing the first element
             if response.data:
                 logger.info(f"Insert successful for table '{table_name}'")
                 return response.data[0]
-            return None
+            else:
+                # Log the failure reason if available from Supabase/PostgREST
+                logger.error(f"Insert failed for table '{table_name}'. Response: {response}")
+                return None
         except Exception as e:
-            logger.error(f"Error inserting data into '{table_name}': {e}")
+            logger.error(f"Exception during insert into '{table_name}': {e}", exc_info=True)
             return None
 
     def update_data_by_id(self, table_name: str, id_filter: Dict, updates: Dict) -> bool:
@@ -285,9 +264,15 @@ class SupabaseService:
             for col, val in id_filter.items():
                 query = query.eq(col, val)
             response = query.execute()
-            return len(response.data) > 0
+            # FIX: Check if response.data exists and has content
+            if response.data:
+                logger.info(f"Update successful for table '{table_name}' with filter {id_filter}")
+                return True
+            else:
+                logger.warning(f"Update for table '{table_name}' with filter {id_filter} affected 0 rows. Response: {response}")
+                return False
         except Exception as e:
-            logger.error(f"Error updating data in '{table_name}': {e}")
+            logger.error(f"Exception during update in '{table_name}': {e}", exc_info=True)
             return False
     def get_user_sessions(self, user_id: str, limit: int = 20, offset: int = 0) -> List[Dict[str, Any]]:
         """Get user's voice sessions (LEGACY)"""
