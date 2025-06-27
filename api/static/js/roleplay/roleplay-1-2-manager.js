@@ -17,6 +17,18 @@ class Roleplay12Manager extends BaseRoleplayManager {
         // 3. Finally, call the init() method to run the setup sequence.
         this.init();
     }
+    init() {
+        console.log('🚀 Initializing Roleplay 1.2 (Marathon) Manager...');
+        // First, run the standard setup from the base class.
+        super.init(); 
+        
+        // This is the CRITICAL FIX:
+        // Tell the voice handler, "When you have a transcript, send it to my processUserInput function."
+        if (this.voiceHandler) {
+            this.voiceHandler.onTranscript = this.processUserInput.bind(this);
+            console.log('✅ Voice handler callback connected for Marathon Mode.');
+        }
+    }
     async playAIResponseAndWaitForUser(text) {
         // Marathon mode just plays the audio and immediately listens for the user's response.
         console.log(' marathon playing AI audio and setting up user turn.');

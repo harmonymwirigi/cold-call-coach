@@ -2,27 +2,29 @@
 
 class Roleplay11Manager extends BaseRoleplayManager {
     constructor(options = {}) {
-        // 1. Call the parent constructor FIRST.
+        // This part is correct.
         super(options);
-
-        // 2. Set up child-specific properties.
         this.roleplayId = "1.1";
         this.roleplayType = "practice";
-
-        // 3. Call init() to run the setup sequence.
+        // This `init()` call starts the setup process.
         this.init();
     }
+
+    // --- START: ADD THIS ENTIRE NEW METHOD ---
+    // This method ensures the manager is properly set up.
     init() {
-        console.log('🚀 Initializing Roleplay 1.1 Manager...');
-        super.init(); // Call the base class init to set up common elements
+        console.log('🚀 Initializing Roleplay 1.1 (Practice) Manager...');
+        // First, run the standard setup from the base class.
+        super.init();
         
-        // CRITICAL FIX: Connect the voice handler's output (onTranscript) 
-        // to this manager's input processing method (processUserInput).
+        // This is the CRITICAL FIX:
+        // Tell the voice handler, "When you have a transcript, send it to my processUserInput function."
         if (this.voiceHandler) {
             this.voiceHandler.onTranscript = this.processUserInput.bind(this);
-            console.log('✅ Voice handler callback connected to processUserInput.');
+            console.log('✅ Voice handler callback connected for Practice Mode.');
         }
 
+        // You can also move other setup logic here if needed.
         this.setupPracticeSpecificFeatures();
     }
 
