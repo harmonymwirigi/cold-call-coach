@@ -2,42 +2,27 @@
 
 class Roleplay11Manager extends BaseRoleplayManager {
     constructor(options = {}) {
+        // 1. Call the parent constructor FIRST.
         super(options);
+
+        // 2. Set up child-specific properties.
         this.roleplayId = "1.1";
         this.roleplayType = "practice";
+
+        // 3. Call init() to run the setup sequence.
+        this.init();
     }
+
+
     initializeModeSelection() {
-        console.log('ðŸŽ¯ Roleplay 1.1: Initializing specific mode selection.');
-        
-        // Define the modes for this specific roleplay
+        console.log('🎯 Roleplay 1.1: Initializing specific mode selection.');
         const modes = [
-            {
-                id: 'practice',
-                name: 'Practice Mode',
-                description: 'A single, detailed call with full AI coaching and feedback.',
-                icon: 'user-graduate'
-            }
+            { id: 'practice', name: 'Practice Mode', description: 'A single, detailed call with full AI coaching and feedback.', icon: 'user-graduate' }
         ];
-        
-        // Use the helper from the base class to create the UI
         this.createModeSelectionUI(modes);
-        
-        // Since there's only one mode, auto-select it
         this.selectMode('practice');
     }
-    init() {
-        console.log('ðŸš€ Initializing Roleplay 1.1 Manager...');
-        super.init();
-        
-        // CRITICAL FIX: Connect the voice handler's output (onTranscript) 
-        // to this manager's input processing method (processUserInput).
-        if (this.voiceHandler) {
-            this.voiceHandler.onTranscript = this.processUserInput.bind(this);
-            console.log('âœ… Voice handler callback connected to processUserInput.');
-        }
-
-        this.setupPracticeSpecificFeatures();
-    }
+    
     
     setupPracticeSpecificFeatures() {
         console.log('Practice mode features are being set up.');

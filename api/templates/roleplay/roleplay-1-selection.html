@@ -1,4 +1,4 @@
-<!-- ===== templates/roleplay/roleplay-1-selection.html ===== -->
+<!-- ===== templates/roleplay/roleplay-1-selection.html (FIXED) ===== -->
 {% extends "base.html" %}
 
 {% block title %}Roleplay 1: Opener & Early Objections - Cold Calling Coach{% endblock %}
@@ -6,303 +6,267 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/roleplay.css') }}">
 <style>
-.selection-container {
-    min-height: 100vh;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 40px 20px;
-}
-
-.back-to-dashboard {
-    position: absolute;
-    top: 20px;
-    left: 20px;
-    color: rgba(255, 255, 255, 0.8);
-    text-decoration: none;
-    font-size: 16px;
-    display: flex;
-    align-items: center;
-    transition: color 0.3s ease;
-}
-
-.back-to-dashboard:hover {
-    color: white;
-    text-decoration: none;
-}
-
-.selection-card {
-    background: linear-gradient(135deg, #1e3c72, #2a5298);
-    border-radius: 25px;
-    padding: 40px;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-    max-width: 800px;
-    width: 100%;
-    border: 3px solid rgba(255, 255, 255, 0.1);
-    text-align: center;
-}
-
-.roleplay-header {
-    margin-bottom: 40px;
-}
-
-.roleplay-title {
-    color: white;
-    font-size: 32px;
-    font-weight: 700;
-    margin-bottom: 10px;
-}
-
-.roleplay-description {
-    color: rgba(255, 255, 255, 0.8);
-    font-size: 18px;
-    margin-bottom: 30px;
-}
-
-.modes-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 20px;
-    margin-bottom: 30px;
-}
-
-.mode-card {
-    background: rgba(255, 255, 255, 0.1);
-    border: 2px solid transparent;
-    border-radius: 16px;
-    padding: 30px 20px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    backdrop-filter: blur(10px);
-    position: relative;
-}
-
-.mode-card:hover:not(.disabled) {
-    background: rgba(255, 255, 255, 0.2);
-    border-color: #60a5fa;
-    transform: translateY(-5px);
-    box-shadow: 0 10px 30px rgba(96, 165, 250, 0.3);
-}
-
-.mode-card.disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    background: rgba(255, 255, 255, 0.05);
-}
-
-.mode-card.completed {
-    border-color: #10b981;
-    background: rgba(16, 185, 129, 0.2);
-}
-
-.mode-icon {
-    font-size: 48px;
-    margin-bottom: 20px;
-    color: #60a5fa;
-}
-
-.mode-card.completed .mode-icon {
-    color: #10b981;
-}
-
-.mode-card.disabled .mode-icon {
-    color: rgba(255, 255, 255, 0.3);
-}
-
-.mode-name {
-    color: white;
-    font-size: 22px;
-    font-weight: 600;
-    margin-bottom: 10px;
-}
-
-.mode-description {
-    color: rgba(255, 255, 255, 0.8);
-    font-size: 14px;
-    line-height: 1.4;
-    margin-bottom: 15px;
-}
-
-.mode-requirements {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.6);
-    font-style: italic;
-}
-
-.mode-status {
-    position: absolute;
-    top: 15px;
-    right: 15px;
-    padding: 4px 8px;
-    border-radius: 12px;
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-}
-
-.status-available {
-    background: rgba(16, 185, 129, 0.8);
-    color: white;
-}
-
-.status-locked {
-    background: rgba(239, 68, 68, 0.8);
-    color: white;
-}
-
-.status-completed {
-    background: rgba(16, 185, 129, 0.8);
-    color: white;
-}
-
-.progress-info {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    padding: 20px;
-    margin-top: 20px;
-    text-align: left;
-}
-
-.progress-title {
-    color: white;
-    font-size: 16px;
-    font-weight: 600;
-    margin-bottom: 10px;
-}
-
-.progress-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-    font-size: 14px;
-    color: rgba(255, 255, 255, 0.8);
-}
-
-.progress-status {
-    font-weight: 600;
-}
-
-.status-pass {
-    color: #10b981;
-}
-
-.status-fail {
-    color: #ef4444;
-}
-
-.status-pending {
-    color: #f59e0b;
-}
-
-@media (max-width: 768px) {
-    .modes-grid {
-        grid-template-columns: 1fr;
+    .selection-container {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 40px 20px;
     }
-    
+    .back-to-dashboard {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        color: rgba(255, 255, 255, 0.8);
+        text-decoration: none;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        transition: color 0.3s ease;
+    }
+    .back-to-dashboard:hover {
+        color: white;
+    }
     .selection-card {
-        padding: 30px 20px;
+        background: linear-gradient(135deg, #1e3c72, #2a5298);
+        border-radius: 25px;
+        padding: 40px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        max-width: 800px;
+        width: 100%;
+        border: 3px solid rgba(255, 255, 255, 0.1);
+        text-align: center;
     }
-    
+    .roleplay-header { margin-bottom: 40px; }
     .roleplay-title {
-        font-size: 24px;
+        color: white;
+        font-size: 32px;
+        font-weight: 700;
+        margin-bottom: 10px;
     }
-}
+    .roleplay-description {
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 18px;
+        margin-bottom: 30px;
+    }
+    .modes-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+    .mode-card {
+        background: rgba(255, 255, 255, 0.1);
+        border: 2px solid transparent;
+        border-radius: 16px;
+        padding: 30px 20px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        backdrop-filter: blur(10px);
+        position: relative;
+        text-decoration: none; /* Ensure it doesn't look like a default link */
+    }
+    .mode-card:hover:not(.disabled) {
+        background: rgba(255, 255, 255, 0.2);
+        border-color: #60a5fa;
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(96, 165, 250, 0.3);
+    }
+    .mode-card.disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    .mode-icon {
+        font-size: 48px;
+        margin-bottom: 20px;
+        color: #60a5fa;
+    }
+    .mode-name {
+        color: white;
+        font-size: 22px;
+        font-weight: 600;
+        margin-bottom: 10px;
+    }
+    .mode-description, .mode-requirements {
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 14px;
+    }
+    .mode-status {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    .status-available { background: rgba(16, 185, 129, 0.8); color: white; }
+    .status-locked { background: rgba(239, 68, 68, 0.8); color: white; }
+    .progress-info {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 20px;
+        margin-top: 20px;
+        text-align: left;
+    }
+    .progress-title {
+        color: white;
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 10px;
+    }
+    .progress-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.8);
+    }
+    .progress-status.status-pass { color: #10b981; }
+    .progress-status.status-fail { color: #ef4444; }
+    .progress-status.status-pending { color: #f59e0b; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="selection-container">
-    <a href="/dashboard" class="back-to-dashboard">
+    <a href="{{ url_for('dashboard_page') }}" class="back-to-dashboard">
         <i class="fas fa-arrow-left me-2"></i>Dashboard
     </a>
 
     <div class="selection-card">
         <div class="roleplay-header">
             <h1 class="roleplay-title">Roleplay 1: Opener & Early Objections</h1>
-            <p class="roleplay-description">
-                Master your cold call openers and handle early objections with confidence.
-                Choose your training mode below.
-            </p>
+            <p class="roleplay-description">Master call openings and handle early objections. Choose your training mode.</p>
         </div>
 
-        <!-- Modes Grid -->
         <div class="modes-grid">
             <!-- Practice Mode (1.1) - Always Unlocked -->
-            <a href="/roleplay/1.1" class="mode-card">
+            <div class="mode-card" data-mode-id="1.1">
                 <div class="mode-status status-available">Available</div>
                 <div class="mode-icon"><i class="fas fa-user-graduate"></i></div>
                 <h3 class="mode-name">Practice Mode</h3>
                 <p class="mode-description">Single call with detailed AI coaching. Perfect for learning fundamentals.</p>
                 <div class="mode-requirements">Always available • Detailed feedback</div>
-            </a>
+            </div>
 
-            <!-- Marathon Mode (1.2) - Unlocked by default, shows progress -->
-            <a href="/roleplay/1.2" class="mode-card">
+            <!-- Marathon Mode (1.2) -->
+            <div class="mode-card" data-mode-id="1.2">
                 <div class="mode-status status-available">Available</div>
                 <div class="mode-icon"><i class="fas fa-running"></i></div>
                 <h3 class="mode-name">Marathon Mode</h3>
                 <p class="mode-description">10 calls in a row. Pass 6 to complete. Tests consistency.</p>
                 <div class="mode-requirements">Need 6/10 passes • Unlocks Legend Mode</div>
-            </a>
+            </div>
 
-            <!-- Legend Mode (1.3) - DYNAMICALLY LOCKED/UNLOCKED -->
-            {% set legend_unlocked = user_progress.get('1.2', {}).get('passed', False) %}
-            <a href="{{ '/roleplay/1.3' if legend_unlocked else '#' }}" class="mode-card {{ 'disabled' if not legend_unlocked }}">
-                <div class="mode-status {{ 'status-available' if legend_unlocked else 'status-locked' }}">
-                    {{ 'Available' if legend_unlocked else 'Locked' }}
-                </div>
+            <!-- Legend Mode (1.3) - Dynamically handled by JS -->
+            <div class="mode-card disabled" data-mode-id="1.3">
+                <div class="mode-status status-locked">Locked</div>
                 <div class="mode-icon"><i class="fas fa-crown"></i></div>
                 <h3 class="mode-name">Legend Mode</h3>
                 <p class="mode-description">6 perfect calls in a row. The ultimate test of mastery.</p>
-                <div class="mode-requirements">
-                    {{ 'No second chances' if legend_unlocked else 'Requires Marathon completion' }}
-                </div>
-            </a>
+                <div class="mode-requirements">Requires Marathon completion</div>
+            </div>
         </div>
 
-        <!-- Progress Info -->
         <div class="progress-info">
             <div class="progress-title"><i class="fas fa-chart-line me-2"></i>Your Progress</div>
             <div class="progress-item">
                 <span>Practice Mode Best Score:</span>
-                <span class="progress-status {{ 'status-pass' if user_progress.get('1.1', {}).get('best_score', 0) >= 70 else 'status-pending' }}">
-                    {{ user_progress.get('1.1', {}).get('best_score', 'Not attempted') }}
-                </span>
+                <span class="progress-status status-pending" id="practice-score">Not attempted</span>
             </div>
             <div class="progress-item">
                 <span>Marathon Mode Status:</span>
-                <span class="progress-status {{ 'status-pass' if user_progress.get('1.2', {}).get('passed') else 'status-pending' }}">
-                    {% if user_progress.get('1.2') %}
-                        {{ user_progress['1.2'].get('marathon_best_run', 0) }}/10 Passed
-                    {% else %}
-                        Not attempted
-                    {% endif %}
-                </span>
+                <span class="progress-status status-pending" id="marathon-status">Not attempted</span>
             </div>
             <div class="progress-item">
                 <span>Roleplay 2 Access:</span>
-                <span class="progress-status {{ 'status-pass' if user_progress.get('1.3', {}).get('completed') else 'status-pending' }}">
-                    {{ 'Unlocked!' if user_progress.get('1.3', {}).get('completed') else 'Complete Legend to unlock' }}
-                </span>
+                <span class="progress-status status-pending" id="roleplay2-status">Complete Legend to unlock</span>
             </div>
         </div>
     </div>
+</div>
+
+<div id="user-progress-data" style="display: none;">
+    {{ user_progress | tojson if user_progress else '{}' }}
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        // Handle clicks on locked cards to provide feedback
-        document.querySelectorAll('.mode-card.disabled').forEach(card => {
-            card.addEventListener('click', (e) => {
-                e.preventDefault();
-                alert('This mode is locked. Complete the previous requirements to unlock it.');
-            });
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('🏁 Roleplay 1 Selection Page Initialized');
+    
+    let userProgress = {};
+    const progressElement = document.getElementById('user-progress-data');
+    if (progressElement && progressElement.textContent.trim()) {
+        try {
+            userProgress = JSON.parse(progressElement.textContent);
+        } catch (e) {
+            console.error("Could not parse user progress JSON", e);
+        }
+    }
+
+    // --- START: NEW EVENT LISTENER LOGIC ---
+    document.querySelectorAll('.mode-card').forEach(card => {
+        card.addEventListener('click', (event) => {
+            const modeId = card.dataset.modeId;
+            if (card.classList.contains('disabled')) {
+                event.preventDefault();
+                alert('This mode is locked. Please complete the previous requirements to unlock it.');
+            } else {
+                console.log(`🚀 Navigating to roleplay/${modeId}`);
+                window.location.href = `/roleplay/${modeId}`;
+            }
         });
     });
+    // --- END: NEW EVENT LISTENER LOGIC ---
+
+    function updateUIBasedOnProgress() {
+        // Update Practice Mode (1.1) score
+        const practiceData = userProgress['1.1'];
+        if (practiceData && practiceData.best_score > 0) {
+            const scoreEl = document.getElementById('practice-score');
+            scoreEl.textContent = `${practiceData.best_score}/100`;
+            scoreEl.className = 'progress-status ' + (practiceData.best_score >= 70 ? 'status-pass' : 'status-fail');
+        }
+
+        // Update Marathon Mode (1.2) status
+        const marathonData = userProgress['1.2'];
+        if (marathonData) {
+            const statusEl = document.getElementById('marathon-status');
+            const bestRun = marathonData.marathon_best_run || 0;
+            statusEl.textContent = `${bestRun}/10 Passed`;
+            statusEl.className = 'progress-status ' + (marathonData.passed ? 'status-pass' : 'status-pending');
+        }
+
+        // Update Legend Mode (1.3) availability
+        const legendUnlocked = marathonData && marathonData.passed;
+        const legendCard = document.querySelector('[data-mode-id="1.3"]');
+        if (legendCard) {
+            if (legendUnlocked) {
+                legendCard.classList.remove('disabled');
+                const statusBadge = legendCard.querySelector('.mode-status');
+                statusBadge.textContent = 'Available';
+                statusBadge.classList.remove('status-locked');
+                statusBadge.classList.add('status-available');
+            }
+        }
+        
+        // Update Roleplay 2 access status
+        const legendCompleted = userProgress['1.3']?.completed;
+        const rp2StatusEl = document.getElementById('roleplay2-status');
+        if (rp2StatusEl && legendCompleted) {
+            rp2StatusEl.textContent = 'Unlocked!';
+            rp2StatusEl.className = 'progress-status status-pass';
+        }
+    }
+
+    updateUIBasedOnProgress();
+});
 </script>
 {% endblock %}

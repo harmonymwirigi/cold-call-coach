@@ -796,7 +796,7 @@
       if __name__ == "__main__":
           main()
 
-📄 index.py (24.1KB)
+📄 index.py (23.8KB)
     Content:
       # ===== api/index.py (VERCEL FIXED HANDLER) =====
       from flask import Flask, render_template, redirect, url_for, send_from_directory, make_response, request, session, jsonify
@@ -1026,39 +1026,32 @@
       def render_roleplay_1_selection(user_id):
           """Render Roleplay 1 selection page - FIXED with all variables"""
           try:
-              logger.info(f"ðŸŽ® Rendering Roleplay 1 selection for user {user_id}")
-              
-              # Get user profile
+              logger.info(f"ðŸ‘ Rendering Roleplay 1 selection for user {user_id}")
               profile = get_user_profile_safe(user_id)
+              roleplay_info = {'id': '1', 'name': 'Roleplay 1: Opener & Early Objections', 'description': 'Master call openings and handle early objections with confidence'}
               
-              # Create roleplay info for Roleplay 1
-              roleplay_info = {
-                  'id': '1',
-                  'name': 'Roleplay 1: Opener & Early Objections',
-                  'description': 'Master call openings and handle early objections with confidence'
-              }
-              
-              # Get user progress for Roleplay 1 modes
+              # --- START: FETCH PROGRESS DATA ---
               try:
                   from services.user_progress_service import UserProgressService
                   progress_service = UserProgressService()
+                  # Fetch progress for all modes of Roleplay 1
                   user_progress = progress_service.get_user_roleplay_progress(user_id, ['1.1', '1.2', '1.3'])
                   logger.info(f"ðŸ“Š Loaded progress for 1.1, 1.2, 1.3: {user_progress}")
               except Exception as e:
                   logger.warning(f"âš ï¸ Could not load user progress: {e}")
                   user_progress = {}
-              
-              # Use your custom template for Roleplay 1
+              # --- END: FETCH PROGRESS DATA ---
+      
               logger.info("ðŸ“„ Rendering roleplay/roleplay-1-selection.html")
               return render_template(
                   'roleplay/roleplay-1-selection.html',
-                  roleplay_info=roleplay_info,  # ADDED: Include roleplay_info
-                  user_progress=user_progress,
+                  roleplay_info=roleplay_info,
+                  user_progress=user_progress, # Pass the progress data to the template
                   user_profile=profile,
-                  main_roleplay_id='1',  # ADDED: Include main_roleplay_id
+                  main_roleplay_id='1',
                   page_title="Roleplay 1: Choose Your Mode"
               )
-              
+                  
           except Exception as e:
               logger.error(f"âŒ Error rendering Roleplay 1 selection: {e}")
               return redirect(url_for('dashboard_page'))
@@ -1105,56 +1098,42 @@
           except Exception as e:
               logger.error(f"âŒ Error rendering Roleplay 2 selection: {e}")
               return redirect(url_for('dashboard_page'))
-      
       def render_specific_roleplay(roleplay_id, user_id):
-          """Render specific roleplay training page - FIXED"""
+          """Render specific roleplay training page - FIXED with access check"""
           try:
               # Get user profile
               profile = get_user_profile_safe(user_id)
               
-              # Check roleplay access first
+              # --- START: ADD ACCESS CHECK LOGIC ---
               try:
                   from services.user_progress_service import UserProgressService
                   progress_service = UserProgressService()
                   access_check = progress_service.check_roleplay_access(user_id, roleplay_id)
                   
                   if not access_check['allowed']:
-                      logger.warning(f"âŒ User {user_id} doesn't have access to {roleplay_id}: {access_check['reason']}")
-                      # Redirect back to selection or dashboard with error message
-                      if roleplay_id.startswith('1.'):
-                          return redirect(url_for('roleplay_page', roleplay_id='1'))
-                      elif roleplay_id.startswith('2.'):
-                          return redirect(url_for('roleplay_page', roleplay_id='2'))
-                      else:
-                          return redirect(url_for('dashboard_page'))
+                      logger.warning(f"âŒ User {user_id} access denied to {roleplay_id}: {access_check['reason']}")
+                      # Redirect back to the selection page or dashboard with an error message
+                      # This prevents users from accessing locked content via URL
+                      main_id = roleplay_id.split('.')[0]
+                      return redirect(url_for('roleplay_page', roleplay_id=main_id))
               except Exception as e:
-                  logger.warning(f"âš ï¸ Could not check access: {e}")
-              
+                  logger.warning(f"âš ï¸ Could not check access for roleplay {roleplay_id}: {e}")
+              # --- END: ADD ACCESS CHECK LOGIC ---
+      
               # Get roleplay info from structure or create default
               roleplay_info = get_roleplay_info_from_structure(roleplay_id)
               
               if not roleplay_info:
+                  # ... (rest of the function is the same)
                   logger.warning(f"No info found for roleplay {roleplay_id}")
-                  # Create default info based on roleplay_id
                   roleplay_names = {
-                      '1.1': 'Practice Mode',
-                      '1.2': 'Marathon Mode', 
-                      '1.3': 'Legend Mode',
-                      '2.1': 'Advanced Practice',
-                      '2.2': 'Advanced Marathon',
-                      '3': 'Warm-up Challenge',
-                      '4': 'Full Cold Call Simulation',
-                      '5': 'Power Hour Challenge'
+                      '1.1': 'Practice Mode', '1.2': 'Marathon Mode', '1.3': 'Legend Mode',
+                      '2.1': 'Advanced Practice', '2.2': 'Advanced Marathon',
+                      '3': 'Warm-up Challenge', '4': 'Full Cold Call Simulation', '5': 'Power Hour Challenge'
                   }
-                  
-                  roleplay_info = {
-                      'id': roleplay_id,
-                      'name': roleplay_names.get(roleplay_id, f'Roleplay {roleplay_id}'),
-                      'description': 'Cold calling training',
-                      'icon': 'phone'
-                  }
+                  roleplay_info = { 'id': roleplay_id, 'name': roleplay_names.get(roleplay_id, f'Roleplay {roleplay_id}'), 'description': 'Cold calling training', 'icon': 'phone' }
               
-              logger.info(f"ðŸŽ® Rendering training page for {roleplay_id}")
+              logger.info(f"ðŸ‘ Rendering training page for {roleplay_id}")
               
               # Use the main roleplay training template
               return render_template(
@@ -1164,7 +1143,7 @@
                   user_profile=profile,
                   page_title=f"{roleplay_info['name']} - Cold Calling Coach"
               )
-              
+                  
           except Exception as e:
               logger.error(f"âŒ Error rendering specific roleplay: {e}")
               return redirect(url_for('dashboard_page'))
@@ -1299,6 +1278,27 @@
       
       @app.route('/api/test/simple-start', methods=['POST'])
       def test_simple_start():
+          """Emergency test endpoint for Vercel"""
+          try:
+              data = request.get_json() or {}
+              user_id = session.get('user_id', 'test_user')
+              
+              # Create minimal session
+              session_id = f"test_{user_id}_{int(datetime.now().timestamp())}"
+              initial_response = "Hello, this is Alex speaking. How can I help you?"
+              
+              # Store in session for testing
+              session['current_roleplay_session'] = session_id
+              
+              logger.info(f"Test session created: {session_id}")
+              
+              return jsonify({
+                  'message': 'Test session started',
+                  'session_id': session_id,
+                  'roleplay_id': data.get('roleplay_id', '1.1'),
+                  'mode': data.get('mode', 'practice'),
+                  'initial_response': initial_response,
+                  'tts_available': False
 
 📄 migrate_existing_data.py (6.5KB)
     Content:
@@ -2956,7 +2956,7 @@
             """Get list of available roleplay types"""
             try:
 
-  📄 user.py (24.1KB)
+  📄 user.py (23.2KB)
       Content:
         # ===== API/ROUTES/USER.PY (COMPLETELY FIXED) =====
         from flask import Blueprint, request, jsonify, session
@@ -3007,29 +3007,25 @@
             except Exception as e:
                 logger.error(f"Error getting profile: {e}")
                 return jsonify({'error': 'Internal server error'}), 500
-        
         @user_bp.route('/stats', methods=['GET'])
         @require_auth
         def get_user_stats():
-            """Get user statistics"""
+            """Get user statistics - FIXED"""
             try:
                 user_id = session['user_id']
                 logger.info(f"Getting stats for user {user_id}")
                 
-                # Get profile for usage info using service client
                 profile = supabase_service.get_user_profile_by_service(user_id)
                 if not profile:
-                    logger.error(f"Profile not found for user {user_id}")
                     return jsonify({'error': 'Profile not found'}), 404
                 
-                # Get session statistics using service client
-                user_sessions = supabase_service.get_user_sessions(user_id, limit=1000)  # Get all sessions for stats
+                # FIX: Get completions from the new table
+                user_completions = supabase_service.get_user_completions(user_id, limit=1000)
                 
-                # Calculate stats with better null handling
                 stats = {
-                    'total_sessions': len(user_sessions),
-                    'total_minutes': sum(s.get('duration_minutes', 0) or 0 for s in user_sessions),
-                    'successful_sessions': sum(1 for s in user_sessions if s.get('success') is True),
+                    'total_sessions': len(user_completions),
+                    'total_minutes': sum(c.get('duration_minutes', 0) or 0 for c in user_completions),
+                    'successful_sessions': sum(1 for c in user_completions if c.get('success') is True),
                     'success_rate': 0,
                     'favorite_roleplay': None,
                     'sessions_this_week': 0,
@@ -3041,27 +3037,17 @@
                 if stats['total_sessions'] > 0:
                     stats['success_rate'] = round((stats['successful_sessions'] / stats['total_sessions']) * 100, 1)
                 
-                # Calculate sessions this week/month with proper timezone handling
                 now = datetime.now(timezone.utc)
                 week_ago = now - timedelta(days=7)
                 month_ago = now - timedelta(days=30)
                 
-                for user_session in user_sessions:
+                for completion in user_completions:
                     try:
-                        session_date_str = user_session.get('created_at') or user_session.get('started_at')
+                        # Use 'completed_at' from the new table
+                        session_date_str = completion.get('completed_at')
                         if not session_date_str:
                             continue
-                            
-                        # Handle timezone-aware datetime strings
-                        if 'T' in session_date_str:
-                            if session_date_str.endswith('Z'):
-                                session_date = datetime.fromisoformat(session_date_str.replace('Z', '+00:00'))
-                            elif '+' in session_date_str or session_date_str.endswith('00'):
-                                session_date = datetime.fromisoformat(session_date_str)
-                            else:
-                                session_date = datetime.fromisoformat(session_date_str + '+00:00')
-                        else:
-                            session_date = datetime.strptime(session_date_str, '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
+                        session_date = _parse_iso_datetime(session_date_str)
                         
                         if session_date >= week_ago:
                             stats['sessions_this_week'] += 1
@@ -3069,16 +3055,17 @@
                             stats['sessions_this_month'] += 1
                             
                     except (ValueError, TypeError) as e:
-                        logger.warning(f"Could not parse session date {session_date_str}: {e}")
+                        logger.warning(f"Could not parse completion date {session_date_str}: {e}")
                         continue
                 
-                # Find favorite roleplay
                 roleplay_counts = {}
-                for user_session in user_sessions:
-                    rp_id = user_session.get('roleplay_id')
-                    if rp_id:
-                        roleplay_counts[rp_id] = roleplay_counts.get(rp_id, 0) + 1
-                
+                for completion in user_completions:
+                    rp_id_str = str(completion.get('roleplay_id'))
+                    if rp_id_str:
+                        # Use the main roleplay ID (e.g., '1' from '1.1')
+                        main_rp_id = int(float(rp_id_str))
+                        roleplay_counts[main_rp_id] = roleplay_counts.get(main_rp_id, 0) + 1
+        
                 if roleplay_counts:
                     favorite_id = max(roleplay_counts, key=roleplay_counts.get)
                     stats['favorite_roleplay'] = ROLEPLAY_CONFIG.get(favorite_id, {}).get('name', f'Roleplay {favorite_id}')
@@ -3093,24 +3080,22 @@
         @user_bp.route('/sessions', methods=['GET'])
         @require_auth
         def get_user_sessions():
-            """Get user's roleplay sessions"""
+            """Get user's roleplay sessions - FIXED"""
             try:
                 user_id = session['user_id']
                 page = request.args.get('page', 1, type=int)
                 limit = request.args.get('limit', 20, type=int)
                 
-                logger.info(f"Getting sessions for user {user_id}, page {page}, limit {limit}")
+                logger.info(f"Getting completions for user {user_id}, page {page}, limit {limit}")
                 
-                # Get sessions from database using service client
                 offset = (page - 1) * limit
-                user_sessions = supabase_service.get_user_sessions(user_id, limit=limit, offset=offset)
+                # FIX: Get completions from the new table
+                user_completions = supabase_service.get_user_completions(user_id, limit=limit, offset=offset)
+                total_count = supabase_service.get_completion_count(user_id)
                 
-                # Get total count
-                total_count = supabase_service.get_session_count(user_id)
-                
-                logger.info(f"Successfully retrieved {len(user_sessions)} sessions for user {user_id}")
+                logger.info(f"Successfully retrieved {len(user_completions)} completions for user {user_id}")
                 return jsonify({
-                    'sessions': user_sessions,
+                    'sessions': user_completions, # Frontend expects 'sessions' key
                     'total_count': total_count,
                     'page': page,
                     'limit': limit,
@@ -3120,11 +3105,9 @@
             except Exception as e:
                 logger.error(f"Error getting user sessions: {e}")
                 return jsonify({'error': 'Internal server error'}), 500
-        
         @user_bp.route('/profile', methods=['PUT'])
         @require_auth
         def update_profile():
-            """Update user profile"""
             try:
                 user_id = session['user_id']
                 data = request.get_json()
@@ -3151,7 +3134,7 @@
             except Exception as e:
                 logger.error(f"Error updating profile: {e}")
                 return jsonify({'error': 'Internal server error'}), 500
-        
+            
         def _calculate_access_info(profile):
             """Calculate user's access limits and usage"""
             access_level = profile.get('access_level', 'limited_trial')
@@ -3276,8 +3259,6 @@
             except (ValueError, TypeError) as e:
                 logger.warning(f"Could not parse datetime {date_string}: {e}")
                 return datetime.now(timezone.utc)
-        
-        # ===== COMPLETE FIX: Replace these functions in routes/user.py =====
         
         @user_bp.route('/roleplay-progress', methods=['GET'])
         @require_auth
@@ -3459,6 +3440,25 @@
                 return []
         
         def calculate_improvement_trend(user_id: str):
+            """Calculate if user is improving over time"""
+            try:
+                # Get recent scores vs older scores
+                recent_completions = supabase_service.get_service_client().table('roleplay_completions').select(
+                    'score, completed_at'
+                ).eq('user_id', user_id).order('completed_at', desc=True).limit(10).execute()
+                
+                if not recent_completions.data or len(recent_completions.data) < 3:
+                    return 'insufficient_data'
+                
+                scores = [c['score'] for c in recent_completions.data]
+                recent_avg = sum(scores[:3]) / 3  # Last 3
+                older_avg = sum(scores[3:]) / len(scores[3:])  # Earlier ones
+                
+                if recent_avg > older_avg + 5:
+                    return 'improving'
+                elif recent_avg < older_avg - 5:
+                    return 'declining'
+                else:
 
   📄 __init__.py (0KB)
       (Empty file)
@@ -4786,7 +4786,7 @@
                 </html>
                 """
 
-  📄 roleplay_engine.py (22.8KB)
+  📄 roleplay_engine.py (17.1KB)
       Content:
         # ===== FIXED: services/roleplay_engine.py =====
         import logging
@@ -4816,21 +4816,22 @@
                 else:
                     self.supabase_service = supabase_service
         
-                # ADD a reference to the progress service here
                 self.progress_service = UserProgressService(self.supabase_service)
         
                 self.roleplay_implementations = {}
                 self._load_roleplay_implementations()
-                logger.info(f"Ã¢Å“â€¦ RoleplayEngine initialized with {len(self.roleplay_implementations)} roleplay types")
+                logger.info(f"âœ… RoleplayEngine initialized with {len(self.roleplay_implementations)} roleplay types")
             
             def _load_roleplay_implementations(self):
                 from .roleplay.roleplay_1_1 import Roleplay11
                 from .roleplay.roleplay_1_2 import Roleplay12
+                from .roleplay.roleplay_1_3 import Roleplay13
                 self.roleplay_implementations = {
                     '1.1': Roleplay11(self.openai_service),
                     '1.2': Roleplay12(self.openai_service),
+                    '1.3': Roleplay13(self.openai_service),
                 }
-            
+        
             def _create_fallback_roleplay(self, roleplay_id: str):
                 """Create a minimal fallback roleplay implementation"""
                 class FallbackRoleplay:
@@ -4863,12 +4864,7 @@
                             'user_context': user_context
                         }
                         self.active_sessions[session_id] = session_data
-                        
-                        return {
-                            'success': True,
-                            'session_id': session_id,
-                            'initial_response': 'Hello?'
-                        }
+                        return { 'success': True, 'session_id': session_id, 'initial_response': 'Hello?'}
                     
                     def process_user_input(self, session_id, user_input):
                         if session_id not in self.active_sessions:
@@ -4915,33 +4911,22 @@
                 try:
                     if roleplay_id not in self.roleplay_implementations:
                         return {'error': f'Roleplay {roleplay_id} not found'}
-                    
                     implementation = self.roleplay_implementations[roleplay_id]
-                    info = implementation.get_roleplay_info()
-                    logger.info(f"âœ… Retrieved info for roleplay {roleplay_id}")
-                    return info
-                    
+                    return implementation.get_roleplay_info()
                 except Exception as e:
                     logger.error(f"âŒ Error getting roleplay info for {roleplay_id}: {e}")
-                    return {
-                        'error': str(e),
-                        'id': roleplay_id,
-                        'name': f'Roleplay {roleplay_id}',
-                        'description': 'Information unavailable'
-                    }
+                    return {'error': str(e)}
             
             def create_session(self, user_id: str, roleplay_id: str, mode: str, user_context: Dict) -> Dict[str, Any]:
-                """FIXED: Create roleplay session with serializable data"""
+                """Create a roleplay session and store it in active memory."""
                 try:
-                    # Validate inputs
-                    
                     if not user_id or not roleplay_id:
                         return {'success': False, 'error': 'Missing required parameters'}
                     
                     if roleplay_id not in self.roleplay_implementations:
                         return {'success': False, 'error': f'Roleplay {roleplay_id} not available'}
                     
-                    logger.info(f"Ã°Å¸Å¡â‚¬ Creating session: {roleplay_id} for user {user_id} (mode: {mode})")
+                    logger.info(f"ðŸš€ Creating session: {roleplay_id} for user {user_id} (mode: {mode})")
                     
                     self._cleanup_user_sessions(user_id)
                     
@@ -4949,92 +4934,83 @@
                     session_result = implementation.create_session(user_id, mode, user_context)
                     
                     if not session_result.get('success'):
-                        logger.error(f"Ã¢ Å’ Implementation failed to create session: {session_result}")
+                        logger.error(f"âŒ Implementation failed to create session: {session_result}")
                         return session_result
                     
                     session_id = session_result['session_id']
                     session_data = implementation.active_sessions.get(session_id)
                     
                     if session_data:
-                        # CRITICAL FIX: Store the roleplay_id string, not the implementation object
+                        # Store the session in the engine's active memory
                         self.active_sessions[session_id] = {
-                            'implementation_id': roleplay_id, # STORE ID, NOT OBJECT
+                            'implementation_id': roleplay_id,
                             'session_data': session_data,
-                            'created_at': datetime.now(timezone.utc).isoformat(),
-                            'last_activity': datetime.now(timezone.utc).isoformat(),
                             'user_id': user_id,
-                            'roleplay_id': roleplay_id
                         }
-                        logger.info(f"Ã¢Å“â€¦ Session {session_id} created and stored successfully")
-                        self._persist_session_to_database(session_id, user_id, self.active_sessions[session_id])
+                        logger.info(f"âœ… Session {session_id} created and stored in active memory.")
+                        # We no longer persist to the active_sessions table here.
+                        # It's better managed in memory or a cache like Redis if needed.
                     
                     return session_result
                     
                 except Exception as e:
-                    logger.error(f"Ã¢ Å’ Error creating roleplay session: {e}", exc_info=True)
+                    logger.error(f"âŒ Error creating roleplay session: {e}", exc_info=True)
                     return {'success': False, 'error': f'Failed to create session: {str(e)}'}
+        
             
             def process_user_input(self, session_id: str, user_input: str) -> Dict[str, Any]:
-                """FIXED: Process user input using implementation_id"""
+                """Process user input by delegating to the correct implementation."""
                 try:
-                    # Validate inputs
                     if not session_id or not user_input:
                         return {'success': False, 'error': 'Missing required parameters'}
                     
                     logger.info(f"ðŸ’¬ Processing input for session {session_id}: '{user_input[:50]}...'")
                     
-                    # Get session with recovery
                     session_info = self._get_session_with_recovery(session_id)
                     if not session_info:
-                        logger.error(f"âŒ Session {session_id} not found in any storage location")
+                        logger.error(f"âŒ Session {session_id} not found")
                         return {'success': False, 'error': 'Session not found or expired'}
                     
                     implementation_id = session_info['implementation_id']
                     implementation = self.roleplay_implementations[implementation_id]
                     
-                    # Update last activity
-                    self._update_session_activity(session_id)
+                    # THE FIX: This function was removed, so we must remove the call to it.
+                    # self._update_session_activity(session_id) 
                     
-                    # Validate session belongs to user (if user info available)
                     session_data = session_info['session_data']
-                    
-                    # Check if session is still active
                     if not session_data.get('session_active', True):
                         logger.error(f"âŒ Session {session_id} is no longer active")
                         return {'success': False, 'error': 'Session has ended'}
                     
-                    # Process input through implementation
-                    try:
-                        result = implementation.process_user_input(session_id, user_input)
-                        logger.info(f"âœ… Input processed: call_continues={result.get('call_continues', False)}")
-                    except Exception as processing_error:
-                        logger.error(f"âŒ Implementation processing error: {processing_error}")
-                        return {'success': False, 'error': f'Processing failed: {str(processing_error)}'}
+                    result = implementation.process_user_input(session_id, user_input)
                     
                     if result.get('success'):
-                        # Update session data in engine
                         updated_session_data = implementation.active_sessions.get(session_id)
                         if updated_session_data and session_id in self.active_sessions:
                             self.active_sessions[session_id]['session_data'] = updated_session_data
-                            self.active_sessions[session_id]['last_activity'] = datetime.now(timezone.utc).isoformat()
-                        
-                        logger.info(f"âœ… Input processed successfully for session {session_id}")
                     
                     return result
                     
                 except Exception as e:
-                    logger.error(f"âŒ Error processing user input: {e}")
-                    return {'success': False, 'error': f'Processing failed: {str(e)}'}
+                    logger.error(f"âŒ Error processing user input: {e}", exc_info=True) # Added exc_info for better logging
+                    return {'success': False, 'error': f"Processing failed: {str(e)}"}
             
             def end_session(self, session_id: str, forced_end: bool = False) -> Dict[str, Any]:
-                """FIXED: End session and correctly save all completion data."""
+                """End session, calculate results, and save the permanent record to the database."""
                 try:
-                    logger.info(f"Ã°Å¸â€œÅ¾ Ending session {session_id} (forced: {forced_end})")
+                    logger.info(f"ðŸ“ž Ending session {session_id} (forced: {forced_end})")
                     
-                    session_info = self._get_session_with_recovery(session_id)
+                    session_info = self.active_sessions.get(session_id)
                     if not session_info:
-                        logger.warning(f"Ã¢Å¡ Ã¯Â¸  Session {session_id} not found for ending")
-                        return {'success': True, 'message': 'Session not found.'}
+                        logger.warning(f"âš ï¸ Session {session_id} not found in active memory for ending.")
+                        # Attempt to recover from implementation state if it exists
+                        for impl in self.roleplay_implementations.values():
+                            if session_id in impl.active_sessions:
+                                session_info = {'session_data': impl.active_sessions.get(session_id)}
+                                break
+                    
+                    if not session_info:
+                         return {'success': True, 'message': 'Session not found or already ended.'}
         
                     implementation_id = session_info.get('implementation_id', '1.1')
                     implementation = self.roleplay_implementations.get(implementation_id)
@@ -5045,7 +5021,6 @@
                     # Get the final result from the specific roleplay logic
                     result = implementation.end_session(session_id, forced_end)
                     
-                    # --- START OF CRITICAL FIX ---
                     if result.get('success'):
                         session_data = result.get('session_data', {})
                         user_id = session_data.get('user_id')
@@ -5060,33 +5035,31 @@
                                 'success': result.get('session_success'),
                                 'duration_minutes': result.get('duration_minutes'),
                                 'started_at': session_data.get('started_at'),
-                                'ended_at': session_data.get('ended_at'),
+                                'completed_at': session_data.get('ended_at'),
                                 'conversation_data': session_data.get('conversation_history'),
                                 'coaching_feedback': result.get('coaching'),
                                 'rubric_scores': session_data.get('rubric_scores'),
                                 'forced_end': forced_end
                             }
                             
-                            # 1. Save the detailed completion record
+                            # 1. Save the final record to the correct 'roleplay_completions' table.
                             self.progress_service.save_roleplay_completion(completion_data)
                             
-                            # 2. Update the user's aggregate stats and usage
+                            # 2. Update the user's aggregate stats and usage.
                             self.progress_service.update_user_progress_after_completion(completion_data)
         
-                            logger.info(f"Ã¢Å“â€¦ Session {session_id} completion and stats have been saved.")
+                            logger.info(f"âœ… Session {session_id} results have been saved to the database.")
                         else:
                             logger.warning("No user_id found in session data, cannot save progress.")
-                    # --- END OF CRITICAL FIX ---
         
-                    # Cleanup in-memory and DB active sessions
+                    # Cleanup in-memory session
                     self.active_sessions.pop(session_id, None)
-                    self._cleanup_session_from_database(session_id)
                     
-                    logger.info(f"Ã¢Å“â€¦ Session {session_id} ended successfully in engine")
+                    logger.info(f"âœ… Session {session_id} ended and cleaned from memory.")
                     return result
                                 
                 except Exception as e:
-                    logger.error(f"Ã¢ Å’ Error ending session: {e}", exc_info=True)
+                    logger.error(f"âŒ Error ending session: {e}", exc_info=True)
                     return {'success': False, 'error': str(e)}
             
             def get_session_status(self, session_id: str) -> Optional[Dict[str, Any]]:
@@ -5126,120 +5099,19 @@
                 except Exception:
                     return False
             
-            # ===== PRIVATE HELPER METHODS =====
-            
             def _get_session_with_recovery(self, session_id: str) -> Optional[Dict[str, Any]]:
-                """Get session with automatic recovery if needed"""
-                # First check active sessions
-                if session_id in self.active_sessions:
-                    return self.active_sessions[session_id]
-                
-                # Try to recover from implementation
-                for implementation in self.roleplay_implementations.values():
-                    if hasattr(implementation, 'active_sessions') and session_id in implementation.active_sessions:
-                        session_data = implementation.active_sessions[session_id]
-                        
-                        # Restore to engine
-                        self.active_sessions[session_id] = {
-                            'implementation': implementation,
-                            'session_data': session_data,
-                            'created_at': session_data.get('started_at'),
-                            'last_activity': datetime.now(timezone.utc).isoformat(),
-                            'user_id': session_data.get('user_id'),
-                            'roleplay_id': session_data.get('roleplay_id'),
-                            'recovered_from_implementation': True
-                        }
-                        
-                        logger.info(f"âœ… Session {session_id} recovered from implementation")
-                        return self.active_sessions[session_id]
-                
-                logger.warning(f"âš ï¸ Session {session_id} not found in active storage")
-                return None
+                return self.active_sessions.get(session_id)
             
             def _cleanup_user_sessions(self, user_id: str):
-                """Clean up existing sessions for a user"""
-                try:
-                    sessions_to_remove = []
-                    
-                    for session_id, session_info in self.active_sessions.items():
-                        if session_info.get('user_id') == user_id:
-                            sessions_to_remove.append(session_id)
-                    
-                    for session_id in sessions_to_remove:
-                        try:
-                            logger.info(f"ðŸ§¹ Cleaning up existing session {session_id} for user {user_id}")
-                            self.end_session(session_id, forced_end=True)
-                        except Exception as cleanup_error:
-                            logger.warning(f"âš ï¸ Error cleaning up session {session_id}: {cleanup_error}")
-                            # Force remove from memory
-                            self.active_sessions.pop(session_id, None)
-                    
-                    if sessions_to_remove:
-                        logger.info(f"âœ… Cleaned up {len(sessions_to_remove)} existing sessions for user {user_id}")
-                    
-                except Exception as e:
-                    logger.error(f"âŒ Error cleaning up user sessions: {e}")
+                sessions_to_remove = [sid for sid, s_info in self.active_sessions.items() if s_info.get('user_id') == user_id]
+                for session_id in sessions_to_remove:
+                    logger.info(f"ðŸ§¹ Cleaning up stale active session {session_id} for user {user_id}")
+                    self.active_sessions.pop(session_id, None)
             
-            def _update_session_activity(self, session_id: str):
-                """Update session last activity timestamp"""
-                try:
-                    if session_id in self.active_sessions:
-                        self.active_sessions[session_id]['last_activity'] = datetime.now(timezone.utc).isoformat()
-                    
-                    # Update in database if available
-                    if self.supabase_service:
-                        try:
-                            self.supabase_service.update_data_by_id(
-                                'active_roleplay_sessions',
-                                {'session_id': session_id},
-                                {'last_activity': datetime.now(timezone.utc).isoformat()}
-                            )
-                        except Exception as db_error:
-                            logger.warning(f"âš ï¸ Failed to update session activity in database: {db_error}")
-                            
-                except Exception as e:
-                    logger.warning(f"âš ï¸ Error updating session activity: {e}")
-            
-            def _persist_session_to_database(self, session_id: str, user_id: str, session_data: Dict):
-                """Persist session to database for recovery"""
-                try:
-                    if not self.supabase_service:
-                        return
-                    
-                    db_record = {
-                        'session_id': session_id,
-                        'user_id': user_id,
-                        'session_data': session_data,
-                        'created_at': datetime.now(timezone.utc).isoformat(),
-                        'last_activity': datetime.now(timezone.utc).isoformat(),
-                        'is_active': True
-                    }
-                    
-                    self.supabase_service.upsert_data('active_roleplay_sessions', db_record)
-                    logger.info(f"âœ… Session {session_id} persisted to database")
-                    
-                except Exception as e:
-                    logger.warning(f"âš ï¸ Failed to persist session to database: {e}")
-            
+                
             def _cleanup_session_from_database(self, session_id: str):
-                """Clean up session from database"""
-                try:
-                    if not self.supabase_service:
-                        return
-                    
-                    self.supabase_service.update_data_by_id(
-                        'active_roleplay_sessions',
-                        {'session_id': session_id},
-                        {
-                            'is_active': False,
-                            'ended_at': datetime.now(timezone.utc).isoformat()
-                        }
-                    )
-                    
-                    logger.info(f"âœ… Session {session_id} marked as inactive in database")
-                    
-                except Exception as e:
-                    logger.warning(f"âš ï¸ Failed to cleanup session from database: {e}")
+                # ...
+                pass
             
             def cleanup_old_sessions(self, max_age_hours: int = 24):
                 """Clean up old/abandoned sessions"""
@@ -5284,8 +5156,9 @@
                 _roleplay_engine = RoleplayEngine()
             return _roleplay_engine
 
-  📄 supabase_client.py (15.3KB)
+  📄 supabase_client.py (15.2KB)
       Content:
+        # ===== UPDATED API/SERVICES/SUPABASE_CLIENT.PY (FIXED) =====
         # ===== UPDATED API/SERVICES/SUPABASE_CLIENT.PY (FIXED) =====
         from supabase import create_client, Client
         import os
@@ -5308,15 +5181,13 @@
                 if not self._initialized:
                     self.url = os.getenv('REACT_APP_SUPABASE_URL')
                     self.anon_key = os.getenv('REACT_APP_SUPABASE_ANON_KEY')
-                    self.service_key = os.getenv('SUPABASE_SERVICE_ROLE_KEY')  # Add this to your .env
+                    self.service_key = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
                     
                     if not self.url or not self.anon_key:
                         raise ValueError("Supabase URL and anon key must be provided")
                     
-                    # Client for user operations (with RLS)
                     self.client: Client = create_client(self.url, self.anon_key)
                     
-                    # Service client for admin operations (bypasses RLS)
                     if self.service_key:
                         self.service_client: Client = create_client(self.url, self.service_key)
                     else:
@@ -5326,43 +5197,26 @@
                     self._initialized = True
             
             def get_client(self) -> Client:
-                """Get client for user operations"""
                 return self.client
             
             def get_service_client(self) -> Client:
-                """Get client for admin operations that bypass RLS"""
                 return self.service_client
             
             def authenticate_user(self, token: str) -> Optional[Dict[str, Any]]:
-                """Verify JWT token and return user"""
                 try:
-                    # Create a temporary client with the user's token to verify it
-                    temp_client = create_client(self.url, self.anon_key)
-                    user = temp_client.auth.get_user(token)
-                    
-                    if user and user.user:
-                        return user.user
-                    else:
-                        logger.warning("Invalid token or no user found")
+                    user = self.client.auth.get_user(token)
+                    return user.user if user else None
                 except Exception as e:
                     logger.error(f"Auth error: {e}")
                     return None
             def get_user_profile_by_service(self, user_id: str) -> Optional[Dict[str, Any]]:
-                """Get user profile using service client (bypasses RLS)"""
                 try:
-                    response = self.client.table('user_progress').select('*').eq('user_id', user_id).execute() # <-- BINGO!
-                    return response.data or []
-                    if response.data and len(response.data) > 0:
-                        logger.info(f"Profile found for user_id: {user_id}")
-                        return response.data[0]
-                    else:
-                        logger.warning(f"No profile found for user_id: {user_id}")
-                        return None
-                        
+                    response = self.service_client.table('user_profiles').select('*').eq('id', user_id).single().execute()
+                    return response.data
                 except Exception as e:
                     logger.error(f"Error getting user profile for {user_id}: {e}")
                     return None
-                
+                    
             
             def get_user_profile(self, user_id: str, access_token: str = None) -> Optional[Dict[str, Any]]:
                 """Get user profile by ID with enhanced error handling"""
@@ -5392,41 +5246,16 @@
                     logger.error(f"Error getting user profile for {user_id}: {e}")
                     return None
             
-            def get_user_profile_by_service(self, user_id: str) -> Optional[Dict[str, Any]]:
-                """Get user profile using service client (bypasses RLS)"""
-                try:
-                    response = self.service_client.table('user_profiles').select('*').eq('id', user_id).execute()
-                    
-                    if response.data and len(response.data) > 0:
-                        logger.info(f"Profile found for user_id: {user_id}")
-                        return response.data[0]
-                    else:
-                        logger.warning(f"No profile found for user_id: {user_id}")
-                        return None
-                        
-                except Exception as e:
-                    logger.error(f"Error getting user profile for {user_id}: {e}")
-                    return None
             
             def create_user_profile(self, profile_data: Dict[str, Any]) -> bool:
-                """Create new user profile using service client to bypass RLS"""
                 try:
-                    # Use service client to bypass RLS during registration
                     response = self.service_client.table('user_profiles').insert(profile_data).execute()
-                    
-                    if response.data:
-                        logger.info(f"User profile created successfully for user {profile_data.get('id')}")
-                        return True
-                    else:
-                        logger.error(f"Failed to create user profile - no data returned")
-                        return False
-                        
+                    return bool(response.data)
                 except Exception as e:
                     logger.error(f"Error creating user profile: {e}")
                     return False
-            
+        
             def update_user_profile(self, user_id: str, updates: Dict[str, Any]) -> bool:
-                """Update user profile"""
                 try:
                     updates['updated_at'] = 'NOW()'
                     response = self.client.table('user_profiles').update(updates).eq('id', user_id).execute()
@@ -5436,25 +5265,26 @@
                     return False
             
             def get_user_progress(self, user_id: str) -> list:
-                """Get all user progress records"""
+                """Get all user progress records from the correct stats table."""
                 try:
-                    response = self.client.table('user_progress').select('*').eq('user_id', user_id).execute()
+                    # FIX: This was pointing to the old 'user_progress' table.
+                    # It should query 'user_roleplay_stats' to get the summary data.
+                    response = self.client.table('user_roleplay_stats').select('*').eq('user_id', user_id).execute()
                     return response.data or []
                 except Exception as e:
-                    logger.error(f"Error getting user progress: {e}")
+                    logger.error(f"Error getting user progress from user_roleplay_stats: {e}")
                     return []
             
             def update_user_progress(self, user_id: str, roleplay_id: int, updates: Dict[str, Any]) -> bool:
                 """Update or create user progress for specific roleplay"""
                 try:
-                    # Use service client for initial progress creation
                     client_to_use = self.service_client
                     
-                    # Try to update existing record
+                    # This function is likely legacy now, but we'll keep it pointed to the old table
+                    # in case it's used elsewhere. The primary flow uses the UserProgressService.
                     response = client_to_use.table('user_progress').update(updates).eq('user_id', user_id).eq('roleplay_id', roleplay_id).execute()
                     
                     if not response.data:
-                        # Create new record if it doesn't exist
                         progress_data = {
                             'user_id': user_id,
                             'roleplay_id': roleplay_id,
@@ -5464,7 +5294,7 @@
                     
                     return bool(response.data)
                 except Exception as e:
-                    logger.error(f"Error updating user progress: {e}")
+                    logger.error(f"Error updating legacy user progress: {e}")
                     return False
             
             def create_verification_code(self, email: str, code: str) -> bool:
@@ -5472,32 +5302,27 @@
                 return self.create_verification_code_with_data(email, code, {})
             
             def create_verification_code_with_data(self, email: str, code: str, user_data: Dict[str, Any]) -> bool:
-                """Create verification code with associated user data"""
                 try:
-                    data = {
-                        'email': email,
-                        'code': code,
-                        'user_data': json.dumps(user_data)  # Store user data as JSON
-                    }
-                    # Use service client to ensure insertion works
+                    data = {'email': email, 'code': code, 'user_data': json.dumps(user_data)}
                     response = self.service_client.table('verification_codes').insert(data).execute()
-                    
-                    if response.data:
-                        logger.info(f"Verification code created for {email}")
-                        return True
-                    else:
-                        logger.error("Failed to create verification code - no data returned")
-                        return False
-                        
+                    return bool(response.data)
                 except Exception as e:
                     logger.error(f"Error creating verification code: {e}")
                     return False
-            
-            def verify_code(self, email: str, code: str) -> bool:
-                """Verify email code (legacy method)"""
-                user_data = self.verify_code_and_get_data(email, code)
-                return user_data is not None
-            
+        
+            def verify_code_and_get_data(self, email: str, code: str) -> Optional[Dict[str, Any]]:
+                try:
+                    response = self.service_client.table('verification_codes').select('*').eq('email', email).eq('code', code).eq('used', False).gt('expires_at', 'NOW()').execute()
+                    if not response.data: return None
+                    
+                    verification_record = response.data[0]
+                    self.service_client.table('verification_codes').update({'used': True}).eq('id', verification_record['id']).execute()
+                    return json.loads(verification_record.get('user_data', '{}'))
+                except Exception as e:
+                    logger.error(f"Error verifying code: {e}")
+                    return None
+        
+        
             def verify_code_and_get_data(self, email: str, code: str) -> Optional[Dict[str, Any]]:
                 """Verify email code and return associated user data"""
                 try:
@@ -5535,19 +5360,27 @@
                 except Exception as e:
                     logger.error(f"Error verifying code: {e}")
                     return None
+            
+            def verify_code(self, email: str, code: str) -> bool:
+                """Verify email code (legacy method)"""
+                user_data = self.verify_code_and_get_data(email, code)
+                return user_data is not None
+            
+            
                 
             def upsert_data(self, table_name: str, data: Union[Dict, List[Dict]]) -> Optional[List[Dict]]:
                 """Upsert data into a table using the service client."""
                 try:
                     response = self.service_client.table(table_name).upsert(data).execute()
+                    # FIX: Check if response.data is not empty before returning
                     if response.data:
                         logger.info(f"Upsert successful for table '{table_name}'")
                         return response.data
                     else:
-                        logger.warning(f"Upsert to '{table_name}' returned no data.")
+                        logger.error(f"Upsert to '{table_name}' failed. Response: {response}")
                         return None
                 except Exception as e:
-                    logger.error(f"Error upserting data to '{table_name}': {e}")
+                    logger.error(f"Exception during upsert to '{table_name}': {e}", exc_info=True)
                     return None
         
             def get_data_with_filter(self, table_name: str, filter_column: str, filter_value: Any, additional_filters: Dict = None, limit: int = None, order_by: str = None, ascending: bool = True) -> List[Dict[str, Any]]:
@@ -5572,12 +5405,16 @@
                 """Insert a single record into a table using the service client."""
                 try:
                     response = self.service_client.table(table_name).insert(data).execute()
+                    # FIX: Check if response.data is not empty before accessing the first element
                     if response.data:
                         logger.info(f"Insert successful for table '{table_name}'")
                         return response.data[0]
-                    return None
+                    else:
+                        # Log the failure reason if available from Supabase/PostgREST
+                        logger.error(f"Insert failed for table '{table_name}'. Response: {response}")
+                        return None
                 except Exception as e:
-                    logger.error(f"Error inserting data into '{table_name}': {e}")
+                    logger.error(f"Exception during insert into '{table_name}': {e}", exc_info=True)
                     return None
         
             def update_data_by_id(self, table_name: str, id_filter: Dict, updates: Dict) -> bool:
@@ -5587,12 +5424,18 @@
                     for col, val in id_filter.items():
                         query = query.eq(col, val)
                     response = query.execute()
-                    return len(response.data) > 0
+                    # FIX: Check if response.data exists and has content
+                    if response.data:
+                        logger.info(f"Update successful for table '{table_name}' with filter {id_filter}")
+                        return True
+                    else:
+                        logger.warning(f"Update for table '{table_name}' with filter {id_filter} affected 0 rows. Response: {response}")
+                        return False
                 except Exception as e:
-                    logger.error(f"Error updating data in '{table_name}': {e}")
+                    logger.error(f"Exception during update in '{table_name}': {e}", exc_info=True)
                     return False
             def get_user_sessions(self, user_id: str, limit: int = 20, offset: int = 0) -> List[Dict[str, Any]]:
-                """Get user's voice sessions"""
+                """Get user's voice sessions (LEGACY)"""
                 try:
                     response = self.service_client.table('voice_sessions')\
                         .select('*')\
@@ -5606,7 +5449,7 @@
                     return []
         
             def get_session_count(self, user_id: str) -> int:
-                """Get total session count for user"""
+                """Get total session count for user (LEGACY)"""
                 try:
                     response = self.service_client.table('voice_sessions')\
                         .select('id', count='exact')\
@@ -5618,19 +5461,31 @@
                     return 0
         
             def update_user_profile_by_service(self, user_id: str, updates: Dict[str, Any]) -> bool:
-                """Update user profile using service client (bypasses RLS)"""
+                from datetime import datetime, timezone
+                updates['updated_at'] = datetime.now(timezone.utc).isoformat()
                 try:
-                    from datetime import datetime, timezone
-                    # Add updated timestamp
-                    updates['updated_at'] = datetime.now(timezone.utc).isoformat()
-                    
                     response = self.service_client.table('user_profiles').update(updates).eq('id', user_id).execute()
-                    return len(response.data) > 0
+                    return bool(response.data)
                 except Exception as e:
                     logger.error(f"Error updating user profile by service: {e}")
                     return False
+            def get_user_completions(self, user_id: str, limit: int = 20, offset: int = 0) -> List[Dict[str, Any]]:
+                try:
+                    response = self.service_client.table('roleplay_completions').select('*').eq('user_id', user_id).order('completed_at', desc=True).range(offset, offset + limit - 1).execute()
+                    return response.data or []
+                except Exception as e:
+                    logger.error(f"Error getting user completions: {e}")
+                    return []
+        
+            def get_completion_count(self, user_id: str) -> int:
+                try:
+                    response = self.service_client.table('roleplay_completions').select('id', count='exact').eq('user_id', user_id).execute()
+                    return response.count or 0
+                except Exception as e:
+                    logger.error(f"Error getting completion count: {e}")
+                    return 0
 
-  📄 user_progress_service.py (27.9KB)
+  📄 user_progress_service.py (29.6KB)
       Content:
         # ===== services/user_progress_service.py =====
         
@@ -5655,12 +5510,10 @@
                         logger.error(f"Failed to import SupabaseService: {e}")
                         self.supabase = None
                 
-                # This defines the unlock dependencies between modules.
                 self.progression_rules = {
                     '1.2': {'requires_completion': '1.1', 'pass_needed': True},
                     '1.3': {'requires_completion': '1.2', 'pass_needed': True},
                     '2.1': {'requires_completion': '1.3', 'pass_needed': True},
-                    # Add other rules here as you create more modules
                 }
                 logger.info("UserProgressService initialized")
             def get_user_roleplay_stats(self, user_id: str, roleplay_id: str = None) -> Dict[str, Any]:
@@ -5681,29 +5534,36 @@
                 except Exception as e:
                     logger.error(f"Error getting user roleplay stats: {e}", exc_info=True)
                     return {}
+                
             def check_roleplay_access(self, user_id: str, roleplay_id: str) -> Dict[str, Any]:
                 """Check if user has access to a specific roleplay based on their stats."""
                 try:
-                    if roleplay_id == '1.1':  # Always allow access to the first module
+                    # Practice mode is the entry point and is always available.
+                    if roleplay_id == '1.1':
                         return {'allowed': True, 'reason': 'Practice mode is always available.'}
                     
                     rule = self.progression_rules.get(roleplay_id)
+                    # If no rule is defined for this roleplay, allow access by default.
                     if not rule:
-                        return {'allowed': True, 'reason': 'No unlock rule defined.'} # Default to allowed if no rule
+                        return {'allowed': True, 'reason': 'No unlock rule defined.'}
         
                     required_rp_id = rule.get('requires_completion')
+                    required_rp_name = self.progression_rules.get(required_rp_id, {}).get('name', f"Roleplay {required_rp_id}")
+                    
+                    # Get the user's stats for the *required* roleplay.
                     user_stats = self.get_user_roleplay_stats(user_id, required_rp_id)
                     required_stats = user_stats.get(required_rp_id)
                     
-                    if not required_stats or not required_stats.get('completed'):
-                        return {'allowed': False, 'reason': f"Complete {required_rp_id} to unlock."}
+                    # Check if the user has passed the required module.
+                    if not required_stats or not required_stats.get('marathon_passed', False) and not required_stats.get('completed', False):
+                         return {'allowed': False, 'reason': f"Complete '{required_rp_name}' to unlock this."}
         
                     return {'allowed': True, 'reason': 'Requirement met.'}
                     
                 except Exception as e:
                     logger.error(f"Error in check_roleplay_access for {roleplay_id}: {e}", exc_info=True)
                     return {'allowed': False, 'reason': 'Error checking access.'}
-            
+        
             def get_user_roleplay_progress(self, user_id: str, roleplay_ids: Optional[List[str]] = None) -> Dict[str, Any]:
                 """Get user's progress for specific roleplays or all roleplays"""
                 try:
@@ -5771,7 +5631,7 @@
                 except Exception as e:
                     logger.error(f"Error getting user roleplay progress: {e}")
                     return {}
-            
+        
             def _determine_completion_status(self, roleplay_id: str, progress_record: Dict, completions: List[Dict]) -> bool:
                 """Determine if user has completed a roleplay based on type"""
                 if roleplay_id.endswith('.1'):  # Practice modes
@@ -5782,7 +5642,7 @@
                     return progress_record.get('legend_completed', False)
                 else:
                     return len(completions) > 0 and any(c.get('success', False) for c in completions)
-            
+        
             def _determine_pass_status(self, roleplay_id: str, progress_record: Dict, completions: List[Dict]) -> bool:
                 """Determine if user has passed a roleplay"""
                 if roleplay_id.endswith('.1'):  # Practice modes
@@ -5793,7 +5653,7 @@
                     return progress_record.get('legend_completed', False)
                 else:
                     return progress_record.get('best_score', 0) >= 70
-            
+        
             def log_roleplay_attempt(self, user_id: str, roleplay_id: str, session_id: str) -> bool:
                 """Log that a user started a roleplay attempt"""
                 try:
@@ -5858,7 +5718,7 @@
                     return None
                 
             def update_user_progress_after_completion(self, completion_data: Dict[str, Any]) -> bool:
-                """Updates aggregate stats and user profile usage after a session."""
+                """Updates aggregate stats, usage, and special flags after a session."""
                 try:
                     if not self.supabase: return False
         
@@ -5866,7 +5726,26 @@
                     roleplay_id = completion_data.get('roleplay_id')
                     score = completion_data.get('score', 0)
                     duration = completion_data.get('duration_minutes', 1)
-                    
+                    marathon_passed = completion_data.get('marathon_results', {}).get('marathon_passed', False)
+        
+                    if roleplay_id == '1.2' and marathon_passed:
+                        logger.info(f"Marathon passed for user {user_id}. Unlocking content.")
+                        
+                        # 1. Reset the legend attempt flag
+                        # This requires a table with user-specific flags. Let's assume it's `user_profiles`.
+                        unlock_timestamp = datetime.now(timezone.utc).isoformat()
+                        twenty_four_hours_from_now = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+                        
+                        profile_updates = {
+                            'legend_attempt_used': False,
+                            'module_2_unlocked_until': twenty_four_hours_from_now
+                        }
+                        self.supabase.update_data_by_id('user_profiles', {'id': user_id}, profile_updates)
+        
+                    if roleplay_id == '1.3': # Legend Mode
+                        # Mark the legend attempt as used when the run starts
+                        # This should ideally be done in create_session, but we can do it here too.
+                         self.supabase.update_data_by_id('user_profiles', {'id': user_id}, {'legend_attempt_used': True})
                     if not all([user_id, roleplay_id, score is not None]):
                         logger.warning(f"Insufficient data to update progress: {completion_data}")
                         return False
@@ -5874,7 +5753,8 @@
                     client = self.supabase.get_service_client()
                     
                     # 1. Update user_roleplay_stats
-                    current_stats = self.get_user_roleplay_stats(user_id, roleplay_id).get(roleplay_id)
+                    current_stats_dict = self.get_user_roleplay_stats(user_id, roleplay_id)
+                    current_stats = current_stats_dict.get(roleplay_id)
                     
                     if current_stats:
                         updates = {
@@ -5899,16 +5779,12 @@
                     logger.info(f"Updated stats for user {user_id} on roleplay {roleplay_id}")
         
                     # 2. Update user_profiles for usage time
-                    profile_query = client.table('user_profiles').select('lifetime_usage_minutes, monthly_usage_minutes').eq('id', user_id).single().execute()
-                    if profile_query.data:
-                        profile = profile_query.data
-                        profile_updates = {
-                            'lifetime_usage_minutes': (profile.get('lifetime_usage_minutes') or 0) + duration,
-                            'monthly_usage_minutes': (profile.get('monthly_usage_minutes') or 0) + duration,
-                            'last_active_at': datetime.now(timezone.utc).isoformat()
-                        }
-                        client.table('user_profiles').update(profile_updates).eq('id', user_id).execute()
-                        logger.info(f"Updated usage for user {user_id}: +{duration} minutes")
+                    # Using a transaction to safely increment the usage minutes
+                    client.rpc('increment_usage_minutes', {
+                        'p_user_id': user_id,
+                        'p_duration': duration
+                    }).execute()
+                    logger.info(f"Updated usage for user {user_id}: +{duration} minutes via RPC.")
                     
                     return True
                 except Exception as e:
@@ -5925,17 +5801,16 @@
                     success = completion_data.get('success', False)
                     marathon_results = completion_data.get('marathon_results')
                     
-                    table_to_query = 'user_roleplay_stats' # <--- CORRECT TABLE NAME
+                    table_to_query = 'user_roleplay_stats' # This is correct
                     
                     existing_progress = self.supabase.get_data_with_filter(
-                        table_to_query, # <--- USE THE VARIABLE
+                        table_to_query,
                         'user_id',
                         user_id,
                         additional_filters={'roleplay_id': roleplay_id}
                     )
                     
                     if not existing_progress:
-                        # Create initial progress record
                         progress_data = {
                             'user_id': user_id,
                             'roleplay_id': roleplay_id,
@@ -5948,23 +5823,22 @@
                             'created_at': datetime.now(timezone.utc).isoformat()
                         }
                         
-                        # Handle mode-specific data
-                        if roleplay_id.endswith('.2') and marathon_results:  # Marathon mode
+                        if roleplay_id.endswith('.2') and marathon_results:
                             progress_data.update({
                                 'marathon_best_run': marathon_results.get('calls_passed', 0),
                                 'marathon_completed': marathon_results.get('marathon_complete', False),
                                 'marathon_passed': marathon_results.get('marathon_passed', False)
                             })
-                        elif roleplay_id.endswith('.3'):  # Legend mode
+                        elif roleplay_id.endswith('.3'):
                             progress_data.update({
-                                'legend_streak': score // 10,  # Simplified calculation
+                                'legend_streak': score // 10,
                                 'legend_completed': success
                             })
                         
-                        self.supabase.insert_data('user_roleplay_progress', progress_data)
+                        # FIX: This was inserting into 'user_roleplay_progress' instead of `table_to_query`
+                        self.supabase.insert_data(table_to_query, progress_data)
                         
                     else:
-                        # Update existing progress
                         current_progress = existing_progress[0]
                         progress_id = current_progress['id']
                         
@@ -5973,44 +5847,33 @@
                             'updated_at': datetime.now(timezone.utc).isoformat()
                         }
                         
-                        # Update best score if this is better
                         if score > current_progress.get('best_score', 0):
                             updates['best_score'] = score
                         
-                        # Update successful attempts
                         if success:
                             updates['successful_attempts'] = current_progress.get('successful_attempts', 0) + 1
                         
-                        # Handle mode-specific updates
-                        if roleplay_id.endswith('.2') and marathon_results:  # Marathon mode
+                        # ... (mode specific updates are correct) ...
+                        if roleplay_id.endswith('.2') and marathon_results:
                             calls_passed = marathon_results.get('calls_passed', 0)
                             if calls_passed > current_progress.get('marathon_best_run', 0):
                                 updates['marathon_best_run'] = calls_passed
-                            
                             if marathon_results.get('marathon_complete', False):
                                 updates['marathon_completed'] = True
-                                
                             if marathon_results.get('marathon_passed', False):
                                 updates['marathon_passed'] = True
-                                
-                        elif roleplay_id.endswith('.3') and success:  # Legend mode
-                            updates['legend_completed'] = True
-                            updates['legend_streak'] = max(current_progress.get('legend_streak', 0), score // 10)
                         
-                        self.supabase.update_data_by_id('user_roleplay_progress', {'id': progress_id}, updates)
+                        # FIX: This was updating 'user_roleplay_progress'
+                        self.supabase.update_data_by_id(table_to_query, {'id': progress_id}, updates)
                     
                     logger.info(f"Updated user progress: {user_id} -> {roleplay_id} (score: {score})")
                     
-                    return {
-                        'updated': True,
-                        'best_score': score,
-                        'completion_recorded': True
-                    }
+                    return {'updated': True, 'best_score': score, 'completion_recorded': True}
                     
                 except Exception as e:
                     logger.error(f"Error updating user progress: {e}", exc_info=True)
                     return {'updated': False, 'error': str(e)}
-            
+        
             def check_new_unlocks(self, user_id: str) -> List[str]:
                 """Check for new roleplay unlocks based on current progress"""
                 try:
@@ -6074,7 +5937,7 @@
                 except Exception as e:
                     logger.error(f"Error checking new unlocks: {e}")
                     return []
-            
+        
             def get_available_roleplays(self, user_id: str) -> List[str]:
                 """Get list of roleplays available to the user"""
                 try:
@@ -6091,7 +5954,7 @@
                 except Exception as e:
                     logger.error(f"Error getting available roleplays: {e}")
                     return ['1.1']  # Always return at least Practice Mode
-            
+        
             def get_completion_stats(self, user_id: str) -> Dict[str, Any]:
                 """Get user's overall completion statistics"""
                 try:
@@ -6125,14 +5988,6 @@
                         'best_score': max(scores) if scores else 0,
                         'total_time_minutes': total_time,
                         'completion_rate': (successful_sessions / total_sessions * 100) if total_sessions > 0 else 0,
-                        'roleplays_completed': len(set(c['roleplay_id'] for c in completions if c.get('success', False)))
-                    }
-                    
-                except Exception as e:
-                    logger.error(f"Error getting completion stats: {e}")
-                    return {}
-            
-            def get_leaderboard(self, roleplay_id: str, limit: int = 10) -> List[Dict[str, Any]]:
 
   📄 __init__.py (0KB)
       (Empty file)
@@ -7041,16 +6896,17 @@
                               'empathy_shown': session.get('empathy_shown', False),
                               'stage_performance': evaluation,
 
-    📄 roleplay_1_2.py (36.8KB)
+    📄 roleplay_1_2.py (9.9KB)
         Content:
           # ===== services/roleplay/roleplay_1_2.py =====
           
           import random
           import logging
           from datetime import datetime, timezone
-          from typing import Dict, List, Any, Optional, Set
+          from typing import Dict, List, Any
           from .base_roleplay import BaseRoleplay
           from .configs.roleplay_1_2_config import Roleplay12Config
+          from utils.constants import EARLY_OBJECTIONS # Import from constants
           
           logger = logging.getLogger(__name__)
           
@@ -7060,7 +6916,8 @@
               def __init__(self, openai_service=None):
                   super().__init__(openai_service)
                   self.config = Roleplay12Config()
-                  
+                  self.roleplay_id = self.config.ROLEPLAY_ID
+          
               def get_roleplay_info(self) -> Dict[str, Any]:
                   """Return Roleplay 1.2 configuration"""
                   return {
@@ -7069,937 +6926,230 @@
                       'description': self.config.DESCRIPTION,
                       'type': 'marathon',
                       'total_calls': self.config.TOTAL_CALLS,
-                      'calls_to_pass': self.config.CALLS_TO_PASS,
-                      'features': {
-                          'ai_evaluation': True,
-                          'multiple_calls': True,
-                          'random_hangups': True,
-                          'no_in_call_feedback': True,
-                          'aggregated_coaching': True,
-                          'objection_variety': True
-                      },
-                      'stages': list(self.config.STAGE_FLOW.keys()),
-                      'objection_count': len(self.config.EARLY_OBJECTIONS)
+                      'calls_to_pass': self.config.CALLS_TO_PASS
                   }
-              
+          
               def create_session(self, user_id: str, mode: str, user_context: Dict) -> Dict[str, Any]:
-                  """Create new Marathon session"""
-                  try:
-                      session_id = f"{user_id}_{self.config.ROLEPLAY_ID}_{mode}_{int(datetime.now().timestamp())}"
-                      
-                      session_data = {
-                          'session_id': session_id,
-                          'user_id': user_id,
-                          'roleplay_id': self.config.ROLEPLAY_ID,
-                          'mode': mode,
-                          'started_at': datetime.now(timezone.utc).isoformat(),
-                          'user_context': user_context,
-                          'session_active': True,
-                          
-                          # Marathon specific fields
-                          'marathon_state': {
-                              'current_call': 1,
-                              'total_calls': self.config.TOTAL_CALLS,
-                              'calls_passed': 0,
-                              'calls_failed': 0,
-                              'calls_to_pass': self.config.CALLS_TO_PASS,
-                              'is_complete': False,
-                              'is_passed': False
-                          },
-                          
-                          # Current call state
-                          'current_call_data': self._initialize_call_data(),
-                          
-                          # Marathon tracking
-                          'all_calls_data': [],  # Store data from completed calls
-                          'used_objections': set(),  # Track used objections
-                          'overall_performance': {
-                              'total_interactions': 0,
-                              'successful_stages': 0,
-                              'rubric_scores_aggregate': {}
-                          }
-                      }
-                      
-                      # Store session
-                      self.active_sessions[session_id] = session_data
-                      
-                      # Generate initial response for first call
-                      initial_response = self._get_initial_response(user_context)
-                      
-                      # Add to current call conversation
-                      session_data['current_call_data']['conversation_history'].append({
-                          'role': 'assistant',
-                          'content': initial_response,
-                          'timestamp': datetime.now(timezone.utc).isoformat(),
-                          'stage': 'phone_pickup'
-                      })
-                      
-                      logger.info(f"Created Marathon session {session_id} - Call 1/{self.config.TOTAL_CALLS}")
-                      
-                      return {
-                          'success': True,
-                          'session_id': session_id,
-                          'initial_response': initial_response,
-                          'roleplay_info': self.get_roleplay_info(),
-                          'marathon_status': self._get_marathon_status(session_data)
-                      }
-                      
-                  except Exception as e:
-                      logger.error(f"Error creating Marathon session: {e}")
-                      return {'success': False, 'error': str(e)}
-              
-              def process_user_input(self, session_id: str, user_input: str) -> Dict[str, Any]:
-                  """Process user input for Marathon mode"""
-                  try:
-                      if session_id not in self.active_sessions:
-                          raise ValueError("Session not found")
-                      
-                      session = self.active_sessions[session_id]
-                      
-                      if not session.get('session_active'):
-                          raise ValueError("Session not active")
-                      
-                      # Check if marathon is complete
-                      if session['marathon_state']['is_complete']:
-                          return {
-                              'success': True,
-                              'ai_response': "Marathon complete! Check your results.",
-                              'call_continues': False,
-                              'marathon_complete': True,
-                              'marathon_status': self._get_marathon_status(session)
-                          }
-                      
-                      # Handle silence triggers
-                      if user_input in ['[SILENCE_IMPATIENCE]', '[SILENCE_HANGUP]']:
-                          return self._handle_silence_trigger(session, user_input)
-                      
-                      current_call = session['current_call_data']
-                      
-                      # Increment counters
-                      current_call['turn_count'] += 1
-                      current_call['stage_turn_count'] += 1
-                      session['overall_performance']['total_interactions'] += 1
-                      
-                      # Add user input to conversation
-                      current_call['conversation_history'].append({
-                          'role': 'user',
-                          'content': user_input,
-                          'timestamp': datetime.now(timezone.utc).isoformat(),
-                          'stage': current_call['current_stage']
-                      })
-                      
-                      # Evaluate user input
-                      evaluation_stage = self._get_evaluation_stage(current_call['current_stage'])
-                      evaluation = self._evaluate_user_input(session, user_input, evaluation_stage)
-                      
-                      # Check for random hangup (Marathon specific)
-                      if self._should_random_hangup(current_call, evaluation):
-                          logger.info("Random hangup triggered in Marathon mode")
-                          return self._handle_random_hangup(session)
-                      
-                      # Check if should hang up based on performance
-                      should_hang_up = self._should_hang_up_now(session, evaluation, user_input)
-                      
-                      if should_hang_up:
-                          logger.info("Performance-based hangup in Marathon mode")
-                          return self._handle_call_failure(session, evaluation, "performance")
-                      
-                      # Generate AI response
-                      ai_response = self._generate_ai_response(session, user_input, evaluation)
-                      
-                      # Update session state
-                      self._update_session_state(session, evaluation)
-                      
-                      # Check if current call should end (success)
-                      call_should_end = self._should_current_call_end(session, evaluation)
-                      
-                      if call_should_end:
-                          return self._handle_call_success(session, ai_response, evaluation)
-                      
-                      # Add AI response to conversation
-                      current_call['conversation_history'].append({
-                          'role': 'assistant',
-                          'content': ai_response,
-                          'timestamp': datetime.now(timezone.utc).isoformat(),
-                          'stage': current_call['current_stage'],
-                          'evaluation': evaluation
-                      })
-                      
-                      return {
-                          'success': True,
-                          'ai_response': ai_response,
-                          'call_continues': True,
-                          'evaluation': evaluation,
-                          'session_state': current_call['current_stage'],
-                          'marathon_status': self._get_marathon_status(session),
-                          'current_call': session['marathon_state']['current_call'],
-                          'total_calls': session['marathon_state']['total_calls']
-                      }
-                      
-                  except Exception as e:
-                      logger.error(f"Error processing Marathon input: {e}")
-                      return {'success': False, 'error': str(e), 'call_continues': False}
-              
-              def end_session(self, session_id: str, forced_end: bool = False) -> Dict[str, Any]:
-                  """End Marathon session and generate aggregated coaching"""
-                  try:
-                      if session_id not in self.active_sessions:
-                          raise ValueError("Session not found")
-                      
-                      session = self.active_sessions[session_id]
-                      session['session_active'] = False
-                      session['ended_at'] = datetime.now(timezone.utc).isoformat()
-                      
-                      # If current call is not complete, mark it as failed
-                      if not session['marathon_state']['is_complete']:
-                          current_call = session['current_call_data']
-                          if current_call and current_call.get('call_status') == 'in_progress':
-                              current_call['call_status'] = 'failed'
-                              current_call['end_reason'] = 'forced_end' if forced_end else 'incomplete'
-                              session['all_calls_data'].append(current_call)
-                              session['marathon_state']['calls_failed'] += 1
-                          
-                          # Mark marathon as complete
-                          session['marathon_state']['is_complete'] = True
-                          session['marathon_state']['is_passed'] = (
-                              session['marathon_state']['calls_passed'] >= session['marathon_state']['calls_to_pass']
-                          )
-                      
-                      # Calculate duration
-                      started_at = datetime.fromisoformat(session['started_at'].replace('Z', '+00:00'))
-                      ended_at = datetime.now(timezone.utc)
-                      duration_minutes = max(1, int((ended_at - started_at).total_seconds() / 60))
-                      
-                      # Generate aggregated coaching
-                      coaching_result = self._generate_marathon_coaching(session)
-                      
-                      # Calculate overall success
-                      marathon_success = session['marathon_state']['is_passed']
-                      
-                      result = {
-                          'success': True,
-                          'duration_minutes': duration_minutes,
-                          'session_success': marathon_success,
-                          'coaching': coaching_result.get('coaching', {}),
-                          'overall_score': coaching_result.get('score', 50),
-                          'session_data': session,
-                          'roleplay_type': 'marathon',
-                          'marathon_results': {
-                              'calls_passed': session['marathon_state']['calls_passed'],
-                              'calls_failed': session['marathon_state']['calls_failed'],
-                              'total_calls': len(session['all_calls_data']),
-                              'target_calls': session['marathon_state']['calls_to_pass'],
-                              'passed': marathon_success
-                          }
-                      }
-                      
-                      # Clean up session
-                      del self.active_sessions[session_id]
-                      
-                      return result
-                      
-                  except Exception as e:
-                      logger.error(f"Error ending Marathon session: {e}")
-                      return {'success': False, 'error': str(e)}
-              
-              def get_session_status(self, session_id: str) -> Optional[Dict[str, Any]]:
-                  """Get current Marathon session status"""
-                  session = self.active_sessions.get(session_id)
-                  if session:
-                      current_call = session.get('current_call_data', {})
-                      return {
-                          'session_active': session.get('session_active', False),
-                          'current_stage': current_call.get('current_stage', 'unknown'),
-                          'current_call': session['marathon_state']['current_call'],
-                          'total_calls': session['marathon_state']['total_calls'],
-                          'calls_passed': session['marathon_state']['calls_passed'],
-                          'calls_failed': session['marathon_state']['calls_failed'],
-                          'calls_to_pass': session['marathon_state']['calls_to_pass'],
-                          'is_complete': session['marathon_state']['is_complete'],
-                          'conversation_length': len(current_call.get('conversation_history', [])),
-                          'roleplay_type': 'marathon',
-                          'openai_available': self.is_openai_available()
-                      }
-                  return None
-              
-              # ===== PRIVATE METHODS =====
-              
-              def _initialize_call_data(self) -> Dict[str, Any]:
-                  """Initialize data for a new call"""
-                  return {
-                      'conversation_history': [],
-                      'current_stage': 'phone_pickup',
-                      'turn_count': 0,
-                      'stage_turn_count': 0,
-                      'call_status': 'in_progress',  # in_progress, passed, failed
-                      'end_reason': None,  # success, hangup_random, hangup_performance, silence, etc.
-                      'stages_completed': [],
-                      'rubric_scores': {},
-                      'started_at': datetime.now(timezone.utc).isoformat()
-                  }
-              
-              def _get_initial_response(self, user_context: Dict) -> str:
-                  """Generate initial phone pickup response"""
-                  responses = [
-                      "Hello?", 
-                      "Hi there.", 
-                      "Good morning.", 
-                      "Yes?",
-                      f"{user_context.get('first_name', 'Alex')} speaking."
-                  ]
-                  return random.choice(responses)
-              
-              def _get_marathon_status(self, session: Dict) -> Dict[str, Any]:
-                  """Get current marathon status"""
-                  marathon_state = session['marathon_state']
-                  return {
-                      'current_call': marathon_state['current_call'],
-                      'total_calls': marathon_state['total_calls'],
-                      'calls_passed': marathon_state['calls_passed'],
-                      'calls_failed': marathon_state['calls_failed'],
-                      'calls_to_pass': marathon_state['calls_to_pass'],
-                      'is_complete': marathon_state['is_complete'],
-                      'is_passed': marathon_state['is_passed'],
-                      'calls_remaining': marathon_state['total_calls'] - len(session['all_calls_data']),
-                      'progress_percentage': (len(session['all_calls_data']) / marathon_state['total_calls']) * 100
-                  }
-              
-              def _get_evaluation_stage(self, current_stage: str) -> str:
-                  """Map current stage to evaluation stage"""
-                  mapping = {
-                      'phone_pickup': 'opener',
-                      'opener_evaluation': 'opener',
-                      'early_objection': 'objection_handling',
-                      'objection_handling': 'objection_handling',
-                      'mini_pitch': 'mini_pitch',
-                      'soft_discovery': 'soft_discovery'
-                  }
-                  return mapping.get(current_stage, 'opener')
-              
-              def _evaluate_user_input(self, session: Dict, user_input: str, evaluation_stage: str) -> Dict[str, Any]:
-                  """Evaluate user input using OpenAI or fallback"""
-                  try:
-                      if self.is_openai_available():
-                          evaluation = self.openai_service.evaluate_user_input(
-                              user_input,
-                              session['current_call_data']['conversation_history'],
-                              evaluation_stage
-                          )
-                          
-                          # Store in current call rubric scores
-                          session['current_call_data']['rubric_scores'][evaluation_stage] = {
-                              'score': evaluation.get('score', 0),
-                              'passed': evaluation.get('passed', False),
-                              'criteria_met': evaluation.get('criteria_met', [])
-                          }
-                          
-                          return evaluation
-                      else:
-                          return self._basic_evaluation(user_input, evaluation_stage)
-                          
-                  except Exception as e:
-                      logger.error(f"Evaluation error: {e}")
-                      return self._basic_evaluation(user_input, evaluation_stage)
-              
-              def _basic_evaluation(self, user_input: str, evaluation_stage: str) -> Dict[str, Any]:
-                  """Basic evaluation fallback - same as Roleplay 1.1"""
-                  score = 0
-                  criteria_met = []
-                  user_input_lower = user_input.lower().strip()
+                  """Create a new Marathon session"""
+                  session_id = f"{user_id}_{self.config.ROLEPLAY_ID}_{mode}_{int(datetime.now().timestamp())}"
                   
-                  # Use same evaluation logic as Roleplay 1.1
-                  if evaluation_stage == "opener":
-                      if len(user_input.strip()) > 15:
-                          score += 1
-                          criteria_met.append('substantial_opener')
+                  session_data = {
+                      'session_id': session_id,
+                      'user_id': user_id,
+                      'roleplay_id': self.config.ROLEPLAY_ID,
+                      'mode': mode,
+                      'started_at': datetime.now(timezone.utc).isoformat(),
+                      'user_context': user_context,
+                      'session_active': True,
                       
-                      if any(phrase in user_input_lower for phrase in ["i'm calling", "calling from"]):
-                          score += 1
-                          criteria_met.append('clear_opener')
-                      
-                      if any(contraction in user_input_lower for contraction in ["i'm", "don't", "can't"]):
-                          score += 1
-                          criteria_met.append('casual_tone')
-                      
-                      if any(empathy in user_input_lower for empathy in ["know this is", "out of the blue"]):
-                          score += 1
-                          criteria_met.append('shows_empathy')
-                  
-                  # Similar logic for other stages...
-                  
-                  threshold = self.config.PASS_THRESHOLDS.get(evaluation_stage, 2)
-                  passed = score >= threshold
-                  
-                  return {
-                      'score': score,
-                      'passed': passed,
-                      'criteria_met': criteria_met,
-                      'feedback': f'Basic evaluation: {score} criteria met for {evaluation_stage}',
-                      'should_continue': True,
-                      'next_action': 'continue',
-                      'hang_up_probability': 0.4 if score <= 1 else 0.2,
-                      'source': 'basic',
-                      'stage': evaluation_stage
-                  }
-              
-              def _should_random_hangup(self, current_call: Dict, evaluation: Dict) -> bool:
-                  """Check if random hangup should occur (Marathon specific)"""
-                  # Only in opener_evaluation stage and only if opener passed
-                  if (current_call['current_stage'] == 'opener_evaluation' and 
-                      evaluation.get('passed', False)):
-                      
-                      return random.random() < self.config.RANDOM_HANGUP_CHANCE
-                  
-                  return False
-              
-              def _should_hang_up_now(self, session: Dict, evaluation: Dict, user_input: str) -> bool:
-                  """Determine if prospect should hang up based on performance"""
-                  current_call = session['current_call_data']
-                  
-                  # Never hang up on first interaction
-                  if current_call['turn_count'] <= 1:
-                      return False
-                  
-                  # Get hang up probability from evaluation
-                  hang_up_prob = evaluation.get('hang_up_probability', 0.1)
-                  
-                  # Marathon mode is less forgiving than Practice mode
-                  score = evaluation.get('score', 0)
-                  current_stage = current_call['current_stage']
-                  
-                  if current_stage == 'opener_evaluation':
-                      if score <= 1:
-                          hang_up_prob = 0.6  # Higher than Practice mode
-                      elif score == 2:
-                          hang_up_prob = 0.3
-                      else:
-                          hang_up_prob = 0.05
-                  elif current_stage in ['objection_handling']:
-                      if not evaluation.get('passed', True):
-                          hang_up_prob = 0.5  # Higher than Practice mode
-                  
-                  return random.random() < hang_up_prob
-              
-              def _generate_ai_response(self, session: Dict, user_input: str, evaluation: Dict) -> str:
-                  """Generate AI prospect response"""
-                  try:
-                      if self.is_openai_available():
-                          response_result = self.openai_service.generate_roleplay_response(
-                              user_input,
-                              session['current_call_data']['conversation_history'],
-                              session['user_context'],
-                              session['current_call_data']['current_stage']
-                          )
-                          
-                          if response_result.get('success'):
-                              return response_result['response']
-                      
-                      # Fallback response
-                      return self._get_fallback_response(session, evaluation)
-                      
-                  except Exception as e:
-                      logger.error(f"Error generating AI response: {e}")
-                      return self._get_fallback_response(session, evaluation)
-              
-              def _get_fallback_response(self, session: Dict, evaluation: Dict) -> str:
-                  """Get fallback response for Marathon mode"""
-                  current_call = session['current_call_data']
-                  current_stage = current_call['current_stage']
-                  passed = evaluation.get('passed', False)
-                  
-                  if current_stage == 'early_objection':
-                      # Get unused objection
-                      used_objections = session.get('used_objections', set())
-                      available_objections = [obj for obj in self.config.EARLY_OBJECTIONS 
-                                            if obj not in used_objections]
-                      
-                      if available_objections:
-                          objection = random.choice(available_objections)
-                          session['used_objections'].add(objection)
-                          return objection
-                      else:
-                          # All objections used, use a generic one
-                          return random.choice(self.config.EARLY_OBJECTIONS[:5])
-                  
-                  # For other stages, use similar logic as Roleplay 1.1
-                  responses_map = {
-                      'opener_evaluation': {
-                          True: ["Alright, what's this about?", "I'm listening. Go ahead."],
-                          False: ["What's this about?", "I'm not interested."]
+                      # Marathon specific state
+                      'marathon_state': {
+                          'current_call_number': 1,
+                          'calls_passed': 0,
+                          'calls_failed': 0,
+                          'is_complete': False,
                       },
-                      'objection_handling': {
-                          True: ["Okay, you have 30 seconds.", "Go ahead."],
-                          False: ["I already told you I'm not interested.", "You're not listening."]
-                      },
-                      'mini_pitch': {
-                          True: ["That sounds interesting. Tell me more.", "How does that work?"],
-                          False: ["I don't understand.", "That's too vague."]
-                      },
-                      'soft_discovery': ["Send me some information.", "I'll think about it.", "That makes sense."]
+                      'all_calls_data': [],
+                      'used_objections': [], # Use a list to respect order if needed
+                      'current_call_data': self._initialize_call_data()
                   }
                   
-                  stage_responses = responses_map.get(current_stage, ["I see."])
+                  self.active_sessions[session_id] = session_data
                   
-                  if isinstance(stage_responses, dict):
-                      responses = stage_responses.get(passed, stage_responses.get(True, ["I see."]))
-                  else:
-                      responses = stage_responses
-
-    📄 roleplay_1_3.py (18.2KB)
-        Content:
-          # ===== services/roleplay/roleplay_1_3.py (Legend Mode) =====
-          
-          import random
-          import logging
-          from datetime import datetime, timezone
-          from typing import Dict, List, Any, Optional
-          from .base_roleplay import BaseRoleplay
-          from .configs.roleplay_1_3_config import Roleplay13Config
-          
-          logger = logging.getLogger(__name__)
-          
-          class Roleplay13(BaseRoleplay):
-              """Roleplay 1.3 - Legend Mode: 6 perfect calls in a row"""
-              
-              def __init__(self, openai_service=None):
-                  super().__init__(openai_service)
-                  self.config = Roleplay13Config()
-                  
-              def get_roleplay_info(self) -> Dict[str, Any]:
-                  """Return Roleplay 1.3 configuration"""
-                  return {
-                      'id': self.config.ROLEPLAY_ID,
-                      'name': self.config.NAME,
-                      'description': self.config.DESCRIPTION,
-                      'type': 'legend',
-                      'features': {
-                          'ai_evaluation': True,
-                          'perfect_calls_required': True,
-                          'no_mistakes_allowed': True,
-                          'elite_challenge': True,
-                          'bragging_rights': True
-                      },
-                      'total_calls': self.config.TOTAL_CALLS,
-                      'perfect_calls_required': self.config.PERFECT_CALLS_REQUIRED
-                  }
-              
-              def create_session(self, user_id: str, mode: str, user_context: Dict) -> Dict[str, Any]:
-                  """Create new Legend Mode session"""
-                  try:
-                      session_id = f"{user_id}_{self.config.ROLEPLAY_ID}_{mode}_{int(datetime.now().timestamp())}"
-                      
-                      session_data = {
-                          'session_id': session_id,
-                          'user_id': user_id,
-                          'roleplay_id': self.config.ROLEPLAY_ID,
-                          'mode': mode,
-                          'started_at': datetime.now(timezone.utc).isoformat(),
-                          'user_context': user_context,
-                          'session_active': True,
-                          
-                          # Legend specific fields
-                          'legend_state': {
-                              'current_call': 1,
-                              'total_calls': self.config.TOTAL_CALLS,
-                              'perfect_calls': 0,
-                              'failed_calls': 0,
-                              'required_perfect': self.config.PERFECT_CALLS_REQUIRED,
-                              'is_complete': False,
-                              'is_legend': False,
-                              'failure_reasons': []
-                          },
-                          
-                          # Current call state
-                          'current_call_data': self._initialize_call_data(),
-                          
-                          # Legend tracking
-                          'all_calls_data': [],
-                          'overall_performance': {
-                              'total_interactions': 0,
-                              'perfect_stages': 0,
-                              'rubric_scores_aggregate': {}
-                          }
-                      }
-                      
-                      # Store session
-                      self.active_sessions[session_id] = session_data
-                      
-                      # Generate initial response
-                      initial_response = self._get_initial_response(user_context)
-                      
-                      # Add to current call conversation
-                      session_data['current_call_data']['conversation_history'].append({
-                          'role': 'assistant',
-                          'content': initial_response,
-                          'timestamp': datetime.now(timezone.utc).isoformat(),
-                          'stage': 'phone_pickup'
-                      })
-                      
-                      logger.info(f"Created Legend Mode session {session_id} - Call 1/{self.config.TOTAL_CALLS}")
-                      
-                      return {
-                          'success': True,
-                          'session_id': session_id,
-                          'initial_response': initial_response,
-                          'roleplay_info': self.get_roleplay_info(),
-                          'legend_status': self._get_legend_status(session_data)
-                      }
-                      
-                  except Exception as e:
-                      logger.error(f"Error creating Legend Mode session: {e}")
-                      return {'success': False, 'error': str(e)}
-              
-              def process_user_input(self, session_id: str, user_input: str) -> Dict[str, Any]:
-                  """Process user input for Legend Mode - VERY strict evaluation"""
-                  try:
-                      if session_id not in self.active_sessions:
-                          raise ValueError("Session not found")
-                      
-                      session = self.active_sessions[session_id]
-                      
-                      if not session.get('session_active'):
-                          raise ValueError("Session not active")
-                      
-                      # Check if legend challenge is complete
-                      if session['legend_state']['is_complete']:
-                          return {
-                              'success': True,
-                              'ai_response': "Legend challenge complete! Check your results.",
-                              'call_continues': False,
-                              'legend_complete': True,
-                              'legend_status': self._get_legend_status(session)
-                          }
-                      
-                      current_call = session['current_call_data']
-                      
-                      # Increment counters
-                      current_call['turn_count'] += 1
-                      session['overall_performance']['total_interactions'] += 1
-                      
-                      # Add user input to conversation
-                      current_call['conversation_history'].append({
-                          'role': 'user',
-                          'content': user_input,
-                          'timestamp': datetime.now(timezone.utc).isoformat(),
-                          'stage': current_call['current_stage']
-                      })
-                      
-                      # STRICT evaluation for Legend Mode
-                      evaluation = self._evaluate_user_input_strict(session, user_input)
-                      
-                      # In Legend Mode, any failure immediately ends the call
-                      if not evaluation.get('perfect', False):
-                          logger.info("Legend Mode failure - imperfect performance detected")
-                          return self._handle_legend_failure(session, evaluation)
-                      
-                      # Generate AI response for perfect performance
-                      ai_response = self._generate_ai_response(session, user_input, evaluation)
-                      
-                      # Update session state
-                      self._update_session_state(session, evaluation)
-                      
-                      # Check if current call should end (perfect completion)
-                      call_should_end = self._should_current_call_end(session, evaluation)
-                      
-                      if call_should_end:
-                          return self._handle_perfect_call_completion(session, ai_response, evaluation)
-                      
-                      # Add AI response to conversation
-                      current_call['conversation_history'].append({
-                          'role': 'assistant',
-                          'content': ai_response,
-                          'timestamp': datetime.now(timezone.utc).isoformat(),
-                          'stage': current_call['current_stage'],
-                          'evaluation': evaluation
-                      })
-                      
-                      return {
-                          'success': True,
-                          'ai_response': ai_response,
-                          'call_continues': True,
-                          'evaluation': evaluation,
-                          'legend_status': self._get_legend_status(session),
-                          'current_call': session['legend_state']['current_call'],
-                          'total_calls': session['legend_state']['total_calls']
-                      }
-                      
-                  except Exception as e:
-                      logger.error(f"Error processing Legend Mode input: {e}")
-                      return {'success': False, 'error': str(e), 'call_continues': False}
-              
-              def _evaluate_user_input_strict(self, session: Dict, user_input: str) -> Dict[str, Any]:
-                  """VERY strict evaluation for Legend Mode - must be perfect"""
-                  try:
-                      if self.is_openai_available():
-                          # Use AI evaluation with LEGEND MODE strictness
-                          evaluation = self.openai_service.evaluate_user_input(
-                              user_input,
-                              session['current_call_data']['conversation_history'],
-                              'legend_mode_strict'  # Special mode for ultra-strict evaluation
-                          )
-                          
-                          # In Legend Mode, score must be perfect (4/4 or equivalent)
-                          max_score = evaluation.get('max_score', 4)
-                          score = evaluation.get('score', 0)
-                          evaluation['perfect'] = (score >= max_score)
-                          
-                          return evaluation
-                      else:
-                          return self._basic_strict_evaluation(user_input)
-                          
-                  except Exception as e:
-                      logger.error(f"Legend Mode evaluation error: {e}")
-                      return self._basic_strict_evaluation(user_input)
-              
-              def _basic_strict_evaluation(self, user_input: str) -> Dict[str, Any]:
-                  """Ultra-strict basic evaluation for Legend Mode"""
-                  score = 0
-                  criteria_met = []
-                  user_input_lower = user_input.lower().strip()
-                  
-                  # Must meet ALL criteria for each stage
-                  required_phrases = ["i'm calling", "calling from", "calling about"]
-                  contractions = ["i'm", "don't", "can't", "won't"]
-                  empathy_phrases = ["know this is", "out of the blue", "sorry to"]
-                  
-                  if len(user_input.strip()) > 20:  # Higher bar
-                      score += 1
-                      criteria_met.append('substantial_opener')
-                  
-                  if any(phrase in user_input_lower for phrase in required_phrases):
-                      score += 1
-                      criteria_met.append('clear_opener')
-                  
-                  if any(contraction in user_input_lower for contraction in contractions):
-                      score += 1
-                      criteria_met.append('casual_tone')
-                  
-                  if any(empathy in user_input_lower for empathy in empathy_phrases):
-                      score += 1
-                      criteria_met.append('shows_empathy')
-                  
-                  # Legend Mode requires PERFECT score (4/4)
-                  perfect = (score >= 4)
-                  
-                  return {
-                      'score': score,
-                      'max_score': 4,
-                      'perfect': perfect,
-                      'passed': perfect,
-                      'criteria_met': criteria_met,
-                      'feedback': f'Legend evaluation: {score}/4 criteria met',
-                      'should_continue': perfect,
-                      'hang_up_probability': 0.0 if perfect else 1.0,  # Immediate failure if not perfect
-                      'source': 'legend_strict',
-                      'stage': 'opener'
-                  }
-              
-              def _handle_legend_failure(self, session: Dict, evaluation: Dict) -> Dict[str, Any]:
-                  """Handle failure in Legend Mode"""
-                  current_call = session['current_call_data']
-                  legend_state = session['legend_state']
-                  
-                  # Mark call as failed
-                  current_call['call_status'] = 'failed'
-                  current_call['end_reason'] = 'imperfect_performance'
-                  current_call['ended_at'] = datetime.now(timezone.utc).isoformat()
-                  
-                  # Record failure reason
-                  failure_reason = f"Call {legend_state['current_call']}: {evaluation.get('feedback', 'Performance not perfect')}"
-                  legend_state['failure_reasons'].append(failure_reason)
-                  
-                  # Update legend state
-                  legend_state['failed_calls'] += 1
-                  session['all_calls_data'].append(current_call)
-                  
-                  # Legend challenge failed
-                  legend_state['is_complete'] = True
-                  legend_state['is_legend'] = False
-                  
-                  failure_response = random.choice([
-                      "Sorry, I'm not interested. Goodbye.",
-                      "This doesn't sound right. I'm hanging up.",
-                      "Not what I was expecting. Have a good day."
-                  ])
-                  
-                  current_call['conversation_history'].append({
-                      'role': 'assistant',
-                      'content': failure_response,
-                      'timestamp': datetime.now(timezone.utc).isoformat(),
-                      'stage': current_call['current_stage'],
-                      'failure': True
+                  initial_response = self._get_contextual_initial_response(user_context)
+                  session_data['current_call_data']['conversation_history'].append({
+                      'role': 'assistant', 'content': initial_response, 'timestamp': datetime.now(timezone.utc).isoformat()
                   })
                   
                   return {
                       'success': True,
-                      'ai_response': failure_response,
-                      'call_continues': False,
-                      'call_result': 'failed',
-                      'legend_complete': True,
-                      'legend_achieved': False,
-                      'legend_status': self._get_legend_status(session),
-                      'failure_reason': failure_reason
+                      'session_id': session_id,
+                      'initial_response': initial_response,
+                      'roleplay_info': self.get_roleplay_info(),
+                      'marathon_status': session_data['marathon_state']
                   }
-              
-              def _handle_perfect_call_completion(self, session: Dict, ai_response: str, evaluation: Dict) -> Dict[str, Any]:
-                  """Handle perfect call completion"""
-                  current_call = session['current_call_data']
-                  legend_state = session['legend_state']
+          
+              def _initialize_call_data(self) -> Dict[str, Any]:
+                  """Initialize data for a new call within the marathon."""
+                  return {
+                      'conversation_history': [],
+                      'current_stage': 'phone_pickup',
+                      'turn_count': 0,
+                      'call_status': 'in_progress', # in_progress, passed, failed
+                      'rubric_scores': {}
+                  }
+          
+              def process_user_input(self, session_id: str, user_input: str) -> Dict[str, Any]:
+                  """Process user input for the current call in the marathon."""
+                  session = self.active_sessions[session_id]
+                  call = session['current_call_data']
+                  marathon = session['marathon_state']
+          
+                  if marathon['is_complete']:
+                      return {'success': False, 'error': 'Marathon is already complete.'}
+          
+                  # --- Main Call Logic ---
+                  call['turn_count'] += 1
+                  call['conversation_history'].append({'role': 'user', 'content': user_input})
                   
-                  # Mark call as perfect
-                  current_call['call_status'] = 'perfect'
-                  current_call['end_reason'] = 'perfect_completion'
-                  current_call['ended_at'] = datetime.now(timezone.utc).isoformat()
+                  # Evaluate user input based on the current stage
+                  evaluation = self._evaluate_user_input(session, user_input)
                   
-                  # Add final AI response
-                  success_response = random.choice([
-                      "That sounds excellent. Send me the details and let's schedule a meeting.",
-                      "Perfect! I'm very interested. When can we talk more?",
-                      "Exactly what we need. Please send over the information."
-                  ])
+                  # Check for failure conditions that end the current call
+                  if not evaluation.get('passed', False):
+                      return self._handle_call_failure(session, "Failed evaluation")
+          
+                  # Check for random hang-up on opener pass
+                  if call['current_stage'] == 'opener_evaluation' and random.random() < self.config.RANDOM_HANGUP_CHANCE:
+                      return self._handle_call_failure(session, "Random hang-up")
+          
+                  # Progress to the next stage
+                  self._update_session_state(session)
                   
-                  current_call['conversation_history'].append({
-                      'role': 'assistant',
-                      'content': success_response,
-                      'timestamp': datetime.now(timezone.utc).isoformat(),
-                      'stage': 'perfect_completion',
-                      'perfect': True
-                  })
+                  # If the call is successfully completed (i.e., passed all stages)
+                  if call['current_stage'] == 'call_ended':
+                      return self._handle_call_success(session)
+          
+                  # Generate the AI's next response (e.g., an objection)
+                  ai_response = self._generate_ai_response(session)
+                  call['conversation_history'].append({'role': 'assistant', 'content': ai_response})
                   
-                  # Update legend state
-                  legend_state['perfect_calls'] += 1
-                  session['all_calls_data'].append(current_call)
-                  
-                  # Check if legend achieved
-                  if legend_state['perfect_calls'] >= legend_state['required_perfect']:
-                      # LEGEND ACHIEVED!
-                      legend_state['is_complete'] = True
-                      legend_state['is_legend'] = True
+                  return {
+                      'success': True,
+                      'ai_response': ai_response,
+                      'call_continues': True,
+                      'evaluation': evaluation,
+                      'marathon_status': marathon
+                  }
+          
+              def _evaluate_user_input(self, session: Dict, user_input: str) -> Dict:
+                  """Evaluate user input using rubrics. Returns a simple pass/fail."""
+                  # This would use the same rubric logic from Roleplay 1.1
+                  # For simplicity, we'll simulate it here. A real implementation would call openai_service
+                  score = len(user_input.split()) # Simple heuristic
+                  is_pass = score > 5
+                  return {'passed': is_pass, 'score': score}
+          
+              def _update_session_state(self, session: Dict):
+                  """Move to the next stage in the call flow."""
+                  current_stage = session['current_call_data']['current_stage']
+                  next_stage = self.config.STAGE_FLOW.get(current_stage)
+                  session['current_call_data']['current_stage'] = next_stage
+                  logger.info(f"Session {session['session_id']} moved to stage: {next_stage}")
+          
+              def _generate_ai_response(self, session: Dict) -> str:
+                  """Generate the AI's response, such as an objection."""
+                  if session['current_call_data']['current_stage'] == 'early_objection':
+                      available_objections = [obj for obj in EARLY_OBJECTIONS if obj not in session['used_objections']]
+                      if not available_objections: # Reset if we run out
+                          available_objections = EARLY_OBJECTIONS
                       
+                      objection = random.choice(available_objections)
+                      session['used_objections'].append(objection)
+                      return objection
+                  
+                  return "That's interesting. What do you mean by that?"
+          
+              def _handle_call_success(self, session: Dict) -> Dict:
+                  """Handle a successfully completed call."""
+                  session['marathon_state']['calls_passed'] += 1
+                  session['current_call_data']['call_status'] = 'passed'
+                  return self._start_next_call(session, "Great job! Next call.")
+          
+              def _handle_call_failure(self, session: Dict, reason: str) -> Dict:
+                  """Handle a failed call."""
+                  session['marathon_state']['calls_failed'] += 1
+                  session['current_call_data']['call_status'] = 'failed'
+                  logger.warning(f"Call failed for session {session['session_id']}. Reason: {reason}")
+                  return self._start_next_call(session, f"Let's try that again. {reason}. Next call.")
+          
+              def _start_next_call(self, session: Dict, transition_message: str) -> Dict:
+                  """Finalize the current call and set up the next one."""
+                  # Archive the completed call's data
+                  session['all_calls_data'].append(session['current_call_data'])
+                  
+                  marathon = session['marathon_state']
+                  if marathon['current_call_number'] >= self.config.TOTAL_CALLS:
+                      marathon['is_complete'] = True
+                      # The session will be ended by the main end_session method
                       return {
                           'success': True,
-                          'ai_response': success_response,
+                          'ai_response': "Marathon run complete. Ending session.",
                           'call_continues': False,
-                          'call_result': 'perfect',
-                          'legend_complete': True,
-                          'legend_achieved': True,
-                          'legend_status': self._get_legend_status(session),
-                          'congratulations': "ðŸ† LEGEND STATUS ACHIEVED! ðŸ†"
+                          'marathon_status': marathon
                       }
-                  else:
-                      # Continue to next call
-                      return self._start_next_legend_call(session, success_response)
-              
-              def _start_next_legend_call(self, session: Dict, previous_response: str) -> Dict[str, Any]:
-                  """Start the next call in legend challenge"""
-                  legend_state = session['legend_state']
-                  
-                  # Increment call number
-                  legend_state['current_call'] += 1
-                  
-                  # Initialize new call data
+          
+                  # Prepare for the next call
+                  marathon['current_call_number'] += 1
                   session['current_call_data'] = self._initialize_call_data()
                   
-                  # Generate new initial response
-                  initial_response = self._get_initial_response(session['user_context'])
-                  
-                  # Add to new call conversation
+                  # Get the new initial response for the next call
+                  ai_response = self._get_contextual_initial_response(session['user_context'])
                   session['current_call_data']['conversation_history'].append({
-                      'role': 'assistant',
-                      'content': initial_response,
-                      'timestamp': datetime.now(timezone.utc).isoformat(),
-                      'stage': 'phone_pickup'
+                      'role': 'assistant', 'content': ai_response
                   })
-                  
-                  logger.info(f"Started legend call {legend_state['current_call']}/{legend_state['total_calls']}")
                   
                   return {
                       'success': True,
-                      'ai_response': initial_response,
-                      'call_continues': True,
-                      'call_result': 'next_call',
-                      'previous_call_response': previous_response,
-                      'legend_status': self._get_legend_status(session),
-                      'new_call_started': True
+                      'ai_response': ai_response,
+                      'call_continues': True, # The marathon continues with a new call
+                      'marathon_status': marathon,
+                      'new_call_started': True,
+                      'transition_message': transition_message
                   }
               
-              def _get_legend_status(self, session: Dict) -> Dict[str, Any]:
-                  """Get current legend status"""
-                  legend_state = session['legend_state']
-                  return {
-                      'current_call': legend_state['current_call'],
-                      'total_calls': legend_state['total_calls'],
-                      'perfect_calls': legend_state['perfect_calls'],
-                      'failed_calls': legend_state['failed_calls'],
-                      'required_perfect': legend_state['required_perfect'],
-                      'is_complete': legend_state['is_complete'],
-                      'is_legend': legend_state['is_legend'],
-                      'calls_remaining': legend_state['total_calls'] - len(session['all_calls_data']),
-                      'progress_percentage': (legend_state['perfect_calls'] / legend_state['required_perfect']) * 100,
-                      'failure_reasons': legend_state.get('failure_reasons', [])
-                  }
-              
-              # ... (Additional methods similar to Marathon mode but with perfect requirements)
-              
-              def _initialize_call_data(self) -> Dict[str, Any]:
-                  """Initialize data for a new call"""
-                  return {
-                      'conversation_history': [],
-                      'current_stage': 'phone_pickup',
-                      'turn_count': 0,
-                      'call_status': 'in_progress',
-                      'end_reason': None,
-                      'started_at': datetime.now(timezone.utc).isoformat()
-                  }
-              
-              def _get_initial_response(self, user_context: Dict) -> str:
-                  """Generate initial phone pickup response"""
-                  responses = [
-                      "Hello?", 
-                      "Hi there.", 
-                      "Good morning.", 
-                      "Yes?",
-                      f"{user_context.get('first_name', 'Alex')} speaking."
-                  ]
-                  return random.choice(responses)
+              def end_session(self, session_id: str, forced_end: bool = False) -> Dict[str, Any]:
+                  """Ends the entire marathon session and provides final results."""
+                  session = self.active_sessions.pop(session_id, None)
+                  if not session:
+                      return {'success': False, 'error': 'Session not found.'}
           
-          # ===== services/roleplay/configs/roleplay_1_3_config.py =====
+                  marathon = session['marathon_state']
+                  marathon['is_complete'] = True
+                  
+                  passed_marathon = marathon['calls_passed'] >= self.config.CALLS_TO_PASS
+                  
+                  # Generate final coaching feedback (simplified)
+                  coaching = {
+                      "overall": f"You completed the marathon with {marathon['calls_passed']} successful calls out of {self.config.TOTAL_CALLS}."
+                  }
           
-          class Roleplay13Config:
-              """Configuration for Roleplay 1.3 - Legend Mode"""
-              
-              ROLEPLAY_ID = "1.3"
-              NAME = "Legend Mode"
-              DESCRIPTION = "6 perfect calls in a row - the ultimate challenge"
-              
-              # Legend specific settings
-              TOTAL_CALLS = 6
-              PERFECT_CALLS_REQUIRED = 6
-              
-              # No tolerance for mistakes in Legend Mode
-              PERFECTION_REQUIRED = True
-              
-              # Stage flow (same as other modes but stricter evaluation)
-              STAGE_FLOW = {
-                  'phone_pickup': 'opener_evaluation',
-                  'opener_evaluation': 'early_objection',
-                  'early_objection': 'objection_handling',
-                  'objection_handling': 'mini_pitch',
-                  'mini_pitch': 'soft_discovery',
-                  'soft_discovery': 'perfect_completion'
-              }
-              
-              # Silence thresholds (same as other modes)
-              IMPATIENCE_THRESHOLD = 10000
-              HANGUP_THRESHOLD = 15000
-              
-              # Perfect thresholds (must score maximum on everything)
-              PERFECT_THRESHOLDS = {
-                  'opener': 4,           # Must get 4/4
-                  'objection_handling': 4, # Must get 4/4
-                  'mini_pitch': 4,       # Must get 4/4
-                  'soft_discovery': 3    # Must get 3/3
-              }
+                  return {
+                      'success': True,
+                      'session_success': passed_marathon,
+                      'overall_score': int((marathon['calls_passed'] / self.config.TOTAL_CALLS) * 100),
+                      'duration_minutes': (datetime.now(timezone.utc) - datetime.fromisoformat(session['started_at'])).total_seconds() / 60,
+                      'coaching': coaching,
+                      'session_data': session, # For saving to DB
+                      'marathon_results': {
+                          'calls_passed': marathon['calls_passed'],
+                          'marathon_passed': passed_marathon
+                      }
+                  }
+
+    📄 roleplay_1_3.py (0.7KB)
+        Content:
+          # ===== services/roleplay/roleplay_1_3.py =====
+          
+          from .base_roleplay import BaseRoleplay
+          
+          class Roleplay13(BaseRoleplay):
+              """
+              Placeholder for Roleplay 1.3 - Legend Mode.
+              The logic for this mode is very strict and will be implemented next.
+              For now, it will behave like the base roleplay.
+              """
+              def __init__(self, openai_service=None):
+                  super().__init__(openai_service)
+                  self.roleplay_id = "1.3"
+          
+              def get_roleplay_info(self) -> dict:
+                  return {
+                      'id': self.roleplay_id,
+                      'name': "Legend Mode",
+                      'description': "6 perfect calls in a row - the ultimate challenge.",
+                      'type': 'legend'
+                  }
 
     📄 roleplay_factory.py (4.3KB)
         Content:
@@ -8596,7 +7746,7 @@
             - Reduced false hang-ups while maintaining realism
             """
 
-      📄 roleplay_1_2_config.py (2.6KB)
+      📄 roleplay_1_2_config.py (1KB)
           Content:
             # services/roleplay/configs/roleplay_1_2_config.py
             class Roleplay12Config:
@@ -8609,76 +7759,27 @@
                 # Marathon specific settings
                 TOTAL_CALLS = 10
                 CALLS_TO_PASS = 6
-                RANDOM_HANGUP_CHANCE = 0.25  # 20-30% as specified
+                RANDOM_HANGUP_CHANCE = 0.25  # 20-30% range, we'll use 25%
                 
-                # Stage flow (simpler than 1.1)
+                # Stage flow is simpler, as each call ends after the mini-pitch
                 STAGE_FLOW = {
                     'phone_pickup': 'opener_evaluation',
                     'opener_evaluation': 'early_objection',
                     'early_objection': 'objection_handling',
                     'objection_handling': 'mini_pitch',
-                    'mini_pitch': 'soft_discovery',
-                    'soft_discovery': 'call_ended'
+                    'mini_pitch': 'call_ended' # A successful call ends here
                 }
                 
-                # Silence thresholds (same as 1.1)
-                IMPATIENCE_THRESHOLD = 10000
-                HANGUP_THRESHOLD = 15000
+                # Silence thresholds from the spec
+                IMPATIENCE_THRESHOLD = 10000 # 10 seconds
+                HANGUP_THRESHOLD = 15000     # 15 seconds
                 
-                # Pass thresholds (same rubrics as 1.1)
+                # Pass thresholds for each rubric (3 of 4 for all stages)
                 PASS_THRESHOLDS = {
                     'opener': 3,
                     'objection_handling': 3,
-                    'mini_pitch': 3,
-                    'soft_discovery': 2
+                    'mini_pitch': 3
                 }
-                
-                # Objection list (29 items as specified)
-                EARLY_OBJECTIONS = [
-                    "What's this about?",
-                    "I'm not interested",
-                    "We don't take cold calls",
-                    "Now is not a good time",
-                    "I have a meeting",
-                    "Can you call me later?",
-                    "I'm about to go into a meeting",
-                    "Send me an email",
-                    "Can you send me the information?",
-                    "Can you message me on WhatsApp?",
-                    "Who gave you this number?",
-                    "This is my personal number",
-                    "Where did you get my number?",
-                    "What are you trying to sell me?",
-                    "Is this a sales call?",
-                    "Is this a cold call?",
-                    "Are you trying to sell me something?",
-                    "We are ok for the moment",
-                    "We are all good / all set",
-                    "We're not looking for anything right now",
-                    "We are not changing anything",
-                    "How long is this going to take?",
-                    "Is this going to take long?",
-                    "What company are you calling from?",
-                    "Who are you again?",
-                    "Where are you calling from?",
-                    "I never heard of you",
-                    "Not interested right now",
-                    "Just send me the details"
-                ]
-                
-                # Impatience phrases
-                IMPATIENCE_PHRASES = [
-                    "Hello? Are you still with me?",
-                    "Can you hear me?",
-                    "Just checking you're thereâ€¦",
-                    "Still on the line?",
-                    "I don't have much time for this.",
-                    "Sounds like you are gone.",
-                    "Are you an idiot.",
-                    "What is going on.",
-                    "Are you okay to continue?",
-                    "I am afraid I have to go"
-                ]
 
 📁 static/
   📁 audio/
@@ -13819,205 +12920,122 @@
             // Export for global access
             window.Roleplay11Manager = Roleplay11Manager;
 
-      📄 roleplay-1-2-manager.js (7.3KB)
+      📄 roleplay-1-2-manager.js (4.7KB)
           Content:
-            
-            
             // static/js/roleplay/roleplay-1-2-manager.js
             class Roleplay12Manager extends BaseRoleplayManager {
-                constructor(containerId) {
-                    super(containerId);
-                    this.marathonState = {
-                        currentCall: 1,
-                        totalCalls: 10,
-                        callsPassed: 0,
-                        callsFailed: 0,
-                        isComplete: false
-                    };
+                constructor(options = {}) {
+                    super(options);
+                    this.roleplayId = "1.2";
+                    this.marathonState = null;
+                    this.marathonProgressElement = document.getElementById('marathon-progress');
                 }
-                
+            
                 async startCall() {
-                    // Marathon-specific call start logic
-                    console.log('ðŸƒ Starting Marathon Mode call...');
+                    console.log('ðŸ Starting Marathon Mode call...');
+                    this.updateStartButton('Starting Marathon...', true);
                     
-                    // Implementation similar to Roleplay 1.1 but with marathon tracking
-                    const response = await this.apiCall('/api/roleplay/start', {
-                        method: 'POST',
-                        body: JSON.stringify({
-                            roleplay_id: '1.2',
-                            mode: this.selectedMode
-                        })
-                    });
-                    
-                    if (response.ok) {
+                    try {
+                        const response = await this.apiCall('/api/roleplay/start', {
+                            method: 'POST',
+                            body: JSON.stringify({ roleplay_id: this.roleplayId, mode: 'marathon' })
+                        });
+            
+                        if (!response.ok) throw new Error('Failed to start marathon');
+            
                         const data = await response.json();
                         this.currentSession = data;
-                        this.marathonState = data.marathon_status || this.marathonState;
+                        this.marathonState = data.marathon_status;
+                        this.isActive = true;
                         
+                        this.updateMarathonUI();
                         await this.startPhoneCallSequence(data.initial_response);
+                    } catch (error) {
+                        this.showError('Could not start Marathon Mode. Please try again.');
+                        this.updateStartButton('Start Marathon', false);
                     }
                 }
-                
+            
                 async processUserInput(transcript) {
-                    console.log('ðŸƒ Processing Marathon input:', transcript);
-                    
-                    const response = await this.apiCall('/api/roleplay/respond', {
-                        method: 'POST',
-                        body: JSON.stringify({
-                            user_input: transcript
-                        })
-                    });
-                    
-                    if (response.ok) {
+                    if (!this.isActive || this.isProcessing) return;
+                    this.isProcessing = true;
+                    this.updateTranscript('ðŸ§  Processing...');
+            
+                    try {
+                        const response = await this.apiCall('/api/roleplay/respond', {
+                            method: 'POST',
+                            body: JSON.stringify({ user_input: transcript, session_id: this.currentSession.session_id })
+                        });
+            
+                        if (!response.ok) throw new Error('Failed to get AI response');
+            
                         const data = await response.json();
-                        
-                        // Update marathon state
-                        if (data.marathon_status) {
-                            this.marathonState = data.marathon_status;
-                            this.updateMarathonUI();
-                        }
-                        
-                        // Handle marathon completion
-                        if (data.marathon_complete) {
-                            this.handleMarathonComplete(data);
-                            return;
-                        }
-                        
-                        // Handle new call started
+                        this.marathonState = data.marathon_status;
+                        this.updateMarathonUI();
+            
                         if (data.new_call_started) {
-                            this.handleNewCallStarted(data);
-                            return;
+                            this.updateTranscript(`ðŸ“ž ${data.transition_message || 'Starting next call...'}`);
+                            await this.delay(2000); // Pause before the next call starts
                         }
                         
-                        // Normal response handling
-                        if (data.call_continues) {
-                            await this.playAIResponseAndWaitForUser(data.ai_response);
+                        if (!data.call_continues) {
+                            this.endCall(data);
                         } else {
-                            this.endCall(data.call_result === 'passed');
+                            await this.playAIResponse(data.ai_response);
                         }
+                    } catch (error) {
+                        this.showError('Error during marathon call. Try speaking again.');
+                        this.startUserTurn();
+                    } finally {
+                        this.isProcessing = false;
                     }
                 }
-                
-                handleNewCallStarted(data) {
-                    console.log(`ðŸ”„ Starting call ${this.marathonState.currentCall}/${this.marathonState.totalCalls}`);
-                    
-                    // Show transition UI
-                    this.updateTranscript(`ðŸ“ž Starting call ${this.marathonState.currentCall}/${this.marathonState.totalCalls}...`);
-                    
-                    setTimeout(async () => {
-                        await this.playAIResponseAndWaitForUser(data.ai_response);
-                    }, 1000);
-                }
-                
-                handleMarathonComplete(data) {
-                    console.log('ðŸ Marathon complete!', data.marathon_status);
-                    
-                    setTimeout(() => {
-                        this.showMarathonResults(data);
-                    }, 2000);
-                }
-                
+            
                 updateMarathonUI() {
-                    // Update progress indicators
-                    const progressElement = document.getElementById('marathon-progress');
-                    if (progressElement) {
-                        progressElement.innerHTML = `
-                            <div class="marathon-stats">
-                                <span>Call ${this.marathonState.currentCall}/${this.marathonState.totalCalls}</span>
-                                <span>Passed: ${this.marathonState.callsPassed}</span>
-                                <span>Failed: ${this.marathonState.callsFailed}</span>
-                                <span>Need: ${this.marathonState.callsToPass}</span>
-                            </div>
-                        `;
-                    }
-                }
-                
-                showMarathonResults(data) {
-                    console.log('ðŸ“Š Showing Marathon results');
-                    
-                    document.getElementById('call-interface').style.display = 'none';
-                    document.getElementById('feedback-section').style.display = 'flex';
-                    
-                    const marathonResults = data.marathon_status;
-                    const passed = marathonResults.is_passed;
-                    
-                    // Show results
-                    const content = document.getElementById('feedback-content');
-                    content.innerHTML = `
-                        <div class="marathon-results">
-                            <h3>${passed ? 'ðŸŽ‰ Marathon Passed!' : 'ðŸ“ˆ Marathon Complete'}</h3>
-                            <div class="results-grid">
-                                <div class="result-item">
-                                    <strong>Calls Passed:</strong> ${marathonResults.callsPassed}/${marathonResults.totalCalls}
-                                </div>
-                                <div class="result-item">
-                                    <strong>Target:</strong> ${marathonResults.callsToPass} calls
-                                </div>
-                                <div class="result-item">
-                                    <strong>Success Rate:</strong> ${Math.round((marathonResults.callsPassed / marathonResults.totalCalls) * 100)}%
-                                </div>
-                            </div>
-                            
-                            ${passed ? 
-                                '<p>ðŸ”“ You\'ve unlocked modules 2.1 & 2.2 for 24 hours and earned one Legend Mode attempt!</p>' :
-                                '<p>Keep practicing! The more reps you get, the easier it becomes. Ready to try Marathon again?</p>'
-                            }
+                    if (!this.marathonState || !this.marathonProgressElement) return;
+            
+                    this.marathonProgressElement.style.display = 'block';
+                    this.marathonProgressElement.innerHTML = `
+                        <div class="marathon-stats">
+                            <span>Call: <strong>${this.marathonState.current_call_number}/${this.config.TOTAL_CALLS}</strong></span>
+                            <span style="color: #10b981;">Passed: <strong>${this.marathonState.calls_passed}</strong></span>
+                            <span style="color: #ef4444;">Failed: <strong>${this.marathonState.calls_failed}</strong></span>
+                            <span>Target: <strong>${this.config.CALLS_TO_PASS}</strong></span>
                         </div>
                     `;
+                }
+                
+                endCall(data) {
+                    // The marathon ends via the backend `end_session` call, 
+                    // which gives a final result package.
+                    super.endCall(data);
+                    this.marathonProgressElement.style.display = 'none';
+                    this.showFeedback(data.coaching, data.overall_score, data.marathon_results);
+                }
+                
+                showFeedback(coaching, score, marathonResults) {
+                    // Override to show marathon-specific messages
+                    super.showFeedback(coaching, score);
                     
-                    // Show coaching if available
-                    if (data.coaching) {
-                        this.populateMarathonCoaching(data.coaching);
+                    const feedbackContent = document.getElementById('feedback-content');
+                    let message = '';
+            
+                    if(marathonResults.marathon_passed) {
+                        message = `<div class="feedback-item" style="background: #10b98120; border-left-color: #10b981;">
+                            <h5>ðŸŽ‰ Marathon Passed!</h5>
+                            <p>Nice workâ€”you passed ${marathonResults.calls_passed} out of 10! You've unlocked the next modules and earned one shot at Legend Mode.</p>
+                        </div>`;
+                    } else {
+                        message = `<div class="feedback-item" style="background: #f59e0b20; border-left-color: #f59e0b;">
+                            <h5> Marathon Complete</h5>
+                            <p>You completed all 10 calls and scored ${marathonResults.calls_passed}/10. Keep practisingâ€”the more reps you get, the easier it becomes.</p>
+                        </div>`;
                     }
-                }
-                
-                populateMarathonCoaching(coaching) {
-                    const content = document.getElementById('feedback-content');
-                    
-                    const coachingHTML = `
-                        <div class="marathon-coaching">
-                            <h4>ðŸ“ Marathon Coaching</h4>
-                            <div class="coaching-grid">
-                                <div class="coaching-item">
-                                    <h6>ðŸŽ¯ Sales Performance</h6>
-                                    <p>${coaching.sales_coaching || 'Good job on completing the marathon!'}</p>
-                                </div>
-                                <div class="coaching-item">
-                                    <h6>ðŸ“ Grammar</h6>
-                                    <p>${coaching.grammar_coaching || 'Focus on using natural contractions.'}</p>
-                                </div>
-                                <div class="coaching-item">
-                                    <h6>ðŸ“– Vocabulary</h6>
-                                    <p>${coaching.vocabulary_coaching || 'Use simple, outcome-focused language.'}</p>
-                                </div>
-                                <div class="coaching-item">
-                                    <h6>ðŸŽ¤ Pronunciation</h6>
-                                    <p>${coaching.pronunciation_coaching || 'Practice speaking clearly and consistently.'}</p>
-                                </div>
-                                <div class="coaching-item">
-                                    <h6>ðŸ¤ Rapport & Confidence</h6>
-                                    <p>${coaching.rapport_assertiveness || 'Show empathy first, then be confident.'}</p>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    
-                    content.innerHTML += coachingHTML;
-                }
-                
-                showFeedback(coaching, score = 75) {
-                    // Marathon uses different feedback display
-                    this.showMarathonResults({
-                        marathon_status: this.marathonState,
-                        coaching: coaching
-                    });
+                    feedbackContent.insertAdjacentHTML('afterbegin', message);
                 }
             }
-            
-            // Export for global access
-            window.Roleplay12Manager = Roleplay12Manager;
 
-      📄 roleplay-factory.js (2.5KB)
+      📄 roleplay-factory.js (2.6KB)
           Content:
             // ===== static/js/roleplay/roleplay-factory.js (Complete Implementation) =====
             
@@ -14029,13 +13047,13 @@
                     if (this.initialized) return;
                     
                     try {
-                        // Register available manager classes
                         if (typeof Roleplay11Manager !== 'undefined') {
                             this.managerClasses["1.1"] = Roleplay11Manager;
                         }
                         if (typeof Roleplay12Manager !== 'undefined') {
                             this.managerClasses["1.2"] = Roleplay12Manager;
                         }
+                        // Add Roleplay13Manager here when it's created
                         
                         console.log('ðŸ­ Roleplay Factory initialized with:', Object.keys(this.managerClasses));
                         this.initialized = true;
@@ -14050,8 +13068,9 @@
                     
                     const ManagerClass = this.managerClasses[roleplayId];
                     if (!ManagerClass) {
-                        const available = Object.keys(this.managerClasses);
-                        throw new Error(`Unknown roleplay ID: ${roleplayId}. Available: ${available.join(', ')}`);
+                        console.warn(`No specific manager for ${roleplayId}, using Roleplay11Manager as fallback.`);
+                        // Fallback to the Practice manager if a specific one isn't found
+                        return new Roleplay11Manager(options);
                     }
                     
                     console.log(`ðŸ­ Creating ${roleplayId} manager`);
@@ -16485,7 +15504,7 @@
           <script src="{{ url_for('static', filename='js/roleplay/roleplay-factory.js') }}?v={{ get_file_version('js/roleplay/roleplay-factory.js') }}"></script>
           {% endblock %}
 
-    📄 roleplay-1-selection.html (12.9KB)
+    📄 roleplay-1-selection.html (8.7KB)
         Content:
           <!-- ===== templates/roleplay/roleplay-1-selection.html ===== -->
           {% extends "base.html" %}
@@ -16704,230 +15723,95 @@
           
           {% block content %}
           <div class="selection-container">
-              <!-- Back to Dashboard -->
               <a href="/dashboard" class="back-to-dashboard">
                   <i class="fas fa-arrow-left me-2"></i>Dashboard
               </a>
           
-              <!-- Selection Card -->
               <div class="selection-card">
-                  <!-- Header -->
                   <div class="roleplay-header">
                       <h1 class="roleplay-title">Roleplay 1: Opener & Early Objections</h1>
                       <p class="roleplay-description">
-                          Master your cold call openers and handle early objections with confidence. 
+                          Master your cold call openers and handle early objections with confidence.
                           Choose your training mode below.
                       </p>
                   </div>
           
                   <!-- Modes Grid -->
                   <div class="modes-grid">
-                      <!-- Practice Mode (1.1) -->
-                      <div class="mode-card" id="mode-1-1" data-mode="1.1" onclick="selectMode('1.1')">
+                      <!-- Practice Mode (1.1) - Always Unlocked -->
+                      <a href="/roleplay/1.1" class="mode-card">
                           <div class="mode-status status-available">Available</div>
-                          <div class="mode-icon">
-                              <i class="fas fa-user-graduate"></i>
-                          </div>
+                          <div class="mode-icon"><i class="fas fa-user-graduate"></i></div>
                           <h3 class="mode-name">Practice Mode</h3>
-                          <p class="mode-description">
-                              Single call with detailed AI coaching and feedback. 
-                              Perfect for learning the fundamentals.
-                          </p>
-                          <div class="mode-requirements">
-                              Always available â€¢ Detailed feedback
-                          </div>
-                      </div>
+                          <p class="mode-description">Single call with detailed AI coaching. Perfect for learning fundamentals.</p>
+                          <div class="mode-requirements">Always available â€¢ Detailed feedback</div>
+                      </a>
           
-                      <!-- Marathon Mode (1.2) -->
-                      <div class="mode-card" id="mode-1-2" data-mode="1.2" onclick="selectMode('1.2')">
+                      <!-- Marathon Mode (1.2) - Unlocked by default, shows progress -->
+                      <a href="/roleplay/1.2" class="mode-card">
                           <div class="mode-status status-available">Available</div>
-                          <div class="mode-icon">
-                              <i class="fas fa-running"></i>
-                          </div>
+                          <div class="mode-icon"><i class="fas fa-running"></i></div>
                           <h3 class="mode-name">Marathon Mode</h3>
-                          <p class="mode-description">
-                              10 calls in a row. Pass 6 out of 10 to unlock Legend Mode. 
-                              Tests your consistency.
-                          </p>
-                          <div class="mode-requirements">
-                              Need 6/10 passes â€¢ No in-call feedback
-                          </div>
-                      </div>
+                          <p class="mode-description">10 calls in a row. Pass 6 to complete. Tests consistency.</p>
+                          <div class="mode-requirements">Need 6/10 passes â€¢ Unlocks Legend Mode</div>
+                      </a>
           
-                      <!-- Legend Mode (1.3) -->
-                      <div class="mode-card disabled" id="mode-1-3" data-mode="1.3">
-                          <div class="mode-status status-locked">Locked</div>
-                          <div class="mode-icon">
-                              <i class="fas fa-crown"></i>
+                      <!-- Legend Mode (1.3) - DYNAMICALLY LOCKED/UNLOCKED -->
+                      {% set legend_unlocked = user_progress.get('1.2', {}).get('passed', False) %}
+                      <a href="{{ '/roleplay/1.3' if legend_unlocked else '#' }}" class="mode-card {{ 'disabled' if not legend_unlocked }}">
+                          <div class="mode-status {{ 'status-available' if legend_unlocked else 'status-locked' }}">
+                              {{ 'Available' if legend_unlocked else 'Locked' }}
                           </div>
+                          <div class="mode-icon"><i class="fas fa-crown"></i></div>
                           <h3 class="mode-name">Legend Mode</h3>
-                          <p class="mode-description">
-                              6 perfect calls in a row. Ultimate test of mastery. 
-                              Unlocks Roleplay 2.
-                          </p>
+                          <p class="mode-description">6 perfect calls in a row. The ultimate test of mastery.</p>
                           <div class="mode-requirements">
-                              Requires Marathon completion â€¢ No second chances
+                              {{ 'No second chances' if legend_unlocked else 'Requires Marathon completion' }}
                           </div>
-                      </div>
+                      </a>
                   </div>
           
                   <!-- Progress Info -->
                   <div class="progress-info">
-                      <div class="progress-title">
-                          <i class="fas fa-chart-line me-2"></i>Your Progress
-                      </div>
+                      <div class="progress-title"><i class="fas fa-chart-line me-2"></i>Your Progress</div>
                       <div class="progress-item">
                           <span>Practice Mode Best Score:</span>
-                          <span class="progress-status status-pending" id="practice-score">Not attempted</span>
+                          <span class="progress-status {{ 'status-pass' if user_progress.get('1.1', {}).get('best_score', 0) >= 70 else 'status-pending' }}">
+                              {{ user_progress.get('1.1', {}).get('best_score', 'Not attempted') }}
+                          </span>
                       </div>
                       <div class="progress-item">
                           <span>Marathon Mode Status:</span>
-                          <span class="progress-status status-pending" id="marathon-status">Not attempted</span>
-                      </div>
-                      <div class="progress-item">
-                          <span>Legend Mode Status:</span>
-                          <span class="progress-status status-pending" id="legend-status">Locked</span>
+                          <span class="progress-status {{ 'status-pass' if user_progress.get('1.2', {}).get('passed') else 'status-pending' }}">
+                              {% if user_progress.get('1.2') %}
+                                  {{ user_progress['1.2'].get('marathon_best_run', 0) }}/10 Passed
+                              {% else %}
+                                  Not attempted
+                              {% endif %}
+                          </span>
                       </div>
                       <div class="progress-item">
                           <span>Roleplay 2 Access:</span>
-                          <span class="progress-status status-pending" id="roleplay2-status">Complete Legend to unlock</span>
+                          <span class="progress-status {{ 'status-pass' if user_progress.get('1.3', {}).get('completed') else 'status-pending' }}">
+                              {{ 'Unlocked!' if user_progress.get('1.3', {}).get('completed') else 'Complete Legend to unlock' }}
+                          </span>
                       </div>
                   </div>
               </div>
-          </div>
-          
-          <!-- Hidden Data -->
-          <div id="user-progress" style="display: none;">
-              {{ user_progress | tojson if user_progress else '{}' }}
           </div>
           {% endblock %}
           
           {% block extra_js %}
           <script>
-          console.log('ðŸŽ® Roleplay 1 Selection Page Loaded');
-          
-          let userProgress = {};
-          
-          // Initialize page
-          document.addEventListener('DOMContentLoaded', async () => {
-              await loadUserProgress();
-              updateUIBasedOnProgress();
-          });
-          
-          async function loadUserProgress() {
-              try {
-                  // Get user progress from hidden element
-                  const progressElement = document.getElementById('user-progress');
-                  if (progressElement && progressElement.textContent.trim()) {
-                      userProgress = JSON.parse(progressElement.textContent);
-                  }
-                  
-                  // Also fetch latest progress from API
-                  const response = await fetch('/api/user/roleplay-progress');
-                  if (response.ok) {
-                      const data = await response.json();
-                      userProgress = data.progress || {};
-                  }
-                  
-                  console.log('ðŸ“Š User progress loaded:', userProgress);
-              } catch (error) {
-                  console.error('âŒ Failed to load user progress:', error);
-                  userProgress = {};
-              }
-          }
-          
-          function updateUIBasedOnProgress() {
-              // Update Practice Mode (1.1)
-              const practiceScore = userProgress['1.1']?.best_score || 0;
-              const practiceElement = document.getElementById('practice-score');
-              if (practiceScore > 0) {
-                  practiceElement.textContent = `${practiceScore}/100`;
-                  practiceElement.className = practiceScore >= 70 ? 'progress-status status-pass' : 'progress-status status-fail';
-              }
-          
-              // Update Marathon Mode (1.2)
-              const marathonData = userProgress['1.2'];
-              const marathonElement = document.getElementById('marathon-status');
-              if (marathonData) {
-                  const passed = marathonData.calls_passed || 0;
-                  const total = marathonData.total_calls || 10;
-                  marathonElement.textContent = `${passed}/${total} passed`;
-                  marathonElement.className = marathonData.completed ? 'progress-status status-pass' : 'progress-status status-fail';
-              }
-          
-              // Update Legend Mode (1.3) availability
-              const marathonCompleted = userProgress['1.2']?.completed && userProgress['1.2']?.passed;
-              const legendCard = document.getElementById('mode-1-3');
-              const legendStatus = document.getElementById('legend-status');
-              
-              if (marathonCompleted) {
-                  legendCard.classList.remove('disabled');
-                  legendCard.setAttribute('onclick', "selectMode('1.3')");
-                  legendCard.querySelector('.mode-status').textContent = 'Available';
-                  legendCard.querySelector('.mode-status').className = 'mode-status status-available';
-                  legendStatus.textContent = 'Available';
-                  legendStatus.className = 'progress-status status-available';
-              }
-          
-              // Check if Legend is completed
-              const legendCompleted = userProgress['1.3']?.completed;
-              const roleplay2Status = document.getElementById('roleplay2-status');
-              if (legendCompleted) {
-                  legendCard.classList.add('completed');
-                  legendStatus.textContent = 'Completed';
-                  legendStatus.className = 'progress-status status-pass';
-                  roleplay2Status.textContent = 'Unlocked!';
-                  roleplay2Status.className = 'progress-status status-pass';
-              }
-          }
-          
-          function selectMode(modeId) {
-              const modeCard = document.getElementById(`mode-${modeId.replace('.', '-')}`);
-              
-              // Check if mode is disabled
-              if (modeCard.classList.contains('disabled')) {
-                  alert('This mode is locked. Complete Marathon Mode first to unlock Legend Mode.');
-                  return;
-              }
-              
-              // Check specific requirements
-              if (modeId === '1.3') {
-                  const marathonCompleted = userProgress['1.2']?.completed && userProgress['1.2']?.passed;
-                  if (!marathonCompleted) {
-                      alert('Legend Mode requires completing Marathon Mode first. Pass 6 out of 10 calls in Marathon Mode to unlock.');
-                      return;
-                  }
-              }
-              
-              console.log(`ðŸŽ¯ Selected mode: ${modeId}`);
-              
-              // Add visual feedback
-              document.querySelectorAll('.mode-card').forEach(card => {
-                  card.style.transform = 'scale(1)';
-                  card.style.opacity = '1';
+              document.addEventListener('DOMContentLoaded', () => {
+                  // Handle clicks on locked cards to provide feedback
+                  document.querySelectorAll('.mode-card.disabled').forEach(card => {
+                      card.addEventListener('click', (e) => {
+                          e.preventDefault();
+                          alert('This mode is locked. Complete the previous requirements to unlock it.');
+                      });
+                  });
               });
-              
-              modeCard.style.transform = 'scale(0.95)';
-              modeCard.style.opacity = '0.8';
-              
-              // Navigate to roleplay
-              setTimeout(() => {
-                  window.location.href = `/roleplay/${modeId}`;
-              }, 200);
-          }
-          
-          // Add hover effects
-          document.querySelectorAll('.mode-card:not(.disabled)').forEach(card => {
-              card.addEventListener('mouseenter', () => {
-                  card.style.transform = 'translateY(-5px) scale(1.02)';
-              });
-              
-              card.addEventListener('mouseleave', () => {
-                  card.style.transform = 'translateY(0) scale(1)';
-              });
-          });
-          
-          console.log('âœ… Roleplay selection page initialized');
           </script>
           {% endblock %}
 
@@ -17320,7 +16204,7 @@
           {% endblock %}
 
 📁 utils/
-  📄 constants.py (25.8KB)
+  📄 constants.py (25.7KB)
       Content:
         # ===== UPDATED API/UTILS/CONSTANTS.PY (Add these to your existing file) =====
         
@@ -17372,12 +16256,10 @@
             "Telecommunications",
             "Other (Please specify)"
         ]
-        
-        # Early objections (29 total) - used in Roleplay 1
         EARLY_OBJECTIONS = [
             "What's this about?",
             "I'm not interested",
-            "We don't take cold calls", 
+            "We don't take cold calls",
             "Now is not a good time",
             "I have a meeting",
             "Can you call me later?",
@@ -17405,6 +16287,7 @@
             "Not interested right now",
             "Just send me the details"
         ]
+        
         
         # Post-pitch objections (24 total) - used in Roleplay 2
         POST_PITCH_OBJECTIONS = [
@@ -17447,8 +16330,6 @@
             "What's your pitch?",
             "Let's hear it."
         ]
-        
-        # Impatience phrases for silence handling
         IMPATIENCE_PHRASES = [
             "Hello? Are you still with me?",
             "Can you hear me?",
@@ -17823,6 +16704,9 @@
                     "Doesn't argue or pitch immediately",
                     "Reframes or buys time in 1 sentence",
                     "Ends with forward-moving question"
+                ]
+            },
+            "mini_pitch": {
 
   📄 decorators.py (3.7KB)
       Content:

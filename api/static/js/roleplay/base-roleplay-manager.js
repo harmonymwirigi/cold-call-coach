@@ -2,9 +2,10 @@
 
 class BaseRoleplayManager {
     constructor(options = {}) {
+        // DO NOT call init() here anymore. The child class will call it.
         this.containerId = options.containerId || null;
         this.selectedMode = null;
-        this.callState = 'idle'; // idle, dialing, ringing, connected, ended
+        this.callState = 'idle';
         this.callStartTime = null;
         this.durationInterval = null;
         this.currentSession = null;
@@ -12,11 +13,7 @@ class BaseRoleplayManager {
         this.voiceHandler = null;
         this.isProcessing = false;
         this.conversationHistory = [];
-        
-        // Debug flag
         this.debugMode = options.debugMode || true;
-        
-        this.init();
     }
     
     init() {
@@ -27,9 +24,8 @@ class BaseRoleplayManager {
         
         this.loadRoleplayData();
         this.setupEventListeners();
-        this.initializeModeSelection();
+        this.initializeModeSelection(); // This will call the child's version
         
-        // Initialize voice handler
         if (typeof VoiceHandler !== 'undefined') {
             this.voiceHandler = new VoiceHandler(this);
             console.log('✅ Voice Handler initialized');
@@ -37,6 +33,7 @@ class BaseRoleplayManager {
             console.warn('⚠️ VoiceHandler not available');
         }
     }
+
     
     updateTime() {
         const now = new Date();

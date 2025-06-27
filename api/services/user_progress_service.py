@@ -22,7 +22,6 @@ class UserProgressService:
                 self.supabase = None
         
         self.progression_rules = {
-            '1.2': {'requires_completion': '1.1', 'pass_needed': True},
             '1.3': {'requires_completion': '1.2', 'pass_needed': True},
             '2.1': {'requires_completion': '1.3', 'pass_needed': True},
         }
@@ -50,23 +49,25 @@ class UserProgressService:
         """Check if user has access to a specific roleplay based on their stats."""
         try:
             # Practice mode is the entry point and is always available.
-            if roleplay_id == '1.1':
-                return {'allowed': True, 'reason': 'Practice mode is always available.'}
+            if roleplay_id in ['1.1', '1.2']:
+                return {'allowed': True, 'reason': 'Starting mode is always available.'}
             
             rule = self.progression_rules.get(roleplay_id)
-            # If no rule is defined for this roleplay, allow access by default.
             if not rule:
                 return {'allowed': True, 'reason': 'No unlock rule defined.'}
 
             required_rp_id = rule.get('requires_completion')
             required_rp_name = self.progression_rules.get(required_rp_id, {}).get('name', f"Roleplay {required_rp_id}")
             
-            # Get the user's stats for the *required* roleplay.
             user_stats = self.get_user_roleplay_stats(user_id, required_rp_id)
             required_stats = user_stats.get(required_rp_id)
             
-            # Check if the user has passed the required module.
-            if not required_stats or not required_stats.get('marathon_passed', False) and not required_stats.get('completed', False):
+            # For Legend mode (1.3), check if Marathon (1.2) has been passed.
+            if required_rp_id == '1.2':
+                if not required_stats or not required_stats.get('marathon_passed', False):
+                    return {'allowed': False, 'reason': f"Pass '{required_rp_name}' to unlock this."}
+            # For other unlocks, a simple 'completed' status is enough.
+            elif not required_stats or not required_stats.get('completed', False):
                  return {'allowed': False, 'reason': f"Complete '{required_rp_name}' to unlock this."}
 
             return {'allowed': True, 'reason': 'Requirement met.'}

@@ -29,9 +29,14 @@ class RoleplayFactory {
         
         const ManagerClass = this.managerClasses[roleplayId];
         if (!ManagerClass) {
-            console.warn(`No specific manager for ${roleplayId}, using Roleplay11Manager as fallback.`);
-            // Fallback to the Practice manager if a specific one isn't found
-            return new Roleplay11Manager(options);
+            const available = Object.keys(this.managerClasses);
+            console.error(`Unknown roleplay ID: ${roleplayId}. Available managers: ${available.join(', ')}`);
+            // Fallback to a default manager or show an error
+            if (this.managerClasses["1.1"]) {
+                console.warn(`Falling back to Roleplay11Manager.`);
+                return new Roleplay11Manager(options);
+            }
+            throw new Error(`No manager found for roleplay ID ${roleplayId} and no fallback is available.`);
         }
         
         console.log(`🏭 Creating ${roleplayId} manager`);

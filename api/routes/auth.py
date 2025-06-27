@@ -165,7 +165,19 @@ def verify_and_register():
             'custom_ai_notes': custom_ai_notes,
             'access_level': 'limited_trial'  # Default access level - admin can upgrade
         }
+        # Initialize progress for the starting roleplays (1.1 and 1.2)
+        # This ensures a record always exists for access checks.
+        initial_progress_data = [
+            {'user_id': user_id, 'roleplay_id': '1.1', 'is_unlocked': True},
+            {'user_id': user_id, 'roleplay_id': '1.2', 'is_unlocked': True},
+        ]
         
+        # Use the service client to upsert these initial records
+        try:
+            supabase_service.get_service_client().table('user_roleplay_stats').upsert(initial_progress_data).execute()
+            logger.info(f"Initialized starting progress for user {user_id}")
+        except Exception as e:
+            logger.error(f"Failed to initialize progress for user {user_id}: {e}")
         if not supabase_service.create_user_profile(profile_data):
             # If profile creation fails, we should clean up the auth user
             try:
