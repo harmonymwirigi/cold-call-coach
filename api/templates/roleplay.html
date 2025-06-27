@@ -101,13 +101,18 @@
 
 <div id="voice-error" class="alert alert-warning position-fixed" style="display: none;"></div>
 {% endblock %}
-
 {% block extra_js %}
-<!-- CORRECTED PATH for voice-handler.js -->
+<!-- Utilities (Must be loaded before the managers that use them) -->
+<script src="{{ url_for('static', filename='js/utils/api-client.js') }}?v={{ get_file_version('js/utils/api-client.js') }}"></script>
+<script src="{{ url_for('static', filename='js/utils/ui-helpers.js') }}?v={{ get_file_version('js/utils/ui-helpers.js') }}"></script>
+
+<!-- Core Handlers and Managers -->
 <script src="{{ url_for('static', filename='js/voice-handler.js') }}?v={{ get_file_version('js/voice-handler.js') }}"></script>
 <script src="{{ url_for('static', filename='js/roleplay/base-roleplay-manager.js') }}?v={{ get_file_version('js/roleplay/base-roleplay-manager.js') }}"></script>
 <script src="{{ url_for('static', filename='js/roleplay/roleplay-1-1-manager.js') }}?v={{ get_file_version('js/roleplay/roleplay-1-1-manager.js') }}"></script>
 <script src="{{ url_for('static', filename='js/roleplay/roleplay-1-2-manager.js') }}?v={{ get_file_version('js/roleplay/roleplay-1-2-manager.js') }}"></script>
+
+<!-- Factory and Initialization (Must be loaded last) -->
 <script src="{{ url_for('static', filename='js/roleplay/roleplay-factory.js') }}?v={{ get_file_version('js/roleplay/roleplay-factory.js') }}"></script>
 <script>
     // Factory-based initialization
