@@ -35,9 +35,11 @@ class RoleplayEngine:
     def _load_roleplay_implementations(self):
         from .roleplay.roleplay_1_1 import Roleplay11
         from .roleplay.roleplay_1_2 import Roleplay12
+        from .roleplay.roleplay_1_3 import Roleplay13
         self.roleplay_implementations = {
             '1.1': Roleplay11(self.openai_service),
             '1.2': Roleplay12(self.openai_service),
+            '1.3': Roleplay13(self.openai_service),
         }
 
     def _create_fallback_roleplay(self, roleplay_id: str):

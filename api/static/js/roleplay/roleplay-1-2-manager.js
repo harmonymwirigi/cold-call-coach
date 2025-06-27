@@ -1,195 +1,112 @@
-
-
 // static/js/roleplay/roleplay-1-2-manager.js
 class Roleplay12Manager extends BaseRoleplayManager {
-    constructor(containerId) {
-        super(containerId);
-        this.marathonState = {
-            currentCall: 1,
-            totalCalls: 10,
-            callsPassed: 0,
-            callsFailed: 0,
-            isComplete: false
-        };
+    constructor(options = {}) {
+        super(options);
+        this.roleplayId = "1.2";
+        this.marathonState = null;
+        this.marathonProgressElement = document.getElementById('marathon-progress');
     }
-    
+
     async startCall() {
-        // Marathon-specific call start logic
-        console.log('🏃 Starting Marathon Mode call...');
+        console.log('🏁 Starting Marathon Mode call...');
+        this.updateStartButton('Starting Marathon...', true);
         
-        // Implementation similar to Roleplay 1.1 but with marathon tracking
-        const response = await this.apiCall('/api/roleplay/start', {
-            method: 'POST',
-            body: JSON.stringify({
-                roleplay_id: '1.2',
-                mode: this.selectedMode
-            })
-        });
-        
-        if (response.ok) {
+        try {
+            const response = await this.apiCall('/api/roleplay/start', {
+                method: 'POST',
+                body: JSON.stringify({ roleplay_id: this.roleplayId, mode: 'marathon' })
+            });
+
+            if (!response.ok) throw new Error('Failed to start marathon');
+
             const data = await response.json();
             this.currentSession = data;
-            this.marathonState = data.marathon_status || this.marathonState;
+            this.marathonState = data.marathon_status;
+            this.isActive = true;
             
+            this.updateMarathonUI();
             await this.startPhoneCallSequence(data.initial_response);
+        } catch (error) {
+            this.showError('Could not start Marathon Mode. Please try again.');
+            this.updateStartButton('Start Marathon', false);
         }
     }
-    
+
     async processUserInput(transcript) {
-        console.log('🏃 Processing Marathon input:', transcript);
-        
-        const response = await this.apiCall('/api/roleplay/respond', {
-            method: 'POST',
-            body: JSON.stringify({
-                user_input: transcript
-            })
-        });
-        
-        if (response.ok) {
+        if (!this.isActive || this.isProcessing) return;
+        this.isProcessing = true;
+        this.updateTranscript('🧠 Processing...');
+
+        try {
+            const response = await this.apiCall('/api/roleplay/respond', {
+                method: 'POST',
+                body: JSON.stringify({ user_input: transcript, session_id: this.currentSession.session_id })
+            });
+
+            if (!response.ok) throw new Error('Failed to get AI response');
+
             const data = await response.json();
-            
-            // Update marathon state
-            if (data.marathon_status) {
-                this.marathonState = data.marathon_status;
-                this.updateMarathonUI();
-            }
-            
-            // Handle marathon completion
-            if (data.marathon_complete) {
-                this.handleMarathonComplete(data);
-                return;
-            }
-            
-            // Handle new call started
+            this.marathonState = data.marathon_status;
+            this.updateMarathonUI();
+
             if (data.new_call_started) {
-                this.handleNewCallStarted(data);
-                return;
+                this.updateTranscript(`📞 ${data.transition_message || 'Starting next call...'}`);
+                await this.delay(2000); // Pause before the next call starts
             }
             
-            // Normal response handling
-            if (data.call_continues) {
-                await this.playAIResponseAndWaitForUser(data.ai_response);
+            if (!data.call_continues) {
+                this.endCall(data);
             } else {
-                this.endCall(data.call_result === 'passed');
+                await this.playAIResponse(data.ai_response);
             }
+        } catch (error) {
+            this.showError('Error during marathon call. Try speaking again.');
+            this.startUserTurn();
+        } finally {
+            this.isProcessing = false;
         }
     }
-    
-    handleNewCallStarted(data) {
-        console.log(`🔄 Starting call ${this.marathonState.currentCall}/${this.marathonState.totalCalls}`);
-        
-        // Show transition UI
-        this.updateTranscript(`📞 Starting call ${this.marathonState.currentCall}/${this.marathonState.totalCalls}...`);
-        
-        setTimeout(async () => {
-            await this.playAIResponseAndWaitForUser(data.ai_response);
-        }, 1000);
-    }
-    
-    handleMarathonComplete(data) {
-        console.log('🏁 Marathon complete!', data.marathon_status);
-        
-        setTimeout(() => {
-            this.showMarathonResults(data);
-        }, 2000);
-    }
-    
+
     updateMarathonUI() {
-        // Update progress indicators
-        const progressElement = document.getElementById('marathon-progress');
-        if (progressElement) {
-            progressElement.innerHTML = `
-                <div class="marathon-stats">
-                    <span>Call ${this.marathonState.currentCall}/${this.marathonState.totalCalls}</span>
-                    <span>Passed: ${this.marathonState.callsPassed}</span>
-                    <span>Failed: ${this.marathonState.callsFailed}</span>
-                    <span>Need: ${this.marathonState.callsToPass}</span>
-                </div>
-            `;
-        }
-    }
-    
-    showMarathonResults(data) {
-        console.log('📊 Showing Marathon results');
-        
-        document.getElementById('call-interface').style.display = 'none';
-        document.getElementById('feedback-section').style.display = 'flex';
-        
-        const marathonResults = data.marathon_status;
-        const passed = marathonResults.is_passed;
-        
-        // Show results
-        const content = document.getElementById('feedback-content');
-        content.innerHTML = `
-            <div class="marathon-results">
-                <h3>${passed ? '🎉 Marathon Passed!' : '📈 Marathon Complete'}</h3>
-                <div class="results-grid">
-                    <div class="result-item">
-                        <strong>Calls Passed:</strong> ${marathonResults.callsPassed}/${marathonResults.totalCalls}
-                    </div>
-                    <div class="result-item">
-                        <strong>Target:</strong> ${marathonResults.callsToPass} calls
-                    </div>
-                    <div class="result-item">
-                        <strong>Success Rate:</strong> ${Math.round((marathonResults.callsPassed / marathonResults.totalCalls) * 100)}%
-                    </div>
-                </div>
-                
-                ${passed ? 
-                    '<p>🔓 You\'ve unlocked modules 2.1 & 2.2 for 24 hours and earned one Legend Mode attempt!</p>' :
-                    '<p>Keep practicing! The more reps you get, the easier it becomes. Ready to try Marathon again?</p>'
-                }
+        if (!this.marathonState || !this.marathonProgressElement) return;
+
+        this.marathonProgressElement.style.display = 'block';
+        this.marathonProgressElement.innerHTML = `
+            <div class="marathon-stats">
+                <span>Call: <strong>${this.marathonState.current_call_number}/${this.config.TOTAL_CALLS}</strong></span>
+                <span style="color: #10b981;">Passed: <strong>${this.marathonState.calls_passed}</strong></span>
+                <span style="color: #ef4444;">Failed: <strong>${this.marathonState.calls_failed}</strong></span>
+                <span>Target: <strong>${this.config.CALLS_TO_PASS}</strong></span>
             </div>
         `;
+    }
+    
+    endCall(data) {
+        // The marathon ends via the backend `end_session` call, 
+        // which gives a final result package.
+        super.endCall(data);
+        this.marathonProgressElement.style.display = 'none';
+        this.showFeedback(data.coaching, data.overall_score, data.marathon_results);
+    }
+    
+    showFeedback(coaching, score, marathonResults) {
+        // Override to show marathon-specific messages
+        super.showFeedback(coaching, score);
         
-        // Show coaching if available
-        if (data.coaching) {
-            this.populateMarathonCoaching(data.coaching);
+        const feedbackContent = document.getElementById('feedback-content');
+        let message = '';
+
+        if(marathonResults.marathon_passed) {
+            message = `<div class="feedback-item" style="background: #10b98120; border-left-color: #10b981;">
+                <h5>🎉 Marathon Passed!</h5>
+                <p>Nice work—you passed ${marathonResults.calls_passed} out of 10! You've unlocked the next modules and earned one shot at Legend Mode.</p>
+            </div>`;
+        } else {
+            message = `<div class="feedback-item" style="background: #f59e0b20; border-left-color: #f59e0b;">
+                <h5> Marathon Complete</h5>
+                <p>You completed all 10 calls and scored ${marathonResults.calls_passed}/10. Keep practising—the more reps you get, the easier it becomes.</p>
+            </div>`;
         }
-    }
-    
-    populateMarathonCoaching(coaching) {
-        const content = document.getElementById('feedback-content');
-        
-        const coachingHTML = `
-            <div class="marathon-coaching">
-                <h4>📝 Marathon Coaching</h4>
-                <div class="coaching-grid">
-                    <div class="coaching-item">
-                        <h6>🎯 Sales Performance</h6>
-                        <p>${coaching.sales_coaching || 'Good job on completing the marathon!'}</p>
-                    </div>
-                    <div class="coaching-item">
-                        <h6>📝 Grammar</h6>
-                        <p>${coaching.grammar_coaching || 'Focus on using natural contractions.'}</p>
-                    </div>
-                    <div class="coaching-item">
-                        <h6>📖 Vocabulary</h6>
-                        <p>${coaching.vocabulary_coaching || 'Use simple, outcome-focused language.'}</p>
-                    </div>
-                    <div class="coaching-item">
-                        <h6>🎤 Pronunciation</h6>
-                        <p>${coaching.pronunciation_coaching || 'Practice speaking clearly and consistently.'}</p>
-                    </div>
-                    <div class="coaching-item">
-                        <h6>🤝 Rapport & Confidence</h6>
-                        <p>${coaching.rapport_assertiveness || 'Show empathy first, then be confident.'}</p>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        content.innerHTML += coachingHTML;
-    }
-    
-    showFeedback(coaching, score = 75) {
-        // Marathon uses different feedback display
-        this.showMarathonResults({
-            marathon_status: this.marathonState,
-            coaching: coaching
-        });
+        feedbackContent.insertAdjacentHTML('afterbegin', message);
     }
 }
-
-// Export for global access
-window.Roleplay12Manager = Roleplay12Manager;

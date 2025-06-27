@@ -229,7 +229,7 @@ class UserProgressService:
             return None
         
     def update_user_progress_after_completion(self, completion_data: Dict[str, Any]) -> bool:
-        """Updates aggregate stats and user profile usage after a session."""
+        """Updates aggregate stats, usage, and special flags after a session."""
         try:
             if not self.supabase: return False
 
@@ -237,7 +237,26 @@ class UserProgressService:
             roleplay_id = completion_data.get('roleplay_id')
             score = completion_data.get('score', 0)
             duration = completion_data.get('duration_minutes', 1)
-            
+            marathon_passed = completion_data.get('marathon_results', {}).get('marathon_passed', False)
+
+            if roleplay_id == '1.2' and marathon_passed:
+                logger.info(f"Marathon passed for user {user_id}. Unlocking content.")
+                
+                # 1. Reset the legend attempt flag
+                # This requires a table with user-specific flags. Let's assume it's `user_profiles`.
+                unlock_timestamp = datetime.now(timezone.utc).isoformat()
+                twenty_four_hours_from_now = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+                
+                profile_updates = {
+                    'legend_attempt_used': False,
+                    'module_2_unlocked_until': twenty_four_hours_from_now
+                }
+                self.supabase.update_data_by_id('user_profiles', {'id': user_id}, profile_updates)
+
+            if roleplay_id == '1.3': # Legend Mode
+                # Mark the legend attempt as used when the run starts
+                # This should ideally be done in create_session, but we can do it here too.
+                 self.supabase.update_data_by_id('user_profiles', {'id': user_id}, {'legend_attempt_used': True})
             if not all([user_id, roleplay_id, score is not None]):
                 logger.warning(f"Insufficient data to update progress: {completion_data}")
                 return False

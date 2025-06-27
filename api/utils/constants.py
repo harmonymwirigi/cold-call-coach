@@ -48,12 +48,10 @@ INDUSTRIES = [
     "Telecommunications",
     "Other (Please specify)"
 ]
-
-# Early objections (29 total) - used in Roleplay 1
 EARLY_OBJECTIONS = [
     "What's this about?",
     "I'm not interested",
-    "We don't take cold calls", 
+    "We don't take cold calls",
     "Now is not a good time",
     "I have a meeting",
     "Can you call me later?",
@@ -81,6 +79,7 @@ EARLY_OBJECTIONS = [
     "Not interested right now",
     "Just send me the details"
 ]
+
 
 # Post-pitch objections (24 total) - used in Roleplay 2
 POST_PITCH_OBJECTIONS = [
@@ -123,8 +122,6 @@ PITCH_PROMPTS = [
     "What's your pitch?",
     "Let's hear it."
 ]
-
-# Impatience phrases for silence handling
 IMPATIENCE_PHRASES = [
     "Hello? Are you still with me?",
     "Can you hear me?",

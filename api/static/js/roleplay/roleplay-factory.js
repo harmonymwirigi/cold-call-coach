@@ -8,13 +8,13 @@ class RoleplayFactory {
         if (this.initialized) return;
         
         try {
-            // Register available manager classes
             if (typeof Roleplay11Manager !== 'undefined') {
                 this.managerClasses["1.1"] = Roleplay11Manager;
             }
             if (typeof Roleplay12Manager !== 'undefined') {
                 this.managerClasses["1.2"] = Roleplay12Manager;
             }
+            // Add Roleplay13Manager here when it's created
             
             console.log('🏭 Roleplay Factory initialized with:', Object.keys(this.managerClasses));
             this.initialized = true;
@@ -29,8 +29,9 @@ class RoleplayFactory {
         
         const ManagerClass = this.managerClasses[roleplayId];
         if (!ManagerClass) {
-            const available = Object.keys(this.managerClasses);
-            throw new Error(`Unknown roleplay ID: ${roleplayId}. Available: ${available.join(', ')}`);
+            console.warn(`No specific manager for ${roleplayId}, using Roleplay11Manager as fallback.`);
+            // Fallback to the Practice manager if a specific one isn't found
+            return new Roleplay11Manager(options);
         }
         
         console.log(`🏭 Creating ${roleplayId} manager`);
