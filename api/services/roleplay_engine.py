@@ -26,13 +26,11 @@ class RoleplayEngine:
         else:
             self.supabase_service = supabase_service
 
-        # ADD a reference to the progress service here
         self.progress_service = UserProgressService(self.supabase_service)
 
         self.roleplay_implementations = {}
         self._load_roleplay_implementations()
         logger.info(f"✅ RoleplayEngine initialized with {len(self.roleplay_implementations)} roleplay types")
-
     
     def _load_roleplay_implementations(self):
         from .roleplay.roleplay_1_1 import Roleplay11
@@ -41,6 +39,7 @@ class RoleplayEngine:
             '1.1': Roleplay11(self.openai_service),
             '1.2': Roleplay12(self.openai_service),
         }
+
     def _create_fallback_roleplay(self, roleplay_id: str):
         """Create a minimal fallback roleplay implementation"""
         class FallbackRoleplay:
@@ -127,7 +126,7 @@ class RoleplayEngine:
             return {'error': str(e)}
     
     def create_session(self, user_id: str, roleplay_id: str, mode: str, user_context: Dict) -> Dict[str, Any]:
-        """Create a roleplay session by delegating to the correct implementation."""
+        """Create a roleplay session and store it in active memory."""
         try:
             if not user_id or not roleplay_id:
                 return {'success': False, 'error': 'Missing required parameters'}
@@ -150,16 +149,15 @@ class RoleplayEngine:
             session_data = implementation.active_sessions.get(session_id)
             
             if session_data:
+                # Store the session in the engine's active memory
                 self.active_sessions[session_id] = {
                     'implementation_id': roleplay_id,
                     'session_data': session_data,
-                    'created_at': datetime.now(timezone.utc).isoformat(),
-                    'last_activity': datetime.now(timezone.utc).isoformat(),
                     'user_id': user_id,
-                    'roleplay_id': roleplay_id
                 }
-                logger.info(f"✅ Session {session_id} created and stored successfully")
-                self._persist_session_to_database(session_id, user_id, self.active_sessions[session_id])
+                logger.info(f"✅ Session {session_id} created and stored in active memory.")
+                # We no longer persist to the active_sessions table here.
+                # It's better managed in memory or a cache like Redis if needed.
             
             return session_result
             
@@ -207,14 +205,21 @@ class RoleplayEngine:
             return {'success': False, 'error': f'Processing failed: {str(e)}'}
     
     def end_session(self, session_id: str, forced_end: bool = False) -> Dict[str, Any]:
-        """FIXED: End session and correctly save all completion data."""
+        """End session, calculate results, and save the permanent record to the database."""
         try:
             logger.info(f"📞 Ending session {session_id} (forced: {forced_end})")
             
-            session_info = self._get_session_with_recovery(session_id)
+            session_info = self.active_sessions.get(session_id)
             if not session_info:
-                logger.warning(f"⚠️ Session {session_id} not found for ending")
-                return {'success': True, 'message': 'Session not found.'}
+                logger.warning(f"⚠️ Session {session_id} not found in active memory for ending.")
+                # Attempt to recover from implementation state if it exists
+                for impl in self.roleplay_implementations.values():
+                    if session_id in impl.active_sessions:
+                        session_info = {'session_data': impl.active_sessions.get(session_id)}
+                        break
+            
+            if not session_info:
+                 return {'success': True, 'message': 'Session not found or already ended.'}
 
             implementation_id = session_info.get('implementation_id', '1.1')
             implementation = self.roleplay_implementations.get(implementation_id)
@@ -225,7 +230,6 @@ class RoleplayEngine:
             # Get the final result from the specific roleplay logic
             result = implementation.end_session(session_id, forced_end)
             
-            # --- START OF CRITICAL FIX ---
             if result.get('success'):
                 session_data = result.get('session_data', {})
                 user_id = session_data.get('user_id')
@@ -240,29 +244,27 @@ class RoleplayEngine:
                         'success': result.get('session_success'),
                         'duration_minutes': result.get('duration_minutes'),
                         'started_at': session_data.get('started_at'),
-                        'ended_at': session_data.get('ended_at'),
+                        'completed_at': session_data.get('ended_at'),
                         'conversation_data': session_data.get('conversation_history'),
                         'coaching_feedback': result.get('coaching'),
                         'rubric_scores': session_data.get('rubric_scores'),
                         'forced_end': forced_end
                     }
                     
-                    # 1. Save the detailed completion record
+                    # 1. Save the final record to the correct 'roleplay_completions' table.
                     self.progress_service.save_roleplay_completion(completion_data)
                     
-                    # 2. Update the user's aggregate stats and usage
+                    # 2. Update the user's aggregate stats and usage.
                     self.progress_service.update_user_progress_after_completion(completion_data)
 
-                    logger.info(f"✅ Session {session_id} completion and stats have been saved.")
+                    logger.info(f"✅ Session {session_id} results have been saved to the database.")
                 else:
                     logger.warning("No user_id found in session data, cannot save progress.")
-            # --- END OF CRITICAL FIX ---
 
-            # Cleanup in-memory and DB active sessions
+            # Cleanup in-memory session
             self.active_sessions.pop(session_id, None)
-            self._cleanup_session_from_database(session_id)
             
-            logger.info(f"✅ Session {session_id} ended successfully in engine")
+            logger.info(f"✅ Session {session_id} ended and cleaned from memory.")
             return result
                         
         except Exception as e:
@@ -307,44 +309,14 @@ class RoleplayEngine:
             return False
     
     def _get_session_with_recovery(self, session_id: str) -> Optional[Dict[str, Any]]:
-        # ... (this method is correct)
-        if session_id in self.active_sessions:
-            return self.active_sessions[session_id]
-        
-        for impl_id, implementation in self.roleplay_implementations.items():
-            if hasattr(implementation, 'active_sessions') and session_id in implementation.active_sessions:
-                session_data = implementation.active_sessions[session_id]
-                self.active_sessions[session_id] = {
-                    'implementation_id': impl_id,
-                    'session_data': session_data,
-                    'created_at': session_data.get('started_at'),
-                    'last_activity': datetime.now(timezone.utc).isoformat(),
-                    'user_id': session_data.get('user_id'),
-                    'roleplay_id': session_data.get('roleplay_id')
-                }
-                logger.info(f"✅ Session {session_id} recovered from implementation")
-                return self.active_sessions[session_id]
-        
-        logger.warning(f"⚠️ Session {session_id} not found in active storage")
-        return None
+        return self.active_sessions.get(session_id)
     
     def _cleanup_user_sessions(self, user_id: str):
-        """Clean up existing sessions for a user"""
-        try:
-            sessions_to_remove = [sid for sid, s_info in self.active_sessions.items() if s_info.get('user_id') == user_id]
-            for session_id in sessions_to_remove:
-                logger.info(f"🧹 Cleaning up existing session {session_id} for user {user_id}")
-                self.end_session(session_id, forced_end=True)
-        except Exception as e:
-            logger.error(f"❌ Error cleaning up user sessions: {e}")
+        sessions_to_remove = [sid for sid, s_info in self.active_sessions.items() if s_info.get('user_id') == user_id]
+        for session_id in sessions_to_remove:
+            logger.info(f"🧹 Cleaning up stale active session {session_id} for user {user_id}")
+            self.active_sessions.pop(session_id, None)
     
-    def _update_session_activity(self, session_id: str):
-        # ...
-        pass
-    
-    def _persist_session_to_database(self, session_id: str, user_id: str, session_data: Dict):
-        # ...
-        pass
         
     def _cleanup_session_from_database(self, session_id: str):
         # ...
