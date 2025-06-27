@@ -5,11 +5,6 @@ class Roleplay11Manager extends BaseRoleplayManager {
         super(options);
         this.roleplayId = "1.1";
         this.roleplayType = "practice";
-        this.naturalMode = true;
-        this.conversationHistory = [];
-        this.currentAudio = null;
-        this.aiIsSpeaking = false;
-        
     }
     initializeModeSelection() {
         console.log('ðŸŽ¯ Roleplay 1.1: Initializing specific mode selection.');
@@ -33,20 +28,20 @@ class Roleplay11Manager extends BaseRoleplayManager {
     init() {
         console.log('ðŸš€ Initializing Roleplay 1.1 Manager...');
         super.init();
+        
+        // CRITICAL FIX: Connect the voice handler's output (onTranscript) 
+        // to this manager's input processing method (processUserInput).
+        if (this.voiceHandler) {
+            this.voiceHandler.onTranscript = this.processUserInput.bind(this);
+            console.log('âœ… Voice handler callback connected to processUserInput.');
+        }
+
         this.setupPracticeSpecificFeatures();
     }
     
     setupPracticeSpecificFeatures() {
-        // Enable natural conversation features
-        this.enableNaturalConversation();
-        
-        // Setup progress tracking
-        this.setupProgressTracking();
-        
-        // Setup interruption handling
-        this.setupInterruptionHandling();
+        console.log('Practice mode features are being set up.');
     }
-
     // ===== ADD THESE TWO MISSING METHODS =====
     setupProgressTracking() {
         console.log('ðŸ“Š Practice Mode: Progress tracking setup.');
@@ -122,58 +117,53 @@ class Roleplay11Manager extends BaseRoleplayManager {
     
     async processUserInput(transcript) {
         if (!this.isActive || !this.currentSession || this.isProcessing) {
-            console.log('â Œ Cannot process user input - invalid state');
+            console.warn('â Œ Cannot process input: call not active or already processing.');
             return;
         }
         
         console.log('ðŸ’¬ Processing Practice Mode input:', transcript);
         this.isProcessing = true;
-        
-        this.addToConversationHistory('user', transcript);
         this.updateTranscript('ðŸ¤– Processing your response...');
-        
+
         try {
             const response = await this.apiCall('/api/roleplay/respond', {
                 method: 'POST',
-                body: JSON.stringify({
-                    user_input: transcript
-                })
+                body: JSON.stringify({ user_input: transcript })
             });
             
+            const data = await response.json();
+
             if (response.ok) {
-                const data = await response.json();
                 console.log('âœ… AI response received:', data);
+                this.updateTranscript(`ðŸ¤– Prospect: "${data.ai_response}"`);
                 
-                // Update conversation quality indicator
-                if (data.conversation_quality !== undefined) {
-                    this.updateConversationQuality(data.conversation_quality);
-                }
-                
-                // Check if call should end
                 if (!data.call_continues) {
-                    console.log('ðŸ“ž Call ending...');
-                    this.endCall(); // Let endCall handle the final data
-                    return;
+                    console.log('ðŸ“ž Call ending based on API response...');
+                    setTimeout(() => this.endCall(), 1500); // End the call after a short delay
+                } else {
+                    await this.playAIResponse(data.ai_response);
                 }
-                
-                // Play AI response and automatically start next user turn
-                await this.playAIResponseAndWaitForUser(data.ai_response);
-                
             } else {
-                const errorData = await response.json();
-                console.error('â Œ API error:', errorData);
-                this.showError(errorData.error || 'Failed to process input');
-                this.startUserTurn(); // Resume user turn on error
+                this.showError(data.error || 'Failed to get AI response.');
+                this.startUserTurn();
             }
         } catch (error) {
-            console.error('â Œ Error processing user input:', error);
-            this.showError('Network error during call');
-            this.startUserTurn(); // Resume user turn on error
+            this.showError('Network error. Please try again.');
+            this.startUserTurn();
         } finally {
             this.isProcessing = false;
         }
     }
-    
+    async playAIResponse(text) {
+        if (this.voiceHandler) {
+             // Let the voice handler manage playing audio and starting the next user turn
+            await this.voiceHandler.playAudio(text);
+        } else {
+            // Fallback if voice handler isn't ready
+            await this.simulateSpeakingTime(text);
+            this.startUserTurn();
+        }
+    }
     async playAIResponseAndWaitForUser(text) {
         try {
             console.log('ðŸŽ­ Playing AI response (interruptible):', text.substring(0, 50) + '...');
@@ -253,19 +243,12 @@ class Roleplay11Manager extends BaseRoleplayManager {
     }
     
     startUserTurn() {
-        console.log('ðŸ‘¤ Starting user turn - auto-listening activated');
-        
-        this.aiIsSpeaking = false;
-        
-        // Start auto-listening for natural conversation
+        console.log('ðŸ‘¤ Starting user turn.');
         if (this.voiceHandler) {
             this.voiceHandler.setUserTurn(true);
             this.voiceHandler.startAutoListening();
         }
-        
-        // Update UI
-        this.updateTranscript('ðŸŽ¤ Your turn - speak naturally...');
-        this.addPulseToMicButton();
+        this.updateTranscript('ðŸŽ¤ Your turn... speak now.');
     }
     
     handleUserInterruption() {
@@ -318,17 +301,28 @@ class Roleplay11Manager extends BaseRoleplayManager {
         document.getElementById('call-interface').style.display = 'none';
         document.getElementById('feedback-section').style.display = 'flex';
         
-        const feedbackHeader = document.querySelector('.feedback-header h4');
-        if (feedbackHeader) {
-            feedbackHeader.textContent = 'Practice Mode Complete!';
+        // Animate the score circle
+        const scoreCircle = document.getElementById('score-circle');
+        if(scoreCircle) {
+            UIHelpers.animateScore(scoreCircle, score);
+            scoreCircle.className = 'score-circle';
+            if (score >= 85) scoreCircle.classList.add('excellent');
+            else if (score >= 70) scoreCircle.classList.add('good');
+            else scoreCircle.classList.add('needs-improvement');
         }
+
+        // Populate coaching details
+        const content = document.getElementById('feedback-content');
+        if (!content) return;
         
-        if (coaching) {
-            this.populatePracticeCoaching(coaching);
+        if (coaching && Object.keys(coaching).length > 0) {
+             content.innerHTML = Object.entries(coaching).map(([key, value]) => {
+                const title = key.replace(/_/g, ' ').replace(/(^\w|\s\w)/g, m => m.toUpperCase());
+                return `<div class="feedback-item"><h5>${title}</h5><p>${value}</p></div>`;
+             }).join('');
+        } else {
+            content.innerHTML = `<div class="feedback-item"><p>Great job completing the session! Keep practicing.</p></div>`;
         }
-        
-        this.animateScore(score);
-        this.updateScoreCircleColor(score);
     }
     
     populatePracticeCoaching(coaching) {

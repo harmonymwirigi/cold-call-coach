@@ -4969,55 +4969,51 @@
                     }
             
             def create_session(self, user_id: str, roleplay_id: str, mode: str, user_context: Dict) -> Dict[str, Any]:
-                """FIXED: Create roleplay session with enhanced error handling and persistence"""
+                """FIXED: Create roleplay session with serializable data"""
                 try:
                     # Validate inputs
+                    
                     if not user_id or not roleplay_id:
                         return {'success': False, 'error': 'Missing required parameters'}
                     
                     if roleplay_id not in self.roleplay_implementations:
                         return {'success': False, 'error': f'Roleplay {roleplay_id} not available'}
                     
-                    logger.info(f"ðŸš€ Creating session: {roleplay_id} for user {user_id} (mode: {mode})")
+                    logger.info(f"Ã°Å¸Å¡â‚¬ Creating session: {roleplay_id} for user {user_id} (mode: {mode})")
                     
-                    # Clean up any existing sessions for this user
                     self._cleanup_user_sessions(user_id)
                     
-                    # Create session through implementation
                     implementation = self.roleplay_implementations[roleplay_id]
                     session_result = implementation.create_session(user_id, mode, user_context)
                     
                     if not session_result.get('success'):
-                        logger.error(f"âŒ Implementation failed to create session: {session_result}")
+                        logger.error(f"Ã¢ Å’ Implementation failed to create session: {session_result}")
                         return session_result
                     
                     session_id = session_result['session_id']
-                    
-                    # Store session in engine's active sessions
                     session_data = implementation.active_sessions.get(session_id)
+                    
                     if session_data:
+                        # CRITICAL FIX: Store the roleplay_id string, not the implementation object
                         self.active_sessions[session_id] = {
-                            'implementation': implementation,
+                            'implementation_id': roleplay_id, # STORE ID, NOT OBJECT
                             'session_data': session_data,
                             'created_at': datetime.now(timezone.utc).isoformat(),
                             'last_activity': datetime.now(timezone.utc).isoformat(),
                             'user_id': user_id,
                             'roleplay_id': roleplay_id
                         }
-                        
-                        logger.info(f"âœ… Session {session_id} created and stored successfully")
-                        
-                        # Store in database for persistence (if available)
-                        self._persist_session_to_database(session_id, user_id, session_data)
+                        logger.info(f"Ã¢Å“â€¦ Session {session_id} created and stored successfully")
+                        self._persist_session_to_database(session_id, user_id, self.active_sessions[session_id])
                     
                     return session_result
                     
                 except Exception as e:
-                    logger.error(f"âŒ Error creating roleplay session: {e}")
+                    logger.error(f"Ã¢ Å’ Error creating roleplay session: {e}", exc_info=True)
                     return {'success': False, 'error': f'Failed to create session: {str(e)}'}
             
             def process_user_input(self, session_id: str, user_input: str) -> Dict[str, Any]:
-                """FIXED: Process user input with robust session recovery"""
+                """FIXED: Process user input using implementation_id"""
                 try:
                     # Validate inputs
                     if not session_id or not user_input:
@@ -5031,7 +5027,8 @@
                         logger.error(f"âŒ Session {session_id} not found in any storage location")
                         return {'success': False, 'error': 'Session not found or expired'}
                     
-                    implementation = session_info['implementation']
+                    implementation_id = session_info['implementation_id']
+                    implementation = self.roleplay_implementations[implementation_id]
                     
                     # Update last activity
                     self._update_session_activity(session_id)
@@ -5068,26 +5065,23 @@
                     return {'success': False, 'error': f'Processing failed: {str(e)}'}
             
             def end_session(self, session_id: str, forced_end: bool = False) -> Dict[str, Any]:
-                """FIXED: End session with comprehensive cleanup"""
+                """FIXED: End session using implementation_id"""
                 try:
-                    logger.info(f"ðŸ“ž Ending session {session_id} (forced: {forced_end})")
+                    logger.info(f"Ã°Å¸â€œÅ¾ Ending session {session_id} (forced: {forced_end})")
                     
-                    # Get session info
                     session_info = self._get_session_with_recovery(session_id)
                     
                     if session_info:
-                        implementation = session_info['implementation']
+                        # CRITICAL FIX: Retrieve implementation using its stored ID
+                        implementation_id = session_info['implementation_id']
+                        implementation = self.roleplay_implementations[implementation_id]
                         
-                        # End through implementation
                         result = implementation.end_session(session_id, forced_end)
                         
-                        # Clean up from engine
                         self.active_sessions.pop(session_id, None)
-                        
-                        # Clean up from database
                         self._cleanup_session_from_database(session_id)
                         
-                        logger.info(f"âœ… Session {session_id} ended successfully")
+                        logger.info(f"Ã¢Å“â€¦ Session {session_id} ended successfully")
                         return result
                     else:
                         # Session not found, but return success for cleanup
@@ -5289,13 +5283,19 @@
                             logger.warning(f"âš ï¸ Error cleaning up old session {session_id}: {cleanup_error}")
                     
                     if sessions_to_remove:
+                        logger.info(f"âœ… Cleaned up {len(sessions_to_remove)} old sessions")
+                    
+                    return len(sessions_to_remove)
+                    
+                except Exception as e:
+                    logger.error(f"âŒ Error cleaning up old sessions: {e}")
 
-  📄 supabase_client.py (12.6KB)
+  📄 supabase_client.py (15.3KB)
       Content:
         # ===== UPDATED API/SERVICES/SUPABASE_CLIENT.PY (FIXED) =====
         from supabase import create_client, Client
         import os
-        from typing import Optional, Dict, Any, List
+        from typing import Optional, Dict, Any, List, Union
         import logging
         import json
         
@@ -5541,6 +5541,62 @@
                 except Exception as e:
                     logger.error(f"Error verifying code: {e}")
                     return None
+                
+            def upsert_data(self, table_name: str, data: Union[Dict, List[Dict]]) -> Optional[List[Dict]]:
+                """Upsert data into a table using the service client."""
+                try:
+                    response = self.service_client.table(table_name).upsert(data).execute()
+                    if response.data:
+                        logger.info(f"Upsert successful for table '{table_name}'")
+                        return response.data
+                    else:
+                        logger.warning(f"Upsert to '{table_name}' returned no data.")
+                        return None
+                except Exception as e:
+                    logger.error(f"Error upserting data to '{table_name}': {e}")
+                    return None
+        
+            def get_data_with_filter(self, table_name: str, filter_column: str, filter_value: Any, additional_filters: Dict = None, limit: int = None, order_by: str = None, ascending: bool = True) -> List[Dict[str, Any]]:
+                """Get data from a table with filters using the service client."""
+                try:
+                    query = self.service_client.table(table_name).select('*').eq(filter_column, filter_value)
+                    if additional_filters:
+                        for col, val in additional_filters.items():
+                            query = query.eq(col, val)
+                    if order_by:
+                        query = query.order(order_by, desc=not ascending)
+                    if limit:
+                        query = query.limit(limit)
+                    
+                    response = query.execute()
+                    return response.data or []
+                except Exception as e:
+                    logger.error(f"Error getting data from '{table_name}': {e}")
+                    return []
+        
+            def insert_data(self, table_name: str, data: Dict) -> Optional[Dict[str, Any]]:
+                """Insert a single record into a table using the service client."""
+                try:
+                    response = self.service_client.table(table_name).insert(data).execute()
+                    if response.data:
+                        logger.info(f"Insert successful for table '{table_name}'")
+                        return response.data[0]
+                    return None
+                except Exception as e:
+                    logger.error(f"Error inserting data into '{table_name}': {e}")
+                    return None
+        
+            def update_data_by_id(self, table_name: str, id_filter: Dict, updates: Dict) -> bool:
+                """Update data in a table based on a filter using the service client."""
+                try:
+                    query = self.service_client.table(table_name).update(updates)
+                    for col, val in id_filter.items():
+                        query = query.eq(col, val)
+                    response = query.execute()
+                    return len(response.data) > 0
+                except Exception as e:
+                    logger.error(f"Error updating data in '{table_name}': {e}")
+                    return False
             def get_user_sessions(self, user_id: str, limit: int = 20, offset: int = 0) -> List[Dict[str, Any]]:
                 """Get user's voice sessions"""
                 try:
@@ -12392,7 +12448,7 @@
     📄 todelete.js (0KB)
         (Empty file)
 
-    📄 voice-handler.js (29.9KB)
+    📄 voice-handler.js (29.8KB)
         Content:
           // ===== SIMPLE & RELIABLE: voice-handler.js (Mobile-First Design) =====
           
@@ -12897,7 +12953,7 @@
                       } catch (e) {
 
     📁 roleplay/
-      📄 base-roleplay-manager.js (20.8KB)
+      📄 base-roleplay-manager.js (23.5KB)
           Content:
             // ===== FIXED static/js/roleplay/base-roleplay-manager.js =====
             
@@ -12951,7 +13007,20 @@
                         timeElement.textContent = time;
                     }
                 }
-                
+                async apiCall(endpoint, options = {}) {
+                    const defaultOptions = {
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`
+                        },
+                        ...options
+                    };
+                    const response = await fetch(endpoint, defaultOptions);
+                    if (!response.ok && response.status === 401) {
+                        window.location.href = '/login';
+                    }
+                    return response;
+                }
                 loadRoleplayData() {
                     const roleplayData = document.getElementById('roleplay-data');
                     if (roleplayData) {
@@ -13206,17 +13275,17 @@
                 }
                 
                 async startPhoneCallSequence(initialResponse) {
-                    console.log('ðŸ“ž Starting phone call sequence...');
+                    console.log('Ã°Å¸â€œÅ¾ Starting phone call sequence...');
                     
                     // Hide mode selection, show call interface
                     document.getElementById('mode-selection').style.display = 'none';
+                    document.getElementById('phone-container').style.display = 'block'; // Show the phone
                     document.getElementById('call-interface').style.display = 'flex';
                     
                     await this.dialingState();
                     await this.ringingState();
                     await this.connectedState(initialResponse);
                 }
-                
                 async dialingState() {
                     console.log('ðŸ“± Dialing state...');
                     this.callState = 'dialing';
@@ -13366,21 +13435,20 @@
                 }
                 
                 tryAgain() {
-                    console.log('ðŸ”„ Trying again');
+                    console.log('Ã°Å¸â€â€ž Trying again');
                     this.showModeSelection();
-                    
-                    if (this.selectedMode) {
-                        setTimeout(() => {
-                            this.selectMode(this.selectedMode);
-                        }, 100);
-                    }
                 }
+            
                 
                 showModeSelection() {
-                    console.log('ðŸŽ¯ Showing mode selection');
+                    console.log('Ã°Å¸Å½Â¯ Showing mode selection');
                     
+                    // Hide phone and feedback, show mode selection
+                    document.getElementById('phone-container').style.display = 'none';
                     document.getElementById('feedback-section').style.display = 'none';
-                    this.initializeModeSelection();
+                    document.getElementById('mode-selection').style.display = 'flex';
+                    
+                    this.initializeModeSelection(); // Re-initialize the selection state
                     
                     this.selectedMode = null;
                     this.currentSession = null;
@@ -13388,20 +13456,8 @@
                     document.querySelectorAll('.mode-option').forEach(option => {
                         option.classList.remove('selected');
                     });
-                    
-                    const startBtn = document.getElementById('start-call-btn');
-                    if (startBtn) {
-                        startBtn.disabled = true;
-                        startBtn.textContent = 'Select a mode to start';
-                    }
-                }
-                
-                getRoleplayId() {
-                    const roleplayData = document.getElementById('roleplay-data');
-                    // FIXED: Don't use parseInt() - return string directly
-                    return roleplayData ? (roleplayData.dataset.roleplayId || '1.1') : '1.1';
 
-      📄 roleplay-1-1-manager.js (13.6KB)
+      📄 roleplay-1-1-manager.js (14.3KB)
           Content:
             // ===== FIXED: static/js/roleplay/roleplay-1-1-manager.js =====
             
@@ -13414,8 +13470,27 @@
                     this.conversationHistory = [];
                     this.currentAudio = null;
                     this.aiIsSpeaking = false;
+                    
                 }
-                
+                initializeModeSelection() {
+                    console.log('Ã°Å¸Å½Â¯ Roleplay 1.1: Initializing specific mode selection.');
+                    
+                    // Define the modes for this specific roleplay
+                    const modes = [
+                        {
+                            id: 'practice',
+                            name: 'Practice Mode',
+                            description: 'A single, detailed call with full AI coaching and feedback.',
+                            icon: 'user-graduate'
+                        }
+                    ];
+                    
+                    // Use the helper from the base class to create the UI
+                    this.createModeSelectionUI(modes);
+                    
+                    // Since there's only one mode, auto-select it
+                    this.selectMode('practice');
+                }
                 init() {
                     console.log('Ã°Å¸Å¡â‚¬ Initializing Roleplay 1.1 Manager...');
                     super.init();
@@ -15979,11 +16054,9 @@
         </script>
         {% endblock %}
 
-  📄 roleplay.html (18.3KB)
+  📄 roleplay.html (6.8KB)
       Content:
-        <!-- ===== CORRECTED FILE: templates/roleplay.html ===== -->
-        <!-- This version uses the RoleplayFactory to load the correct JS manager dynamically -->
-        
+        <!-- ===== FIXED: templates/roleplay.html ===== -->
         {% extends "base.html" %}
         
         {% block title %}{{ roleplay_info.name if roleplay_info else 'Roleplay Training' }} - Cold Calling Coach{% endblock %}
@@ -15991,497 +16064,137 @@
         {% block extra_css %}
         <link rel="stylesheet" href="{{ url_for('static', filename='css/roleplay.css') }}">
         <style>
-        /* Enhanced roleplay-specific styles */
-        .training-container {
-            min-height: 100vh;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 20px;
-            position: relative;
-        }
-        
-        .back-to-dashboard {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            color: rgba(255, 255, 255, 0.8);
-            text-decoration: none;
-            font-size: 16px;
-            display: flex;
-            align-items: center;
-            z-index: 10;
-            transition: color 0.3s ease;
-        }
-        
-        .back-to-dashboard:hover {
-            color: white;
-            text-decoration: none;
-        }
-        
-        .phone-container {
-            width: 100%;
-            max-width: 400px;
-            margin: 60px auto 20px auto;
-            perspective: 1000px;
-        }
-        
-        .phone-screen {
-            background: linear-gradient(135deg, #1e3c72, #2a5298);
-            border-radius: 25px;
-            padding: 20px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-            min-height: 600px;
-            display: flex;
-            flex-direction: column;
-            position: relative;
-            border: 3px solid rgba(255, 255, 255, 0.1);
-        }
-        
-        .status-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            color: white;
-            font-size: 16px;
-            font-weight: 600;
-            padding: 10px 0 20px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            margin-bottom: 20px;
-        }
-        
-        .status-icons {
-            display: flex;
-            gap: 8px;
-            font-size: 14px;
-        }
-        
-        .mode-selection {
-            text-align: center;
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-        
-        .mode-selection h3 {
-            color: white;
-            margin-bottom: 10px;
-            font-size: 24px;
-            font-weight: 700;
-        }
-        
-        .roleplay-version {
-            color: rgba(255, 255, 255, 0.8);
-            margin-bottom: 30px;
-            font-size: 16px;
-        }
-        
-        .mode-grid {
-            margin: 20px 0;
-        }
-        
-        .mode-option {
-            background: rgba(255, 255, 255, 0.1);
-            border: 2px solid transparent;
-            border-radius: 16px;
-            padding: 24px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin: 12px 0;
-            backdrop-filter: blur(10px);
-        }
-        
-        .mode-option:hover {
-            background: rgba(255, 255, 255, 0.2);
-            border-color: #60a5fa;
-            transform: translateY(-2px);
-        }
-        
-        .mode-option.selected {
-            background: rgba(96, 165, 250, 0.3);
-            border-color: #60a5fa;
-            box-shadow: 0 8px 25px rgba(96, 165, 250, 0.4);
-        }
-        
-        .mode-option h5 {
-            margin: 16px 0 8px 0;
-            color: white;
-            font-size: 20px;
-            font-weight: 600;
-        }
-        
-        .mode-option small {
-            color: rgba(255, 255, 255, 0.8);
-            font-size: 14px;
-            line-height: 1.4;
-        }
-        
-        .start-call-btn {
-            width: 100%;
-            padding: 16px 24px;
-            background: linear-gradient(135deg, #10b981, #059669);
-            color: white;
-            border: none;
-            border-radius: 12px;
-            font-size: 18px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-top: 20px;
-            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
-        }
-        
-        .start-call-btn:hover:not(:disabled) {
-            background: linear-gradient(135deg, #059669, #047857);
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.6);
-        }
-        
-        .start-call-btn:disabled {
-            background: #6b7280;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
-        
-        .call-interface {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            text-align: center;
-        }
-        
-        .call-status {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        
-        .contact-avatar {
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            margin: 0 auto 12px auto;
-            display: block;
-            border: 3px solid rgba(255, 255, 255, 0.3);
-        }
-        
-        .contact-name {
-            color: white;
-            font-size: 22px;
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
-        
-        .contact-info {
-            color: rgba(255, 255, 255, 0.8);
-            font-size: 14px;
-            margin-bottom: 8px;
-        }
-        
-        .call-status-text {
-            color: #10b981;
-            font-size: 16px;
-            font-weight: 500;
-            margin-bottom: 4px;
-        }
-        
-        .call-duration {
-            color: white;
-            font-size: 18px;
-            font-weight: 600;
-            font-family: 'Courier New', monospace;
-        }
-        
-        .live-transcript {
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 12px;
-            padding: 16px;
-            margin: 20px 0;
-            flex: 1;
-            overflow-y: auto;
-            max-height: 300px;
-            min-height: 150px;
-            text-align: left;
-        }
-        
-        .transcript-message {
-            margin: 8px 0;
-            padding: 10px 12px;
-            border-radius: 8px;
-            word-wrap: break-word;
-            animation: slideIn 0.3s ease-out;
-        }
-        
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
+            /* Add this style to ensure the phone container is initially hidden */
+            #phone-container {
+                display: none; 
             }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
+        </style>
+        {% endblock %}
         
-        .transcript-message.user {
-            background: #1e40af;
-            margin-left: 20px;
-            border-top-right-radius: 4px;
-        }
+        {% block content %}
+        <div class="training-container">
+            <!-- Back to Dashboard Link -->
+            <a href="/dashboard" class="back-to-dashboard">
+                <i class="fas fa-arrow-left me-2"></i>Dashboard
+            </a>
         
-        .transcript-message.ai {
-            background: #7c3aed;
-            margin-right: 20px;
-            border-top-left-radius: 4px;
-        }
+            <!-- Mode Selection Screen (Now outside the phone) -->
+            <div class="mode-selection" id="mode-selection" style="position: static; max-width: 800px; background: none;">
+                <h3 id="roleplay-title">Choose Training Mode</h3>
+                <div class="roleplay-version" id="roleplay-version">Loading...</div>
+                <div class="mode-grid" id="mode-grid">
+                    <!-- Mode options will be populated by JavaScript -->
+                    <div class="text-center text-white py-5">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading Modes...</p>
+                    </div>
+                </div>
+                <button class="start-call-btn" id="start-call-btn" disabled>
+                    Select a mode to start
+                </button>
+            </div>
         
-        .transcript-message .speaker {
-            font-weight: bold;
-            font-size: 12px;
-            margin-bottom: 4px;
-            color: rgba(255, 255, 255, 0.8);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
+            <!-- Phone Interface Container (Initially hidden) -->
+            <div class="phone-container" id="phone-container">
+                <div class="phone-screen">
+                    <!-- Status Bar -->
+                    <div class="status-bar" id="status-bar">
+                        <div class="time" id="current-time">9:41</div>
+                        <div class="status-icons">
+                            <i class="fas fa-signal"></i>
+                            <i class="fas fa-wifi"></i>
+                            <i class="fas fa-battery-three-quarters"></i>
+                        </div>
+                    </div>
         
-        .transcript-message .message {
-            font-size: 14px;
-            line-height: 1.4;
-            color: white;
-        }
+                    <!-- Conversation Quality Indicator -->
+                    <div class="conversation-quality" id="conversation-quality" style="display: none;">50%</div>
         
-        .call-controls {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-            padding: 20px 0;
-        }
+                    <!-- Marathon Progress -->
+                    <div class="marathon-progress" id="marathon-progress" style="display: none;">
+                        <!-- Marathon stats will be populated here -->
+                    </div>
         
-        .control-btn {
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            border: none;
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            font-size: 24px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            backdrop-filter: blur(10px);
-        }
+                    <!-- Call Interface -->
+                    <div class="call-interface" id="call-interface" style="display: none;">
+                        <div class="call-status">
+                            <img src="" alt="Contact" class="contact-avatar" id="contact-avatar">
+                            <div class="contact-name" id="contact-name">...</div>
+                            <div class="contact-info" id="contact-info">...</div>
+                            <div class="call-status-text" id="call-status-text">...</div>
+                            <div class="call-duration" id="call-duration">00:00</div>
+                        </div>
+                        <div class="live-transcript" id="live-transcript">...</div>
+                        <div style="margin-top: auto;">
+                            <div class="end-call-container">
+                                <button class="end-call-btn" id="end-call-btn" title="End call"><i class="fas fa-phone"></i></button>
+                            </div>
+                        </div>
+                    </div>
         
-        .control-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: scale(1.1);
-        }
+                    <!-- Feedback Section -->
+                    <div class="feedback-section" id="feedback-section" style="display: none;">
+                         <div class="feedback-header">
+                            <div class="roleplay-badge" id="roleplay-badge">Roleplay</div>
+                            <div class="score-circle" id="score-circle">0</div>
+                            <h4 style="color: white; margin: 0;">Training Complete!</h4>
+                         </div>
+                         <div id="feedback-content" style="overflow-y: auto; flex: 1;"></div>
+                         <div class="feedback-actions">
+                             <button class="feedback-btn" id="try-again-btn"><i class="fas fa-redo me-2"></i>Try Again</button>
+                             <button class="feedback-btn primary" id="new-mode-btn"><i class="fas fa-arrow-left me-2"></i>Change Roleplay</button>
+                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
         
-        .control-btn.mic {
-            background: linear-gradient(135deg, #10b981, #059669);
-        }
+        <div id="roleplay-data" 
+             data-roleplay-id="{{ roleplay_id if roleplay_id else '1.1' }}"
+             data-user-authenticated="{{ 'true' if session.get('user_id') else 'false' }}"
+             style="display: none;">
+        </div>
         
-        .control-btn.mic:hover {
-            background: linear-gradient(135deg, #059669, #047857);
-        }
+        <div id="voice-error" class="alert alert-warning position-fixed" style="display: none;"></div>
+        {% endblock %}
         
-        .end-call-container {
-            margin-top: 10px;
-        }
-        
-        .end-call-btn {
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #ef4444, #dc2626);
-            border: none;
-            color: white;
-            font-size: 32px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin: 0 auto;
-            display: block;
-            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
-        }
-        
-        .end-call-btn:hover {
-            background: linear-gradient(135deg, #dc2626, #b91c1c);
-            transform: scale(1.1);
-            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.6);
-        }
-        
-        .feedback-section {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            text-align: center;
-        }
-        
-        .feedback-header {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        
-        .roleplay-badge {
-            background: linear-gradient(135deg, #10b981, #059669);
-            color: white;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-            display: inline-block;
-            margin-bottom: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .score-circle {
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #10b981, #059669);
-            color: white;
-            font-size: 24px;
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 16px auto;
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
-        }
-        
-        .score-circle.excellent {
-            background: linear-gradient(135deg, #10b981, #059669);
-        }
-        
-        .score-circle.good {
-            background: linear-gradient(135deg, #f59e0b, #d97706);
-        }
-        
-        .score-circle.needs-improvement {
-            background: linear-gradient(135deg, #ef4444, #dc2626);
-        }
-        
-        .feedback-category {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            padding: 16px;
-            margin: 8px 0;
-            text-align: left;
-            backdrop-filter: blur(10px);
-        }
-        
-        .feedback-category h5 {
-            color: white;
-            margin-bottom: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-        }
-        
-        .feedback-category p {
-            color: rgba(255, 255, 255, 0.9);
-            margin: 0;
-            line-height: 1.5;
-            font-size: 14px;
-        }
-        
-        .feedback-actions {
-            display: flex;
-            gap: 12px;
-            margin-top: 20px;
-        }
-        
-        .feedback-btn {
-            flex: 1;
-            padding: 12px 20px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-weight: 500;
-            backdrop-filter: blur(10px);
-        }
-        
-        .feedback-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-            border-color: rgba(255, 255, 255, 0.5);
-            transform: translateY(-1px);
-        }
-        
-        .feedback-btn.primary {
-            background: linear-gradient(135deg, #3b82f6, #2563eb);
-            border-color: #3b82f6;
-        }
-        
-        .feedback-btn.primary:hover {
-            background: linear-gradient(135deg, #2563eb, #1d4ed8);
-        }
-        
-        /* Voice error styling */
-        #voice-error {
-            background: rgba(239, 68, 68, 0.9);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            padding: 12px 16px;
-            font-weight: 500;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-        }
-        
-        /* Responsive design */
-        @media (max-width: 768px) {
-            .training-container {
-                padding: 10px;
-            }
-            
-            .phone-container {
-                max-width: 350px;
-                margin: 40px auto 10px auto;
-            }
-            
-            .phone-screen {
-                padding: 16px;
-                min-height: 500px;
-            }
-            
-            .mode-option {
-                padding: 20px 16px;
-            }
-            
-            .mode-option h5 {
-                font-size: 18px;
-            }
-            
-            .start-call-btn {
-                padding: 14px 20px;
-                font-size: 16px;
-            }
-            
-            .feedback-actions {
-                flex-direction: column;
-            }
-            
-            .back-to-dashboard {
-                position: relative;
-                top: auto;
-                left: auto;
-                margin-bottom: 20px;
-                align-self: flex-start;
-            }
-        }
-        
-        @media (max-width: 480px) {
-            .phone-container {
-                max-width: 320px;
-            }
-            
-            .phone-screen {
+        {% block extra_js %}
+        <!-- CORRECTED PATH for voice-handler.js -->
+        <script src="{{ url_for('static', filename='js/voice-handler.js') }}?v={{ get_file_version('js/voice-handler.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/roleplay/base-roleplay-manager.js') }}?v={{ get_file_version('js/roleplay/base-roleplay-manager.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/roleplay/roleplay-1-1-manager.js') }}?v={{ get_file_version('js/roleplay/roleplay-1-1-manager.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/roleplay/roleplay-1-2-manager.js') }}?v={{ get_file_version('js/roleplay/roleplay-1-2-manager.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/roleplay/roleplay-factory.js') }}?v={{ get_file_version('js/roleplay/roleplay-factory.js') }}"></script>
+        <script>
+            // Factory-based initialization
+            document.addEventListener('DOMContentLoaded', () => {
+                try {
+                    const roleplayId = document.getElementById('roleplay-data').dataset.roleplayId;
+                    console.log(`Initializing manager for roleplay ID: ${roleplayId}`);
+                    
+                    // This global instance `currentRoleplayManager` will be used by the page
+                    window.currentRoleplayManager = RoleplayFactory.createManager(roleplayId);
+                    
+                    console.log('âœ… Roleplay successfully initialized via factory.');
+                } catch (error) {
+                    console.error('ðŸš¨ CRITICAL ERROR: Roleplay initialization failed.', error);
+                    const container = document.querySelector('.training-container');
+                    if (container) {
+                        container.innerHTML = `
+                            <div class="text-center text-white">
+                                <h2>Initialization Failed</h2>
+                                <p>Could not load the roleplay module. Please try again or go back to the dashboard.</p>
+                                <p class="text-danger small">Error: ${error.message}</p>
+                                <a href="/dashboard" class="btn btn-light mt-3">Back to Dashboard</a>
+                            </div>
+                        `;
+                    }
+                }
+            });
+        </script>
+        {% endblock %}
 
   📄 verify-email.html (0KB)
       (Empty file)
