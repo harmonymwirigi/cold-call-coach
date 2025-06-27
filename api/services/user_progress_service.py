@@ -69,7 +69,7 @@ class UserProgressService:
         except Exception as e:
             logger.error(f"Error in check_roleplay_access for {roleplay_id}: {e}", exc_info=True)
             return {'allowed': False, 'reason': 'Error checking access.'}
-    
+
     def get_user_roleplay_progress(self, user_id: str, roleplay_ids: Optional[List[str]] = None) -> Dict[str, Any]:
         """Get user's progress for specific roleplays or all roleplays"""
         try:
@@ -137,7 +137,7 @@ class UserProgressService:
         except Exception as e:
             logger.error(f"Error getting user roleplay progress: {e}")
             return {}
-    
+
     def _determine_completion_status(self, roleplay_id: str, progress_record: Dict, completions: List[Dict]) -> bool:
         """Determine if user has completed a roleplay based on type"""
         if roleplay_id.endswith('.1'):  # Practice modes
@@ -148,7 +148,7 @@ class UserProgressService:
             return progress_record.get('legend_completed', False)
         else:
             return len(completions) > 0 and any(c.get('success', False) for c in completions)
-    
+
     def _determine_pass_status(self, roleplay_id: str, progress_record: Dict, completions: List[Dict]) -> bool:
         """Determine if user has passed a roleplay"""
         if roleplay_id.endswith('.1'):  # Practice modes
@@ -159,7 +159,7 @@ class UserProgressService:
             return progress_record.get('legend_completed', False)
         else:
             return progress_record.get('best_score', 0) >= 70
-    
+
     def log_roleplay_attempt(self, user_id: str, roleplay_id: str, session_id: str) -> bool:
         """Log that a user started a roleplay attempt"""
         try:
@@ -376,7 +376,7 @@ class UserProgressService:
         except Exception as e:
             logger.error(f"Error updating user progress: {e}", exc_info=True)
             return {'updated': False, 'error': str(e)}
-    
+
     def check_new_unlocks(self, user_id: str) -> List[str]:
         """Check for new roleplay unlocks based on current progress"""
         try:
@@ -440,7 +440,7 @@ class UserProgressService:
         except Exception as e:
             logger.error(f"Error checking new unlocks: {e}")
             return []
-    
+
     def get_available_roleplays(self, user_id: str) -> List[str]:
         """Get list of roleplays available to the user"""
         try:
@@ -457,7 +457,7 @@ class UserProgressService:
         except Exception as e:
             logger.error(f"Error getting available roleplays: {e}")
             return ['1.1']  # Always return at least Practice Mode
-    
+
     def get_completion_stats(self, user_id: str) -> Dict[str, Any]:
         """Get user's overall completion statistics"""
         try:
@@ -497,7 +497,7 @@ class UserProgressService:
         except Exception as e:
             logger.error(f"Error getting completion stats: {e}")
             return {}
-    
+
     def get_leaderboard(self, roleplay_id: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Get leaderboard for a specific roleplay"""
         try:
@@ -536,7 +536,7 @@ class UserProgressService:
         except Exception as e:
             logger.error(f"Error getting leaderboard: {e}")
             return []
-    
+
     def get_next_recommendations(self, user_id: str) -> List[Dict[str, Any]]:
         """Get recommended next steps for the user"""
         try:
@@ -573,7 +573,7 @@ class UserProgressService:
         except Exception as e:
             logger.error(f"Error getting recommendations: {e}")
             return []
-    
+
     def _get_recommendation_reason(self, roleplay_id: str, progress: Dict[str, Any]) -> str:
         """Get reason for recommending a specific roleplay"""
         attempts = progress.get('total_attempts', 0)
@@ -589,6 +589,33 @@ class UserProgressService:
             return "Ready for legend challenge"
         else:
             return "Continue improving"
+    
+    
+    
+    def save_roleplay_completion(self, completion_data: Dict[str, Any]) -> Optional[str]:
+        """Save a completed roleplay session to the completions table."""
+        try:
+            if not self.supabase: return None
+            
+            for key in ['ai_evaluation', 'coaching_feedback', 'conversation_data', 'rubric_scores']:
+                if key in completion_data and not isinstance(completion_data.get(key), (str, type(None))):
+                    completion_data[key] = json.dumps(completion_data[key])
+            
+            response = self.supabase.insert_data('roleplay_completions', completion_data)
+            if response:
+                logger.info(f"Saved roleplay completion ID: {response.get('id')}")
+                return response.get('id')
+            return None
+        except Exception as e:
+            logger.error(f"Error saving roleplay completion: {e}", exc_info=True)
+            return None
+        
+    
+    
+    
+    
+    
+    
 
 # Global instance
 _user_progress_service = None
