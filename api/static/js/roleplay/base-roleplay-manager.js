@@ -301,7 +301,17 @@ class BaseRoleplayManager {
             startBtn.textContent = `Start ${this.capitalizeFirst(mode)} Mode`;
         }
     }
-    
+    async playAIResponse(text) {
+        if (this.voiceHandler) {
+             // Let the voice handler manage playing audio and starting the next user turn
+            await this.voiceHandler.playAudio(text);
+        } else {
+            // Fallback if voice handler isn't ready
+            console.warn("Voice handler not available, simulating speech time.");
+            await this.simulateSpeakingTime(text);
+            this.startUserTurn();
+        }
+    }
     updateStartButton(text, disabled = false) {
         const startBtn = document.getElementById('start-call-btn');
         if (startBtn) {

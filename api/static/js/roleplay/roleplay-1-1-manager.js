@@ -151,16 +151,7 @@ class Roleplay11Manager extends BaseRoleplayManager {
             this.isProcessing = false;
         }
     }
-    async playAIResponse(text) {
-        if (this.voiceHandler) {
-             // Let the voice handler manage playing audio and starting the next user turn
-            await this.voiceHandler.playAudio(text);
-        } else {
-            // Fallback if voice handler isn't ready
-            await this.simulateSpeakingTime(text);
-            this.startUserTurn();
-        }
-    }
+    
     async playAIResponseAndWaitForUser(text) {
         try {
             console.log('ðŸŽ­ Playing AI response (interruptible):', text.substring(0, 50) + '...');
