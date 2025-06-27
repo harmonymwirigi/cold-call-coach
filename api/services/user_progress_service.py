@@ -245,7 +245,8 @@ class UserProgressService:
             client = self.supabase.get_service_client()
             
             # 1. Update user_roleplay_stats
-            current_stats = self.get_user_roleplay_stats(user_id, roleplay_id).get(roleplay_id)
+            current_stats_dict = self.get_user_roleplay_stats(user_id, roleplay_id)
+            current_stats = current_stats_dict.get(roleplay_id)
             
             if current_stats:
                 updates = {
@@ -270,16 +271,12 @@ class UserProgressService:
             logger.info(f"Updated stats for user {user_id} on roleplay {roleplay_id}")
 
             # 2. Update user_profiles for usage time
-            profile_query = client.table('user_profiles').select('lifetime_usage_minutes, monthly_usage_minutes').eq('id', user_id).single().execute()
-            if profile_query.data:
-                profile = profile_query.data
-                profile_updates = {
-                    'lifetime_usage_minutes': (profile.get('lifetime_usage_minutes') or 0) + duration,
-                    'monthly_usage_minutes': (profile.get('monthly_usage_minutes') or 0) + duration,
-                    'last_active_at': datetime.now(timezone.utc).isoformat()
-                }
-                client.table('user_profiles').update(profile_updates).eq('id', user_id).execute()
-                logger.info(f"Updated usage for user {user_id}: +{duration} minutes")
+            # Using a transaction to safely increment the usage minutes
+            client.rpc('increment_usage_minutes', {
+                'p_user_id': user_id,
+                'p_duration': duration
+            }).execute()
+            logger.info(f"Updated usage for user {user_id}: +{duration} minutes via RPC.")
             
             return True
         except Exception as e:
@@ -587,19 +584,27 @@ class UserProgressService:
     def save_roleplay_completion(self, completion_data: Dict[str, Any]) -> Optional[str]:
         """Save a completed roleplay session to the completions table."""
         try:
-            if not self.supabase: return None
+            if not self.supabase: 
+                return None
             
-            for key in ['ai_evaluation', 'coaching_feedback', 'conversation_data', 'rubric_scores']:
-                if key in completion_data and not isinstance(completion_data.get(key), (str, type(None))):
-                    completion_data[key] = json.dumps(completion_data[key])
+            # The Supabase client library automatically handles converting Python dicts
+            # to jsonb. Manually calling json.dumps() causes an error.
+            # We are REMOVING the loop that did this.
             
-            response = self.supabase.insert_data('roleplay_completions', completion_data)
+            # Create a copy to ensure we don't modify the original dict
+            data_to_insert = completion_data.copy()
+
+            response = self.supabase.insert_data('roleplay_completions', data_to_insert)
+            
             if response:
-                logger.info(f"Saved roleplay completion ID: {response.get('id')}")
+                logger.info(f"✅ Successfully saved roleplay completion ID: {response.get('id')}")
                 return response.get('id')
-            return None
+            else:
+                logger.error(f"❌ Failed to save roleplay completion. insert_data returned None.")
+                return None
+
         except Exception as e:
-            logger.error(f"Error saving roleplay completion: {e}", exc_info=True)
+            logger.error(f"❌ Exception in save_roleplay_completion: {e}", exc_info=True)
             return None
         
     
