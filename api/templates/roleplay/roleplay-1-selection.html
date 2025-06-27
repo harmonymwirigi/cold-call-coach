@@ -215,229 +215,94 @@
 
 {% block content %}
 <div class="selection-container">
-    <!-- Back to Dashboard -->
     <a href="/dashboard" class="back-to-dashboard">
         <i class="fas fa-arrow-left me-2"></i>Dashboard
     </a>
 
-    <!-- Selection Card -->
     <div class="selection-card">
-        <!-- Header -->
         <div class="roleplay-header">
             <h1 class="roleplay-title">Roleplay 1: Opener & Early Objections</h1>
             <p class="roleplay-description">
-                Master your cold call openers and handle early objections with confidence. 
+                Master your cold call openers and handle early objections with confidence.
                 Choose your training mode below.
             </p>
         </div>
 
         <!-- Modes Grid -->
         <div class="modes-grid">
-            <!-- Practice Mode (1.1) -->
-            <div class="mode-card" id="mode-1-1" data-mode="1.1" onclick="selectMode('1.1')">
+            <!-- Practice Mode (1.1) - Always Unlocked -->
+            <a href="/roleplay/1.1" class="mode-card">
                 <div class="mode-status status-available">Available</div>
-                <div class="mode-icon">
-                    <i class="fas fa-user-graduate"></i>
-                </div>
+                <div class="mode-icon"><i class="fas fa-user-graduate"></i></div>
                 <h3 class="mode-name">Practice Mode</h3>
-                <p class="mode-description">
-                    Single call with detailed AI coaching and feedback. 
-                    Perfect for learning the fundamentals.
-                </p>
-                <div class="mode-requirements">
-                    Always available • Detailed feedback
-                </div>
-            </div>
+                <p class="mode-description">Single call with detailed AI coaching. Perfect for learning fundamentals.</p>
+                <div class="mode-requirements">Always available • Detailed feedback</div>
+            </a>
 
-            <!-- Marathon Mode (1.2) -->
-            <div class="mode-card" id="mode-1-2" data-mode="1.2" onclick="selectMode('1.2')">
+            <!-- Marathon Mode (1.2) - Unlocked by default, shows progress -->
+            <a href="/roleplay/1.2" class="mode-card">
                 <div class="mode-status status-available">Available</div>
-                <div class="mode-icon">
-                    <i class="fas fa-running"></i>
-                </div>
+                <div class="mode-icon"><i class="fas fa-running"></i></div>
                 <h3 class="mode-name">Marathon Mode</h3>
-                <p class="mode-description">
-                    10 calls in a row. Pass 6 out of 10 to unlock Legend Mode. 
-                    Tests your consistency.
-                </p>
-                <div class="mode-requirements">
-                    Need 6/10 passes • No in-call feedback
-                </div>
-            </div>
+                <p class="mode-description">10 calls in a row. Pass 6 to complete. Tests consistency.</p>
+                <div class="mode-requirements">Need 6/10 passes • Unlocks Legend Mode</div>
+            </a>
 
-            <!-- Legend Mode (1.3) -->
-            <div class="mode-card disabled" id="mode-1-3" data-mode="1.3">
-                <div class="mode-status status-locked">Locked</div>
-                <div class="mode-icon">
-                    <i class="fas fa-crown"></i>
+            <!-- Legend Mode (1.3) - DYNAMICALLY LOCKED/UNLOCKED -->
+            {% set legend_unlocked = user_progress.get('1.2', {}).get('passed', False) %}
+            <a href="{{ '/roleplay/1.3' if legend_unlocked else '#' }}" class="mode-card {{ 'disabled' if not legend_unlocked }}">
+                <div class="mode-status {{ 'status-available' if legend_unlocked else 'status-locked' }}">
+                    {{ 'Available' if legend_unlocked else 'Locked' }}
                 </div>
+                <div class="mode-icon"><i class="fas fa-crown"></i></div>
                 <h3 class="mode-name">Legend Mode</h3>
-                <p class="mode-description">
-                    6 perfect calls in a row. Ultimate test of mastery. 
-                    Unlocks Roleplay 2.
-                </p>
+                <p class="mode-description">6 perfect calls in a row. The ultimate test of mastery.</p>
                 <div class="mode-requirements">
-                    Requires Marathon completion • No second chances
+                    {{ 'No second chances' if legend_unlocked else 'Requires Marathon completion' }}
                 </div>
-            </div>
+            </a>
         </div>
 
         <!-- Progress Info -->
         <div class="progress-info">
-            <div class="progress-title">
-                <i class="fas fa-chart-line me-2"></i>Your Progress
-            </div>
+            <div class="progress-title"><i class="fas fa-chart-line me-2"></i>Your Progress</div>
             <div class="progress-item">
                 <span>Practice Mode Best Score:</span>
-                <span class="progress-status status-pending" id="practice-score">Not attempted</span>
+                <span class="progress-status {{ 'status-pass' if user_progress.get('1.1', {}).get('best_score', 0) >= 70 else 'status-pending' }}">
+                    {{ user_progress.get('1.1', {}).get('best_score', 'Not attempted') }}
+                </span>
             </div>
             <div class="progress-item">
                 <span>Marathon Mode Status:</span>
-                <span class="progress-status status-pending" id="marathon-status">Not attempted</span>
-            </div>
-            <div class="progress-item">
-                <span>Legend Mode Status:</span>
-                <span class="progress-status status-pending" id="legend-status">Locked</span>
+                <span class="progress-status {{ 'status-pass' if user_progress.get('1.2', {}).get('passed') else 'status-pending' }}">
+                    {% if user_progress.get('1.2') %}
+                        {{ user_progress['1.2'].get('marathon_best_run', 0) }}/10 Passed
+                    {% else %}
+                        Not attempted
+                    {% endif %}
+                </span>
             </div>
             <div class="progress-item">
                 <span>Roleplay 2 Access:</span>
-                <span class="progress-status status-pending" id="roleplay2-status">Complete Legend to unlock</span>
+                <span class="progress-status {{ 'status-pass' if user_progress.get('1.3', {}).get('completed') else 'status-pending' }}">
+                    {{ 'Unlocked!' if user_progress.get('1.3', {}).get('completed') else 'Complete Legend to unlock' }}
+                </span>
             </div>
         </div>
     </div>
-</div>
-
-<!-- Hidden Data -->
-<div id="user-progress" style="display: none;">
-    {{ user_progress | tojson if user_progress else '{}' }}
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-console.log('🎮 Roleplay 1 Selection Page Loaded');
-
-let userProgress = {};
-
-// Initialize page
-document.addEventListener('DOMContentLoaded', async () => {
-    await loadUserProgress();
-    updateUIBasedOnProgress();
-});
-
-async function loadUserProgress() {
-    try {
-        // Get user progress from hidden element
-        const progressElement = document.getElementById('user-progress');
-        if (progressElement && progressElement.textContent.trim()) {
-            userProgress = JSON.parse(progressElement.textContent);
-        }
-        
-        // Also fetch latest progress from API
-        const response = await fetch('/api/user/roleplay-progress');
-        if (response.ok) {
-            const data = await response.json();
-            userProgress = data.progress || {};
-        }
-        
-        console.log('📊 User progress loaded:', userProgress);
-    } catch (error) {
-        console.error('❌ Failed to load user progress:', error);
-        userProgress = {};
-    }
-}
-
-function updateUIBasedOnProgress() {
-    // Update Practice Mode (1.1)
-    const practiceScore = userProgress['1.1']?.best_score || 0;
-    const practiceElement = document.getElementById('practice-score');
-    if (practiceScore > 0) {
-        practiceElement.textContent = `${practiceScore}/100`;
-        practiceElement.className = practiceScore >= 70 ? 'progress-status status-pass' : 'progress-status status-fail';
-    }
-
-    // Update Marathon Mode (1.2)
-    const marathonData = userProgress['1.2'];
-    const marathonElement = document.getElementById('marathon-status');
-    if (marathonData) {
-        const passed = marathonData.calls_passed || 0;
-        const total = marathonData.total_calls || 10;
-        marathonElement.textContent = `${passed}/${total} passed`;
-        marathonElement.className = marathonData.completed ? 'progress-status status-pass' : 'progress-status status-fail';
-    }
-
-    // Update Legend Mode (1.3) availability
-    const marathonCompleted = userProgress['1.2']?.completed && userProgress['1.2']?.passed;
-    const legendCard = document.getElementById('mode-1-3');
-    const legendStatus = document.getElementById('legend-status');
-    
-    if (marathonCompleted) {
-        legendCard.classList.remove('disabled');
-        legendCard.setAttribute('onclick', "selectMode('1.3')");
-        legendCard.querySelector('.mode-status').textContent = 'Available';
-        legendCard.querySelector('.mode-status').className = 'mode-status status-available';
-        legendStatus.textContent = 'Available';
-        legendStatus.className = 'progress-status status-available';
-    }
-
-    // Check if Legend is completed
-    const legendCompleted = userProgress['1.3']?.completed;
-    const roleplay2Status = document.getElementById('roleplay2-status');
-    if (legendCompleted) {
-        legendCard.classList.add('completed');
-        legendStatus.textContent = 'Completed';
-        legendStatus.className = 'progress-status status-pass';
-        roleplay2Status.textContent = 'Unlocked!';
-        roleplay2Status.className = 'progress-status status-pass';
-    }
-}
-
-function selectMode(modeId) {
-    const modeCard = document.getElementById(`mode-${modeId.replace('.', '-')}`);
-    
-    // Check if mode is disabled
-    if (modeCard.classList.contains('disabled')) {
-        alert('This mode is locked. Complete Marathon Mode first to unlock Legend Mode.');
-        return;
-    }
-    
-    // Check specific requirements
-    if (modeId === '1.3') {
-        const marathonCompleted = userProgress['1.2']?.completed && userProgress['1.2']?.passed;
-        if (!marathonCompleted) {
-            alert('Legend Mode requires completing Marathon Mode first. Pass 6 out of 10 calls in Marathon Mode to unlock.');
-            return;
-        }
-    }
-    
-    console.log(`🎯 Selected mode: ${modeId}`);
-    
-    // Add visual feedback
-    document.querySelectorAll('.mode-card').forEach(card => {
-        card.style.transform = 'scale(1)';
-        card.style.opacity = '1';
+    document.addEventListener('DOMContentLoaded', () => {
+        // Handle clicks on locked cards to provide feedback
+        document.querySelectorAll('.mode-card.disabled').forEach(card => {
+            card.addEventListener('click', (e) => {
+                e.preventDefault();
+                alert('This mode is locked. Complete the previous requirements to unlock it.');
+            });
+        });
     });
-    
-    modeCard.style.transform = 'scale(0.95)';
-    modeCard.style.opacity = '0.8';
-    
-    // Navigate to roleplay
-    setTimeout(() => {
-        window.location.href = `/roleplay/${modeId}`;
-    }, 200);
-}
-
-// Add hover effects
-document.querySelectorAll('.mode-card:not(.disabled)').forEach(card => {
-    card.addEventListener('mouseenter', () => {
-        card.style.transform = 'translateY(-5px) scale(1.02)';
-    });
-    
-    card.addEventListener('mouseleave', () => {
-        card.style.transform = 'translateY(0) scale(1)';
-    });
-});
-
-console.log('✅ Roleplay selection page initialized');
 </script>
 {% endblock %}

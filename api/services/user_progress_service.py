@@ -14,6 +14,7 @@ class UserProgressService:
         if supabase_service:
             self.supabase = supabase_service
         else:
+            # ... (rest of init)
             try:
                 from .supabase_client import SupabaseService
                 self.supabase = SupabaseService()
@@ -21,14 +22,15 @@ class UserProgressService:
                 logger.error(f"Failed to import SupabaseService: {e}")
                 self.supabase = None
         
-        # This defines the unlock dependencies between modules.
+        # Define the unlock dependencies between modules.
         self.progression_rules = {
-            '1.2': {'requires_completion': '1.1', 'pass_needed': True},
-            '1.3': {'requires_completion': '1.2', 'pass_needed': True},
-            '2.1': {'requires_completion': '1.3', 'pass_needed': True},
+            '1.2': {'requires_completion': '1.1', 'pass_needed': True, 'name': 'Marathon Mode'},
+            '1.3': {'requires_completion': '1.2', 'pass_needed': True, 'name': 'Legend Mode'},
+            '2.1': {'requires_completion': '1.3', 'pass_needed': True, 'name': 'Pitch Practice'},
             # Add other rules here as you create more modules
         }
         logger.info("UserProgressService initialized")
+
     def get_user_roleplay_stats(self, user_id: str, roleplay_id: str = None) -> Dict[str, Any]:
         """Gets all roleplay stats for a user, or for a specific roleplay."""
         try:
@@ -47,22 +49,29 @@ class UserProgressService:
         except Exception as e:
             logger.error(f"Error getting user roleplay stats: {e}", exc_info=True)
             return {}
+        
     def check_roleplay_access(self, user_id: str, roleplay_id: str) -> Dict[str, Any]:
         """Check if user has access to a specific roleplay based on their stats."""
         try:
-            if roleplay_id == '1.1':  # Always allow access to the first module
+            # Practice mode is the entry point and is always available.
+            if roleplay_id == '1.1':
                 return {'allowed': True, 'reason': 'Practice mode is always available.'}
             
             rule = self.progression_rules.get(roleplay_id)
+            # If no rule is defined for this roleplay, allow access by default.
             if not rule:
-                return {'allowed': True, 'reason': 'No unlock rule defined.'} # Default to allowed if no rule
+                return {'allowed': True, 'reason': 'No unlock rule defined.'}
 
             required_rp_id = rule.get('requires_completion')
+            required_rp_name = self.progression_rules.get(required_rp_id, {}).get('name', f"Roleplay {required_rp_id}")
+            
+            # Get the user's stats for the *required* roleplay.
             user_stats = self.get_user_roleplay_stats(user_id, required_rp_id)
             required_stats = user_stats.get(required_rp_id)
             
-            if not required_stats or not required_stats.get('completed'):
-                return {'allowed': False, 'reason': f"Complete {required_rp_id} to unlock."}
+            # Check if the user has passed the required module.
+            if not required_stats or not required_stats.get('marathon_passed', False) and not required_stats.get('completed', False):
+                 return {'allowed': False, 'reason': f"Complete '{required_rp_name}' to unlock this."}
 
             return {'allowed': True, 'reason': 'Requirement met.'}
             

@@ -226,39 +226,32 @@ def roleplay_page(roleplay_id):
 def render_roleplay_1_selection(user_id):
     """Render Roleplay 1 selection page - FIXED with all variables"""
     try:
-        logger.info(f"🎮 Rendering Roleplay 1 selection for user {user_id}")
-        
-        # Get user profile
+        logger.info(f"👍 Rendering Roleplay 1 selection for user {user_id}")
         profile = get_user_profile_safe(user_id)
+        roleplay_info = {'id': '1', 'name': 'Roleplay 1: Opener & Early Objections', 'description': 'Master call openings and handle early objections with confidence'}
         
-        # Create roleplay info for Roleplay 1
-        roleplay_info = {
-            'id': '1',
-            'name': 'Roleplay 1: Opener & Early Objections',
-            'description': 'Master call openings and handle early objections with confidence'
-        }
-        
-        # Get user progress for Roleplay 1 modes
+        # --- START: FETCH PROGRESS DATA ---
         try:
             from services.user_progress_service import UserProgressService
             progress_service = UserProgressService()
+            # Fetch progress for all modes of Roleplay 1
             user_progress = progress_service.get_user_roleplay_progress(user_id, ['1.1', '1.2', '1.3'])
             logger.info(f"📊 Loaded progress for 1.1, 1.2, 1.3: {user_progress}")
         except Exception as e:
             logger.warning(f"⚠️ Could not load user progress: {e}")
             user_progress = {}
-        
-        # Use your custom template for Roleplay 1
+        # --- END: FETCH PROGRESS DATA ---
+
         logger.info("📄 Rendering roleplay/roleplay-1-selection.html")
         return render_template(
             'roleplay/roleplay-1-selection.html',
-            roleplay_info=roleplay_info,  # ADDED: Include roleplay_info
-            user_progress=user_progress,
+            roleplay_info=roleplay_info,
+            user_progress=user_progress, # Pass the progress data to the template
             user_profile=profile,
-            main_roleplay_id='1',  # ADDED: Include main_roleplay_id
+            main_roleplay_id='1',
             page_title="Roleplay 1: Choose Your Mode"
         )
-        
+            
     except Exception as e:
         logger.error(f"❌ Error rendering Roleplay 1 selection: {e}")
         return redirect(url_for('dashboard_page'))
@@ -305,56 +298,42 @@ def render_roleplay_2_selection(user_id):
     except Exception as e:
         logger.error(f"❌ Error rendering Roleplay 2 selection: {e}")
         return redirect(url_for('dashboard_page'))
-
 def render_specific_roleplay(roleplay_id, user_id):
-    """Render specific roleplay training page - FIXED"""
+    """Render specific roleplay training page - FIXED with access check"""
     try:
         # Get user profile
         profile = get_user_profile_safe(user_id)
         
-        # Check roleplay access first
+        # --- START: ADD ACCESS CHECK LOGIC ---
         try:
             from services.user_progress_service import UserProgressService
             progress_service = UserProgressService()
             access_check = progress_service.check_roleplay_access(user_id, roleplay_id)
             
             if not access_check['allowed']:
-                logger.warning(f"❌ User {user_id} doesn't have access to {roleplay_id}: {access_check['reason']}")
-                # Redirect back to selection or dashboard with error message
-                if roleplay_id.startswith('1.'):
-                    return redirect(url_for('roleplay_page', roleplay_id='1'))
-                elif roleplay_id.startswith('2.'):
-                    return redirect(url_for('roleplay_page', roleplay_id='2'))
-                else:
-                    return redirect(url_for('dashboard_page'))
+                logger.warning(f"❌ User {user_id} access denied to {roleplay_id}: {access_check['reason']}")
+                # Redirect back to the selection page or dashboard with an error message
+                # This prevents users from accessing locked content via URL
+                main_id = roleplay_id.split('.')[0]
+                return redirect(url_for('roleplay_page', roleplay_id=main_id))
         except Exception as e:
-            logger.warning(f"⚠️ Could not check access: {e}")
-        
+            logger.warning(f"⚠️ Could not check access for roleplay {roleplay_id}: {e}")
+        # --- END: ADD ACCESS CHECK LOGIC ---
+
         # Get roleplay info from structure or create default
         roleplay_info = get_roleplay_info_from_structure(roleplay_id)
         
         if not roleplay_info:
+            # ... (rest of the function is the same)
             logger.warning(f"No info found for roleplay {roleplay_id}")
-            # Create default info based on roleplay_id
             roleplay_names = {
-                '1.1': 'Practice Mode',
-                '1.2': 'Marathon Mode', 
-                '1.3': 'Legend Mode',
-                '2.1': 'Advanced Practice',
-                '2.2': 'Advanced Marathon',
-                '3': 'Warm-up Challenge',
-                '4': 'Full Cold Call Simulation',
-                '5': 'Power Hour Challenge'
+                '1.1': 'Practice Mode', '1.2': 'Marathon Mode', '1.3': 'Legend Mode',
+                '2.1': 'Advanced Practice', '2.2': 'Advanced Marathon',
+                '3': 'Warm-up Challenge', '4': 'Full Cold Call Simulation', '5': 'Power Hour Challenge'
             }
-            
-            roleplay_info = {
-                'id': roleplay_id,
-                'name': roleplay_names.get(roleplay_id, f'Roleplay {roleplay_id}'),
-                'description': 'Cold calling training',
-                'icon': 'phone'
-            }
+            roleplay_info = { 'id': roleplay_id, 'name': roleplay_names.get(roleplay_id, f'Roleplay {roleplay_id}'), 'description': 'Cold calling training', 'icon': 'phone' }
         
-        logger.info(f"🎮 Rendering training page for {roleplay_id}")
+        logger.info(f"👍 Rendering training page for {roleplay_id}")
         
         # Use the main roleplay training template
         return render_template(
@@ -364,7 +343,7 @@ def render_specific_roleplay(roleplay_id, user_id):
             user_profile=profile,
             page_title=f"{roleplay_info['name']} - Cold Calling Coach"
         )
-        
+            
     except Exception as e:
         logger.error(f"❌ Error rendering specific roleplay: {e}")
         return redirect(url_for('dashboard_page'))
