@@ -167,7 +167,7 @@ class RoleplayEngine:
 
     
     def process_user_input(self, session_id: str, user_input: str) -> Dict[str, Any]:
-        """FIXED: Process user input using implementation_id"""
+        """Process user input by delegating to the correct implementation."""
         try:
             if not session_id or not user_input:
                 return {'success': False, 'error': 'Missing required parameters'}
@@ -176,16 +176,16 @@ class RoleplayEngine:
             
             session_info = self._get_session_with_recovery(session_id)
             if not session_info:
-                logger.error(f"❌ Session {session_id} not found in any storage location")
+                logger.error(f"❌ Session {session_id} not found")
                 return {'success': False, 'error': 'Session not found or expired'}
             
             implementation_id = session_info['implementation_id']
             implementation = self.roleplay_implementations[implementation_id]
             
-            self._update_session_activity(session_id)
+            # THE FIX: This function was removed, so we must remove the call to it.
+            # self._update_session_activity(session_id) 
             
             session_data = session_info['session_data']
-            
             if not session_data.get('session_active', True):
                 logger.error(f"❌ Session {session_id} is no longer active")
                 return {'success': False, 'error': 'Session has ended'}
@@ -196,13 +196,12 @@ class RoleplayEngine:
                 updated_session_data = implementation.active_sessions.get(session_id)
                 if updated_session_data and session_id in self.active_sessions:
                     self.active_sessions[session_id]['session_data'] = updated_session_data
-                    self.active_sessions[session_id]['last_activity'] = datetime.now(timezone.utc).isoformat()
             
             return result
             
         except Exception as e:
-            logger.error(f"❌ Error processing user input: {e}")
-            return {'success': False, 'error': f'Processing failed: {str(e)}'}
+            logger.error(f"❌ Error processing user input: {e}", exc_info=True) # Added exc_info for better logging
+            return {'success': False, 'error': f"Processing failed: {str(e)}"}
     
     def end_session(self, session_id: str, forced_end: bool = False) -> Dict[str, Any]:
         """End session, calculate results, and save the permanent record to the database."""
