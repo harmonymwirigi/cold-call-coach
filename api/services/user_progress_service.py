@@ -246,40 +246,85 @@ class UserProgressService:
             if not self.supabase:
                 return None
             
-            # Prepare completion record
-            completion_record = {
-                'user_id': completion_data['user_id'],
-                'session_id': completion_data['session_id'],
-                'roleplay_id': completion_data['roleplay_id'],
-                'mode': completion_data.get('mode', 'practice'),
-                'started_at': completion_data.get('started_at'),
-                'ended_at': completion_data.get('ended_at', datetime.now(timezone.utc).isoformat()),
-                'duration_minutes': completion_data.get('duration_minutes', 1),
-                'success': completion_data.get('success', False),
-                'score': completion_data.get('score', 0),
-                'ai_evaluation': completion_data.get('ai_evaluation'),
-                'coaching_feedback': completion_data.get('coaching_feedback'),
-                'conversation_data': completion_data.get('conversation_data'),
-                'rubric_scores': completion_data.get('rubric_scores'),
-                'marathon_results': completion_data.get('marathon_results'),
-                'forced_end': completion_data.get('forced_end', False),
-                'created_at': datetime.now(timezone.utc).isoformat()
-            }
-            
+            # Make sure all jsonb fields are properly formatted
+            for key in ['ai_evaluation', 'coaching_feedback', 'conversation_data', 'rubric_scores', 'marathon_results']:
+                if key in completion_data and not isinstance(completion_data[key], (str, type(None))):
+                    completion_data[key] = json.dumps(completion_data[key])
+
             # Insert completion record
-            result = self.supabase.insert_data('roleplay_completions', completion_record)
+            result = self.supabase.insert_data('roleplay_completions', completion_data)
             
             if result:
-                completion_id = result.get('id') if isinstance(result, dict) else str(result)
+                completion_id = result.get('id')
                 logger.info(f"Saved roleplay completion: {completion_id}")
                 return completion_id
             
             return None
-            
         except Exception as e:
             logger.error(f"Error saving roleplay completion: {e}")
             return None
-    
+    def update_user_progress_after_completion(self, completion_data: Dict[str, Any]) -> bool:
+        """
+        Updates aggregate stats in user_roleplay_stats and usage in user_profiles.
+        """
+        try:
+            if not self.supabase:
+                return False
+
+            user_id = completion_data['user_id']
+            roleplay_id = completion_data['roleplay_id']
+            score = completion_data.get('score', 0)
+            duration = completion_data.get('duration_minutes', 1)
+            now = datetime.now(timezone.utc).isoformat()
+
+            # --- 1. Update user_roleplay_stats ---
+            # Get existing aggregate progress
+            client = self.supabase.get_service_client()
+            stats_query = client.table('user_roleplay_stats').select('*').eq('user_id', user_id).eq('roleplay_id', roleplay_id).execute()
+            
+            if stats_query.data:
+                current_stats = stats_query.data[0]
+                updates = {
+                    'total_attempts': current_stats.get('total_attempts', 0) + 1,
+                    'last_score': score,
+                    'last_attempt_at': now,
+                    'best_score': max(current_stats.get('best_score', 0), score),
+                    'completed': current_stats.get('completed') or (score >= 70)
+                }
+                client.table('user_roleplay_stats').update(updates).eq('id', current_stats['id']).execute()
+            else:
+                new_stats = {
+                    'user_id': user_id,
+                    'roleplay_id': roleplay_id,
+                    'total_attempts': 1,
+                    'best_score': score,
+                    'last_score': score,
+                    'completed': score >= 70,
+                    'last_attempt_at': now
+                }
+                client.table('user_roleplay_stats').insert(new_stats).execute()
+
+            # --- 2. Update user_profiles for usage time ---
+            profile_query = client.table('user_profiles').select('lifetime_usage_minutes, monthly_usage_minutes').eq('id', user_id).execute()
+            
+            if profile_query.data:
+                profile = profile_query.data[0]
+                new_lifetime_usage = profile.get('lifetime_usage_minutes', 0) + duration
+                new_monthly_usage = profile.get('monthly_usage_minutes', 0) + duration
+                
+                profile_updates = {
+                    'lifetime_usage_minutes': new_lifetime_usage,
+                    'monthly_usage_minutes': new_monthly_usage,
+                    'last_active_at': now
+                }
+                client.table('user_profiles').update(profile_updates).eq('id', user_id).execute()
+                logger.info(f"Updated usage for user {user_id}: +{duration} minutes")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error updating user progress after completion: {e}", exc_info=True)
+            return False
     def update_user_progress(self, user_id: str, roleplay_id: str, completion_data: Dict[str, Any]) -> Dict[str, Any]:
         """Update user's overall progress based on a completion"""
         try:
