@@ -4786,14 +4786,17 @@
                 </html>
                 """
 
-  📄 roleplay_engine.py (23.2KB)
+  📄 roleplay_engine.py (22.8KB)
       Content:
         # ===== FIXED: services/roleplay_engine.py =====
-        
         import logging
         from datetime import datetime, timezone
         from typing import Dict, List, Any, Optional
         import uuid
+        
+        # Re-import just in case
+        from .supabase_client import SupabaseService
+        from .user_progress_service import UserProgressService
         
         logger = logging.getLogger(__name__)
         
@@ -4801,73 +4804,32 @@
             """FIXED Roleplay Engine with robust session management and recovery"""
             
             def __init__(self, openai_service=None, supabase_service=None):
-                # Store active sessions in memory (primary storage)
                 self.active_sessions = {}
-                
-                # Service dependencies
-                self.openai_service = openai_service
-                self.supabase_service = supabase_service
-                
-                # Initialize services if not provided
-                if not self.openai_service:
-                    try:
-                        from .openai_service import OpenAIService
-                        self.openai_service = OpenAIService()
-                        logger.info("âœ… OpenAI service initialized")
-                    except ImportError as e:
-                        logger.warning(f"âš ï¸ OpenAI service not available: {e}")
-                        self.openai_service = None
-                
-                if not self.supabase_service:
-                    try:
-                        from .supabase_client import SupabaseService
-                        self.supabase_service = SupabaseService()
-                        logger.info("âœ… Supabase service initialized")
-                    except ImportError as e:
-                        logger.warning(f"âš ï¸ Supabase service not available: {e}")
-                        self.supabase_service = None
-                
-                # Load roleplay implementations
+                if not openai_service:
+                    from .openai_service import OpenAIService
+                    self.openai_service = OpenAIService()
+                else:
+                    self.openai_service = openai_service
+        
+                if not supabase_service:
+                    self.supabase_service = SupabaseService()
+                else:
+                    self.supabase_service = supabase_service
+        
+                # ADD a reference to the progress service here
+                self.progress_service = UserProgressService(self.supabase_service)
+        
                 self.roleplay_implementations = {}
                 self._load_roleplay_implementations()
-                
-                logger.info(f"âœ… RoleplayEngine initialized with {len(self.roleplay_implementations)} roleplay types")
+                logger.info(f"Ã¢Å“â€¦ RoleplayEngine initialized with {len(self.roleplay_implementations)} roleplay types")
             
             def _load_roleplay_implementations(self):
-                """Load all available roleplay implementations"""
-                try:
-                    # Import the fixed roleplay implementations
-                    from .roleplay.roleplay_1_1 import Roleplay11
-                    
-                    # Initialize with OpenAI service
-                    self.roleplay_implementations = {
-                        '1.1': Roleplay11(self.openai_service)
-                    }
-                    
-                    # Try to load other roleplays if available
-                    try:
-                        from .roleplay.roleplay_1_2 import Roleplay12
-                        self.roleplay_implementations['1.2'] = Roleplay12(self.openai_service)
-                        logger.info("âœ… Loaded Roleplay 1.2")
-                    except ImportError:
-                        logger.info("â„¹ï¸ Roleplay 1.2 not available")
-                    
-                    try:
-                        from .roleplay.roleplay_1_3 import Roleplay13
-                        self.roleplay_implementations['1.3'] = Roleplay13(self.openai_service)
-                        logger.info("âœ… Loaded Roleplay 1.3")
-                    except ImportError:
-                        logger.info("â„¹ï¸ Roleplay 1.3 not available")
-                    
-                    logger.info(f"âœ… Loaded roleplay implementations: {list(self.roleplay_implementations.keys())}")
-                    
-                except ImportError as e:
-                    logger.error(f"âŒ Failed to load roleplay implementations: {e}")
-                    # Create minimal fallback
-                    self.roleplay_implementations = {
-                        '1.1': self._create_fallback_roleplay('1.1')
-                    }
-                    logger.warning("âš ï¸ Using fallback roleplay implementation")
+                from .roleplay.roleplay_1_1 import Roleplay11
+                from .roleplay.roleplay_1_2 import Roleplay12
+                self.roleplay_implementations = {
+                    '1.1': Roleplay11(self.openai_service),
+                    '1.2': Roleplay12(self.openai_service),
+                }
             
             def _create_fallback_roleplay(self, roleplay_id: str):
                 """Create a minimal fallback roleplay implementation"""
@@ -5065,46 +5027,67 @@
                     return {'success': False, 'error': f'Processing failed: {str(e)}'}
             
             def end_session(self, session_id: str, forced_end: bool = False) -> Dict[str, Any]:
-                """FIXED: End session using implementation_id"""
+                """FIXED: End session and correctly save all completion data."""
                 try:
                     logger.info(f"Ã°Å¸â€œÅ¾ Ending session {session_id} (forced: {forced_end})")
                     
                     session_info = self._get_session_with_recovery(session_id)
+                    if not session_info:
+                        logger.warning(f"Ã¢Å¡ Ã¯Â¸  Session {session_id} not found for ending")
+                        return {'success': True, 'message': 'Session not found.'}
+        
+                    implementation_id = session_info.get('implementation_id', '1.1')
+                    implementation = self.roleplay_implementations.get(implementation_id)
                     
-                    if session_info:
-                        # CRITICAL FIX: Retrieve implementation using its stored ID
-                        implementation_id = session_info['implementation_id']
-                        implementation = self.roleplay_implementations[implementation_id]
+                    if not implementation:
+                        raise ValueError(f"Implementation for {implementation_id} not found")
+        
+                    # Get the final result from the specific roleplay logic
+                    result = implementation.end_session(session_id, forced_end)
+                    
+                    # --- START OF CRITICAL FIX ---
+                    if result.get('success'):
+                        session_data = result.get('session_data', {})
+                        user_id = session_data.get('user_id')
                         
-                        result = implementation.end_session(session_id, forced_end)
-                        
-                        self.active_sessions.pop(session_id, None)
-                        self._cleanup_session_from_database(session_id)
-                        
-                        logger.info(f"Ã¢Å“â€¦ Session {session_id} ended successfully")
-                        return result
-                    else:
-                        # Session not found, but return success for cleanup
-                        logger.warning(f"âš ï¸ Session {session_id} not found for ending")
-                        return {
-                            'success': True,
-                            'duration_minutes': 1,
-                            'session_success': False,
-                            'coaching': {'error': 'Session not found'},
-                            'overall_score': 0,
-                            'session_data': {}
-                        }
-                        
+                        if user_id:
+                            completion_data = {
+                                'user_id': user_id,
+                                'session_id': session_id,
+                                'roleplay_id': session_data.get('roleplay_id'),
+                                'mode': session_data.get('mode', 'practice'),
+                                'score': result.get('overall_score'),
+                                'success': result.get('session_success'),
+                                'duration_minutes': result.get('duration_minutes'),
+                                'started_at': session_data.get('started_at'),
+                                'ended_at': session_data.get('ended_at'),
+                                'conversation_data': session_data.get('conversation_history'),
+                                'coaching_feedback': result.get('coaching'),
+                                'rubric_scores': session_data.get('rubric_scores'),
+                                'forced_end': forced_end
+                            }
+                            
+                            # 1. Save the detailed completion record
+                            self.progress_service.save_roleplay_completion(completion_data)
+                            
+                            # 2. Update the user's aggregate stats and usage
+                            self.progress_service.update_user_progress_after_completion(completion_data)
+        
+                            logger.info(f"Ã¢Å“â€¦ Session {session_id} completion and stats have been saved.")
+                        else:
+                            logger.warning("No user_id found in session data, cannot save progress.")
+                    # --- END OF CRITICAL FIX ---
+        
+                    # Cleanup in-memory and DB active sessions
+                    self.active_sessions.pop(session_id, None)
+                    self._cleanup_session_from_database(session_id)
+                    
+                    logger.info(f"Ã¢Å“â€¦ Session {session_id} ended successfully in engine")
+                    return result
+                                
                 except Exception as e:
-                    logger.error(f"âŒ Error ending session: {e}")
-                    return {
-                        'success': True,  # Return success to allow cleanup
-                        'duration_minutes': 1,
-                        'session_success': False,
-                        'coaching': {'error': f'Error ending session: {str(e)}'},
-                        'overall_score': 0,
-                        'session_data': {}
-                    }
+                    logger.error(f"Ã¢ Å’ Error ending session: {e}", exc_info=True)
+                    return {'success': False, 'error': str(e)}
             
             def get_session_status(self, session_id: str) -> Optional[Dict[str, Any]]:
                 """Get current status of a session"""
@@ -5289,6 +5272,17 @@
                     
                 except Exception as e:
                     logger.error(f"âŒ Error cleaning up old sessions: {e}")
+                    return 0
+        
+        # Global instance for singleton pattern
+        _roleplay_engine = None
+        
+        def get_roleplay_engine():
+            """Get global roleplay engine instance"""
+            global _roleplay_engine
+            if _roleplay_engine is None:
+                _roleplay_engine = RoleplayEngine()
+            return _roleplay_engine
 
   📄 supabase_client.py (15.3KB)
       Content:
@@ -5356,8 +5350,8 @@
             def get_user_profile_by_service(self, user_id: str) -> Optional[Dict[str, Any]]:
                 """Get user profile using service client (bypasses RLS)"""
                 try:
-                    response = self.service_client.table('user_profiles').select('*').eq('id', user_id).execute()
-                    
+                    response = self.client.table('user_progress').select('*').eq('user_id', user_id).execute() # <-- BINGO!
+                    return response.data or []
                     if response.data and len(response.data) > 0:
                         logger.info(f"Profile found for user_id: {user_id}")
                         return response.data[0]
@@ -5636,7 +5630,7 @@
                     logger.error(f"Error updating user profile by service: {e}")
                     return False
 
-  📄 user_progress_service.py (26.6KB)
+  📄 user_progress_service.py (27.9KB)
       Content:
         # ===== services/user_progress_service.py =====
         
@@ -5654,7 +5648,6 @@
                 if supabase_service:
                     self.supabase = supabase_service
                 else:
-                    # Import here to avoid circular imports
                     try:
                         from .supabase_client import SupabaseService
                         self.supabase = SupabaseService()
@@ -5662,87 +5655,54 @@
                         logger.error(f"Failed to import SupabaseService: {e}")
                         self.supabase = None
                 
-                # Roleplay progression rules
+                # This defines the unlock dependencies between modules.
                 self.progression_rules = {
-                    '1.1': {
-                        'name': 'Practice Mode',
-                        'unlocks': [],
-                        'required_for': ['1.2'],
-                        'always_available': True
-                    },
-                    '1.2': {
-                        'name': 'Marathon Mode', 
-                        'unlocks': ['1.3'],
-                        'required_for': ['2.1'],
-                        'requires_completion': False,
-                        'requires_pass': False
-                    },
-                    '1.3': {
-                        'name': 'Legend Mode',
-                        'unlocks': ['2.1', '2.2'],
-                        'required_for': [],
-                        'requires_completion': '1.2',
-                        'requires_pass': True
-                    },
-                    '2.1': {
-                        'name': 'Advanced Practice',
-                        'unlocks': ['2.2'],
-                        'required_for': [],
-                        'requires_completion': '1.3',
-                        'requires_pass': True
-                    },
-                    '2.2': {
-                        'name': 'Advanced Marathon',
-                        'unlocks': [],
-                        'required_for': [],
-                        'requires_completion': '2.1',
-                        'requires_pass': True
-                    }
+                    '1.2': {'requires_completion': '1.1', 'pass_needed': True},
+                    '1.3': {'requires_completion': '1.2', 'pass_needed': True},
+                    '2.1': {'requires_completion': '1.3', 'pass_needed': True},
+                    # Add other rules here as you create more modules
                 }
-                
                 logger.info("UserProgressService initialized")
-            
-            def check_roleplay_access(self, user_id: str, roleplay_id: str) -> Dict[str, Any]:
-                """Check if user has access to a specific roleplay"""
+            def get_user_roleplay_stats(self, user_id: str, roleplay_id: str = None) -> Dict[str, Any]:
+                """Gets all roleplay stats for a user, or for a specific roleplay."""
                 try:
-                    if not self.supabase:
-                        return {'allowed': True, 'reason': 'Service unavailable'}
+                    if not self.supabase: return {}
                     
-                    # Always allow Practice Mode (1.1)
-                    if roleplay_id == '1.1':
-                        return {'allowed': True, 'reason': 'Always available'}
+                    client = self.supabase.get_service_client()
+                    query = client.table('user_roleplay_stats').select('*').eq('user_id', user_id)
                     
-                    rules = self.progression_rules.get(roleplay_id)
-                    if not rules:
-                        return {'allowed': False, 'reason': f'Unknown roleplay: {roleplay_id}'}
-                    
-                    # Check if requires completion of another roleplay
-                    if 'requires_completion' in rules:
-                        required_roleplay = rules['requires_completion']
-                        requires_pass = rules.get('requires_pass', False)
+                    if roleplay_id:
+                        query = query.eq('roleplay_id', roleplay_id)
                         
-                        progress = self.get_user_roleplay_progress(user_id, [required_roleplay])
-                        required_progress = progress.get(required_roleplay)
-                        
-                        if not required_progress:
-                            return {
-                                'allowed': False,
-                                'reason': f'Must complete {self.progression_rules[required_roleplay]["name"]} first',
-                                'requirements': [required_roleplay]
-                            }
-                        
-                        if requires_pass and not required_progress.get('completed'):
-                            return {
-                                'allowed': False,
-                                'reason': f'Must pass {self.progression_rules[required_roleplay]["name"]} first',
-                                'requirements': [required_roleplay]
-                            }
+                    response = query.execute()
                     
-                    return {'allowed': True, 'reason': 'Access granted'}
+                    stats_dict = {stat['roleplay_id']: stat for stat in response.data} if response.data else {}
+                    return stats_dict
+                except Exception as e:
+                    logger.error(f"Error getting user roleplay stats: {e}", exc_info=True)
+                    return {}
+            def check_roleplay_access(self, user_id: str, roleplay_id: str) -> Dict[str, Any]:
+                """Check if user has access to a specific roleplay based on their stats."""
+                try:
+                    if roleplay_id == '1.1':  # Always allow access to the first module
+                        return {'allowed': True, 'reason': 'Practice mode is always available.'}
+                    
+                    rule = self.progression_rules.get(roleplay_id)
+                    if not rule:
+                        return {'allowed': True, 'reason': 'No unlock rule defined.'} # Default to allowed if no rule
+        
+                    required_rp_id = rule.get('requires_completion')
+                    user_stats = self.get_user_roleplay_stats(user_id, required_rp_id)
+                    required_stats = user_stats.get(required_rp_id)
+                    
+                    if not required_stats or not required_stats.get('completed'):
+                        return {'allowed': False, 'reason': f"Complete {required_rp_id} to unlock."}
+        
+                    return {'allowed': True, 'reason': 'Requirement met.'}
                     
                 except Exception as e:
-                    logger.error(f"Error checking roleplay access: {e}")
-                    return {'allowed': True, 'reason': 'Error checking access'}
+                    logger.error(f"Error in check_roleplay_access for {roleplay_id}: {e}", exc_info=True)
+                    return {'allowed': False, 'reason': 'Error checking access.'}
             
             def get_user_roleplay_progress(self, user_id: str, roleplay_ids: Optional[List[str]] = None) -> Dict[str, Any]:
                 """Get user's progress for specific roleplays or all roleplays"""
@@ -5750,12 +5710,14 @@
                     if not self.supabase:
                         return {}
                     
+                    table_to_query = 'user_roleplay_stats' # <--- CORRECT TABLE NAME
+                    
                     # Get progress records
                     if roleplay_ids:
                         progress_records = []
                         for roleplay_id in roleplay_ids:
                             records = self.supabase.get_data_with_filter(
-                                'user_roleplay_progress',
+                                table_to_query, # <--- USE THE VARIABLE
                                 'user_id',
                                 user_id,
                                 additional_filters={'roleplay_id': roleplay_id}
@@ -5763,7 +5725,7 @@
                             progress_records.extend(records)
                     else:
                         progress_records = self.supabase.get_data_with_filter(
-                            'user_roleplay_progress',
+                            table_to_query, # <--- USE THE VARIABLE
                             'user_id',
                             user_id
                         )
@@ -5838,32 +5800,30 @@
                     if not self.supabase:
                         return False
                     
-                    # Create or update progress record
                     now = datetime.now(timezone.utc).isoformat()
                     
+                    table_to_query = 'user_roleplay_stats' # <--- CORRECT TABLE NAME
+        
                     existing_progress = self.supabase.get_data_with_filter(
-                        'user_roleplay_progress',
+                        table_to_query, # <--- USE THE VARIABLE
                         'user_id',
                         user_id,
                         additional_filters={'roleplay_id': roleplay_id}
                     )
                     
                     if existing_progress:
-                        # Update existing record
                         progress_id = existing_progress[0]['id']
                         updates = {
                             'total_attempts': (existing_progress[0].get('total_attempts', 0) + 1),
                             'last_attempt_at': now,
                             'updated_at': now
                         }
-                        
                         if not existing_progress[0].get('first_attempt_at'):
                             updates['first_attempt_at'] = now
-                        
-                        self.supabase.update_data_by_id('user_roleplay_progress', {'id': progress_id}, updates)
+                        self.supabase.update_data_by_id(table_to_query, {'id': progress_id}, updates) # <--- USE THE VARIABLE
                     else:
                         # Create new progress record
-                        self.supabase.insert_data('user_roleplay_progress', {
+                        self.supabase.insert_data(table_to_query, { # <--- USE THE VARIABLE
                             'user_id': user_id,
                             'roleplay_id': roleplay_id,
                             'total_attempts': 1,
@@ -5877,49 +5837,84 @@
                     return True
                     
                 except Exception as e:
-                    logger.error(f"Error logging roleplay attempt: {e}")
+                    logger.error(f"Error logging roleplay attempt: {e}", exc_info=True)
                     return False
-            
             def save_roleplay_completion(self, completion_data: Dict[str, Any]) -> Optional[str]:
-                """Save a completed roleplay session to database"""
+                """Save a completed roleplay session to the completions table."""
                 try:
-                    if not self.supabase:
-                        return None
+                    if not self.supabase: return None
                     
-                    # Prepare completion record
-                    completion_record = {
-                        'user_id': completion_data['user_id'],
-                        'session_id': completion_data['session_id'],
-                        'roleplay_id': completion_data['roleplay_id'],
-                        'mode': completion_data.get('mode', 'practice'),
-                        'started_at': completion_data.get('started_at'),
-                        'ended_at': completion_data.get('ended_at', datetime.now(timezone.utc).isoformat()),
-                        'duration_minutes': completion_data.get('duration_minutes', 1),
-                        'success': completion_data.get('success', False),
-                        'score': completion_data.get('score', 0),
-                        'ai_evaluation': completion_data.get('ai_evaluation'),
-                        'coaching_feedback': completion_data.get('coaching_feedback'),
-                        'conversation_data': completion_data.get('conversation_data'),
-                        'rubric_scores': completion_data.get('rubric_scores'),
-                        'marathon_results': completion_data.get('marathon_results'),
-                        'forced_end': completion_data.get('forced_end', False),
-                        'created_at': datetime.now(timezone.utc).isoformat()
-                    }
+                    for key in ['ai_evaluation', 'coaching_feedback', 'conversation_data', 'rubric_scores']:
+                        if key in completion_data and not isinstance(completion_data.get(key), (str, type(None))):
+                            completion_data[key] = json.dumps(completion_data[key])
                     
-                    # Insert completion record
-                    result = self.supabase.insert_data('roleplay_completions', completion_record)
-                    
-                    if result:
-                        completion_id = result.get('id') if isinstance(result, dict) else str(result)
-                        logger.info(f"Saved roleplay completion: {completion_id}")
-                        return completion_id
-                    
+                    response = self.supabase.insert_data('roleplay_completions', completion_data)
+                    if response:
+                        logger.info(f"Saved roleplay completion ID: {response.get('id')}")
+                        return response.get('id')
                     return None
-                    
                 except Exception as e:
-                    logger.error(f"Error saving roleplay completion: {e}")
+                    logger.error(f"Error saving roleplay completion: {e}", exc_info=True)
                     return None
-            
+                
+            def update_user_progress_after_completion(self, completion_data: Dict[str, Any]) -> bool:
+                """Updates aggregate stats and user profile usage after a session."""
+                try:
+                    if not self.supabase: return False
+        
+                    user_id = completion_data.get('user_id')
+                    roleplay_id = completion_data.get('roleplay_id')
+                    score = completion_data.get('score', 0)
+                    duration = completion_data.get('duration_minutes', 1)
+                    
+                    if not all([user_id, roleplay_id, score is not None]):
+                        logger.warning(f"Insufficient data to update progress: {completion_data}")
+                        return False
+        
+                    client = self.supabase.get_service_client()
+                    
+                    # 1. Update user_roleplay_stats
+                    current_stats = self.get_user_roleplay_stats(user_id, roleplay_id).get(roleplay_id)
+                    
+                    if current_stats:
+                        updates = {
+                            'total_attempts': current_stats.get('total_attempts', 0) + 1,
+                            'last_score': score,
+                            'last_attempt_at': datetime.now(timezone.utc).isoformat(),
+                            'best_score': max(current_stats.get('best_score', 0), score),
+                            'completed': current_stats.get('completed') or (score >= 70)
+                        }
+                        client.table('user_roleplay_stats').update(updates).eq('id', current_stats['id']).execute()
+                    else:
+                        new_stats = {
+                            'user_id': user_id,
+                            'roleplay_id': roleplay_id,
+                            'total_attempts': 1,
+                            'best_score': score,
+                            'last_score': score,
+                            'completed': score >= 70,
+                            'last_attempt_at': datetime.now(timezone.utc).isoformat()
+                        }
+                        client.table('user_roleplay_stats').insert(new_stats).execute()
+                    logger.info(f"Updated stats for user {user_id} on roleplay {roleplay_id}")
+        
+                    # 2. Update user_profiles for usage time
+                    profile_query = client.table('user_profiles').select('lifetime_usage_minutes, monthly_usage_minutes').eq('id', user_id).single().execute()
+                    if profile_query.data:
+                        profile = profile_query.data
+                        profile_updates = {
+                            'lifetime_usage_minutes': (profile.get('lifetime_usage_minutes') or 0) + duration,
+                            'monthly_usage_minutes': (profile.get('monthly_usage_minutes') or 0) + duration,
+                            'last_active_at': datetime.now(timezone.utc).isoformat()
+                        }
+                        client.table('user_profiles').update(profile_updates).eq('id', user_id).execute()
+                        logger.info(f"Updated usage for user {user_id}: +{duration} minutes")
+                    
+                    return True
+                except Exception as e:
+                    logger.error(f"Error in update_user_progress_after_completion: {e}", exc_info=True)
+                    return False
+                
             def update_user_progress(self, user_id: str, roleplay_id: str, completion_data: Dict[str, Any]) -> Dict[str, Any]:
                 """Update user's overall progress based on a completion"""
                 try:
@@ -5930,9 +5925,10 @@
                     success = completion_data.get('success', False)
                     marathon_results = completion_data.get('marathon_results')
                     
-                    # Get existing progress
+                    table_to_query = 'user_roleplay_stats' # <--- CORRECT TABLE NAME
+                    
                     existing_progress = self.supabase.get_data_with_filter(
-                        'user_roleplay_progress',
+                        table_to_query, # <--- USE THE VARIABLE
                         'user_id',
                         user_id,
                         additional_filters={'roleplay_id': roleplay_id}
@@ -6012,7 +6008,7 @@
                     }
                     
                 except Exception as e:
-                    logger.error(f"Error updating user progress: {e}")
+                    logger.error(f"Error updating user progress: {e}", exc_info=True)
                     return {'updated': False, 'error': str(e)}
             
             def check_new_unlocks(self, user_id: str) -> List[str]:
@@ -6137,8 +6133,6 @@
                     return {}
             
             def get_leaderboard(self, roleplay_id: str, limit: int = 10) -> List[Dict[str, Any]]:
-                """Get leaderboard for a specific roleplay"""
-                try:
 
   📄 __init__.py (0KB)
       (Empty file)
@@ -13457,7 +13451,7 @@
                         option.classList.remove('selected');
                     });
 
-      📄 roleplay-1-1-manager.js (14.3KB)
+      📄 roleplay-1-1-manager.js (14.6KB)
           Content:
             // ===== FIXED: static/js/roleplay/roleplay-1-1-manager.js =====
             
@@ -13466,11 +13460,6 @@
                     super(options);
                     this.roleplayId = "1.1";
                     this.roleplayType = "practice";
-                    this.naturalMode = true;
-                    this.conversationHistory = [];
-                    this.currentAudio = null;
-                    this.aiIsSpeaking = false;
-                    
                 }
                 initializeModeSelection() {
                     console.log('Ã°Å¸Å½Â¯ Roleplay 1.1: Initializing specific mode selection.');
@@ -13494,20 +13483,20 @@
                 init() {
                     console.log('Ã°Å¸Å¡â‚¬ Initializing Roleplay 1.1 Manager...');
                     super.init();
+                    
+                    // CRITICAL FIX: Connect the voice handler's output (onTranscript) 
+                    // to this manager's input processing method (processUserInput).
+                    if (this.voiceHandler) {
+                        this.voiceHandler.onTranscript = this.processUserInput.bind(this);
+                        console.log('Ã¢Å“â€¦ Voice handler callback connected to processUserInput.');
+                    }
+            
                     this.setupPracticeSpecificFeatures();
                 }
                 
                 setupPracticeSpecificFeatures() {
-                    // Enable natural conversation features
-                    this.enableNaturalConversation();
-                    
-                    // Setup progress tracking
-                    this.setupProgressTracking();
-                    
-                    // Setup interruption handling
-                    this.setupInterruptionHandling();
+                    console.log('Practice mode features are being set up.');
                 }
-            
                 // ===== ADD THESE TWO MISSING METHODS =====
                 setupProgressTracking() {
                     console.log('Ã°Å¸â€œÅ  Practice Mode: Progress tracking setup.');
@@ -13583,58 +13572,53 @@
                 
                 async processUserInput(transcript) {
                     if (!this.isActive || !this.currentSession || this.isProcessing) {
-                        console.log('Ã¢ Å’ Cannot process user input - invalid state');
+                        console.warn('Ã¢ Å’ Cannot process input: call not active or already processing.');
                         return;
                     }
                     
                     console.log('Ã°Å¸â€™Â¬ Processing Practice Mode input:', transcript);
                     this.isProcessing = true;
-                    
-                    this.addToConversationHistory('user', transcript);
                     this.updateTranscript('Ã°Å¸Â¤â€“ Processing your response...');
-                    
+            
                     try {
                         const response = await this.apiCall('/api/roleplay/respond', {
                             method: 'POST',
-                            body: JSON.stringify({
-                                user_input: transcript
-                            })
+                            body: JSON.stringify({ user_input: transcript })
                         });
                         
+                        const data = await response.json();
+            
                         if (response.ok) {
-                            const data = await response.json();
                             console.log('Ã¢Å“â€¦ AI response received:', data);
+                            this.updateTranscript(`Ã°Å¸Â¤â€“ Prospect: "${data.ai_response}"`);
                             
-                            // Update conversation quality indicator
-                            if (data.conversation_quality !== undefined) {
-                                this.updateConversationQuality(data.conversation_quality);
-                            }
-                            
-                            // Check if call should end
                             if (!data.call_continues) {
-                                console.log('Ã°Å¸â€œÅ¾ Call ending...');
-                                this.endCall(); // Let endCall handle the final data
-                                return;
+                                console.log('Ã°Å¸â€œÅ¾ Call ending based on API response...');
+                                setTimeout(() => this.endCall(), 1500); // End the call after a short delay
+                            } else {
+                                await this.playAIResponse(data.ai_response);
                             }
-                            
-                            // Play AI response and automatically start next user turn
-                            await this.playAIResponseAndWaitForUser(data.ai_response);
-                            
                         } else {
-                            const errorData = await response.json();
-                            console.error('Ã¢ Å’ API error:', errorData);
-                            this.showError(errorData.error || 'Failed to process input');
-                            this.startUserTurn(); // Resume user turn on error
+                            this.showError(data.error || 'Failed to get AI response.');
+                            this.startUserTurn();
                         }
                     } catch (error) {
-                        console.error('Ã¢ Å’ Error processing user input:', error);
-                        this.showError('Network error during call');
-                        this.startUserTurn(); // Resume user turn on error
+                        this.showError('Network error. Please try again.');
+                        this.startUserTurn();
                     } finally {
                         this.isProcessing = false;
                     }
                 }
-                
+                async playAIResponse(text) {
+                    if (this.voiceHandler) {
+                         // Let the voice handler manage playing audio and starting the next user turn
+                        await this.voiceHandler.playAudio(text);
+                    } else {
+                        // Fallback if voice handler isn't ready
+                        await this.simulateSpeakingTime(text);
+                        this.startUserTurn();
+                    }
+                }
                 async playAIResponseAndWaitForUser(text) {
                     try {
                         console.log('Ã°Å¸Å½Â­ Playing AI response (interruptible):', text.substring(0, 50) + '...');
@@ -13714,19 +13698,12 @@
                 }
                 
                 startUserTurn() {
-                    console.log('Ã°Å¸â€˜Â¤ Starting user turn - auto-listening activated');
-                    
-                    this.aiIsSpeaking = false;
-                    
-                    // Start auto-listening for natural conversation
+                    console.log('Ã°Å¸â€˜Â¤ Starting user turn.');
                     if (this.voiceHandler) {
                         this.voiceHandler.setUserTurn(true);
                         this.voiceHandler.startAutoListening();
                     }
-                    
-                    // Update UI
-                    this.updateTranscript('Ã°Å¸Å½Â¤ Your turn - speak naturally...');
-                    this.addPulseToMicButton();
+                    this.updateTranscript('Ã°Å¸Å½Â¤ Your turn... speak now.');
                 }
                 
                 handleUserInterruption() {
@@ -13779,17 +13756,28 @@
                     document.getElementById('call-interface').style.display = 'none';
                     document.getElementById('feedback-section').style.display = 'flex';
                     
-                    const feedbackHeader = document.querySelector('.feedback-header h4');
-                    if (feedbackHeader) {
-                        feedbackHeader.textContent = 'Practice Mode Complete!';
+                    // Animate the score circle
+                    const scoreCircle = document.getElementById('score-circle');
+                    if(scoreCircle) {
+                        UIHelpers.animateScore(scoreCircle, score);
+                        scoreCircle.className = 'score-circle';
+                        if (score >= 85) scoreCircle.classList.add('excellent');
+                        else if (score >= 70) scoreCircle.classList.add('good');
+                        else scoreCircle.classList.add('needs-improvement');
                     }
+            
+                    // Populate coaching details
+                    const content = document.getElementById('feedback-content');
+                    if (!content) return;
                     
-                    if (coaching) {
-                        this.populatePracticeCoaching(coaching);
+                    if (coaching && Object.keys(coaching).length > 0) {
+                         content.innerHTML = Object.entries(coaching).map(([key, value]) => {
+                            const title = key.replace(/_/g, ' ').replace(/(^\w|\s\w)/g, m => m.toUpperCase());
+                            return `<div class="feedback-item"><h5>${title}</h5><p>${value}</p></div>`;
+                         }).join('');
+                    } else {
+                        content.innerHTML = `<div class="feedback-item"><p>Great job completing the session! Keep practicing.</p></div>`;
                     }
-                    
-                    this.animateScore(score);
-                    this.updateScoreCircleColor(score);
                 }
                 
                 populatePracticeCoaching(coaching) {
@@ -16054,7 +16042,7 @@
         </script>
         {% endblock %}
 
-  📄 roleplay.html (6.8KB)
+  📄 roleplay.html (7.1KB)
       Content:
         <!-- ===== FIXED: templates/roleplay.html ===== -->
         {% extends "base.html" %}
@@ -16159,13 +16147,18 @@
         
         <div id="voice-error" class="alert alert-warning position-fixed" style="display: none;"></div>
         {% endblock %}
-        
         {% block extra_js %}
-        <!-- CORRECTED PATH for voice-handler.js -->
+        <!-- Utilities (Must be loaded before the managers that use them) -->
+        <script src="{{ url_for('static', filename='js/utils/api-client.js') }}?v={{ get_file_version('js/utils/api-client.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/utils/ui-helpers.js') }}?v={{ get_file_version('js/utils/ui-helpers.js') }}"></script>
+        
+        <!-- Core Handlers and Managers -->
         <script src="{{ url_for('static', filename='js/voice-handler.js') }}?v={{ get_file_version('js/voice-handler.js') }}"></script>
         <script src="{{ url_for('static', filename='js/roleplay/base-roleplay-manager.js') }}?v={{ get_file_version('js/roleplay/base-roleplay-manager.js') }}"></script>
         <script src="{{ url_for('static', filename='js/roleplay/roleplay-1-1-manager.js') }}?v={{ get_file_version('js/roleplay/roleplay-1-1-manager.js') }}"></script>
         <script src="{{ url_for('static', filename='js/roleplay/roleplay-1-2-manager.js') }}?v={{ get_file_version('js/roleplay/roleplay-1-2-manager.js') }}"></script>
+        
+        <!-- Factory and Initialization (Must be loaded last) -->
         <script src="{{ url_for('static', filename='js/roleplay/roleplay-factory.js') }}?v={{ get_file_version('js/roleplay/roleplay-factory.js') }}"></script>
         <script>
             // Factory-based initialization

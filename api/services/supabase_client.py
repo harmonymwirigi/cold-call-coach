@@ -60,10 +60,11 @@ class SupabaseService:
             logger.error(f"Auth error: {e}")
             return None
     def get_user_profile_by_service(self, user_id: str) -> Optional[Dict[str, Any]]:
-        """Get user profile using service client (bypasses RLS)"""
+        """Get user profile using service client (bypasses RLS) - FIXED"""
         try:
-            response = self.client.table('user_progress').select('*').eq('user_id', user_id).execute() # <-- BINGO!
-            return response.data or []
+            # FIX: This was incorrectly querying 'user_progress'. It should be 'user_profiles'.
+            response = self.service_client.table('user_profiles').select('*').eq('id', user_id).execute()
+            
             if response.data and len(response.data) > 0:
                 logger.info(f"Profile found for user_id: {user_id}")
                 return response.data[0]
@@ -104,21 +105,6 @@ class SupabaseService:
             logger.error(f"Error getting user profile for {user_id}: {e}")
             return None
     
-    def get_user_profile_by_service(self, user_id: str) -> Optional[Dict[str, Any]]:
-        """Get user profile using service client (bypasses RLS)"""
-        try:
-            response = self.service_client.table('user_profiles').select('*').eq('id', user_id).execute()
-            
-            if response.data and len(response.data) > 0:
-                logger.info(f"Profile found for user_id: {user_id}")
-                return response.data[0]
-            else:
-                logger.warning(f"No profile found for user_id: {user_id}")
-                return None
-                
-        except Exception as e:
-            logger.error(f"Error getting user profile for {user_id}: {e}")
-            return None
     
     def create_user_profile(self, profile_data: Dict[str, Any]) -> bool:
         """Create new user profile using service client to bypass RLS"""
@@ -304,7 +290,7 @@ class SupabaseService:
             logger.error(f"Error updating data in '{table_name}': {e}")
             return False
     def get_user_sessions(self, user_id: str, limit: int = 20, offset: int = 0) -> List[Dict[str, Any]]:
-        """Get user's voice sessions"""
+        """Get user's voice sessions (LEGACY)"""
         try:
             response = self.service_client.table('voice_sessions')\
                 .select('*')\
@@ -318,7 +304,7 @@ class SupabaseService:
             return []
 
     def get_session_count(self, user_id: str) -> int:
-        """Get total session count for user"""
+        """Get total session count for user (LEGACY)"""
         try:
             response = self.service_client.table('voice_sessions')\
                 .select('id', count='exact')\
@@ -341,3 +327,28 @@ class SupabaseService:
         except Exception as e:
             logger.error(f"Error updating user profile by service: {e}")
             return False
+    def get_user_completions(self, user_id: str, limit: int = 20, offset: int = 0) -> List[Dict[str, Any]]:
+        """Get user's roleplay completions from the new table."""
+        try:
+            response = self.service_client.table('roleplay_completions')\
+                .select('*')\
+                .eq('user_id', user_id)\
+                .order('completed_at', desc=True)\
+                .range(offset, offset + limit - 1)\
+                .execute()
+            return response.data or []
+        except Exception as e:
+            logger.error(f"Error getting user completions: {e}")
+            return []
+
+    def get_completion_count(self, user_id: str) -> int:
+        """Get total completion count for a user from the new table."""
+        try:
+            response = self.service_client.table('roleplay_completions')\
+                .select('id', count='exact')\
+                .eq('user_id', user_id)\
+                .execute()
+            return response.count or 0
+        except Exception as e:
+            logger.error(f"Error getting completion count: {e}")
+            return 0

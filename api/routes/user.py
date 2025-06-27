@@ -47,29 +47,25 @@ def get_profile():
     except Exception as e:
         logger.error(f"Error getting profile: {e}")
         return jsonify({'error': 'Internal server error'}), 500
-
 @user_bp.route('/stats', methods=['GET'])
 @require_auth
 def get_user_stats():
-    """Get user statistics"""
+    """Get user statistics - FIXED"""
     try:
         user_id = session['user_id']
         logger.info(f"Getting stats for user {user_id}")
         
-        # Get profile for usage info using service client
         profile = supabase_service.get_user_profile_by_service(user_id)
         if not profile:
-            logger.error(f"Profile not found for user {user_id}")
             return jsonify({'error': 'Profile not found'}), 404
         
-        # Get session statistics using service client
-        user_sessions = supabase_service.get_user_sessions(user_id, limit=1000)  # Get all sessions for stats
+        # FIX: Get completions from the new table
+        user_completions = supabase_service.get_user_completions(user_id, limit=1000)
         
-        # Calculate stats with better null handling
         stats = {
-            'total_sessions': len(user_sessions),
-            'total_minutes': sum(s.get('duration_minutes', 0) or 0 for s in user_sessions),
-            'successful_sessions': sum(1 for s in user_sessions if s.get('success') is True),
+            'total_sessions': len(user_completions),
+            'total_minutes': sum(c.get('duration_minutes', 0) or 0 for c in user_completions),
+            'successful_sessions': sum(1 for c in user_completions if c.get('success') is True),
             'success_rate': 0,
             'favorite_roleplay': None,
             'sessions_this_week': 0,
@@ -81,27 +77,17 @@ def get_user_stats():
         if stats['total_sessions'] > 0:
             stats['success_rate'] = round((stats['successful_sessions'] / stats['total_sessions']) * 100, 1)
         
-        # Calculate sessions this week/month with proper timezone handling
         now = datetime.now(timezone.utc)
         week_ago = now - timedelta(days=7)
         month_ago = now - timedelta(days=30)
         
-        for user_session in user_sessions:
+        for completion in user_completions:
             try:
-                session_date_str = user_session.get('created_at') or user_session.get('started_at')
+                # Use 'completed_at' from the new table
+                session_date_str = completion.get('completed_at')
                 if not session_date_str:
                     continue
-                    
-                # Handle timezone-aware datetime strings
-                if 'T' in session_date_str:
-                    if session_date_str.endswith('Z'):
-                        session_date = datetime.fromisoformat(session_date_str.replace('Z', '+00:00'))
-                    elif '+' in session_date_str or session_date_str.endswith('00'):
-                        session_date = datetime.fromisoformat(session_date_str)
-                    else:
-                        session_date = datetime.fromisoformat(session_date_str + '+00:00')
-                else:
-                    session_date = datetime.strptime(session_date_str, '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
+                session_date = _parse_iso_datetime(session_date_str)
                 
                 if session_date >= week_ago:
                     stats['sessions_this_week'] += 1
@@ -109,16 +95,17 @@ def get_user_stats():
                     stats['sessions_this_month'] += 1
                     
             except (ValueError, TypeError) as e:
-                logger.warning(f"Could not parse session date {session_date_str}: {e}")
+                logger.warning(f"Could not parse completion date {session_date_str}: {e}")
                 continue
         
-        # Find favorite roleplay
         roleplay_counts = {}
-        for user_session in user_sessions:
-            rp_id = user_session.get('roleplay_id')
-            if rp_id:
-                roleplay_counts[rp_id] = roleplay_counts.get(rp_id, 0) + 1
-        
+        for completion in user_completions:
+            rp_id_str = str(completion.get('roleplay_id'))
+            if rp_id_str:
+                # Use the main roleplay ID (e.g., '1' from '1.1')
+                main_rp_id = int(float(rp_id_str))
+                roleplay_counts[main_rp_id] = roleplay_counts.get(main_rp_id, 0) + 1
+
         if roleplay_counts:
             favorite_id = max(roleplay_counts, key=roleplay_counts.get)
             stats['favorite_roleplay'] = ROLEPLAY_CONFIG.get(favorite_id, {}).get('name', f'Roleplay {favorite_id}')
@@ -133,24 +120,22 @@ def get_user_stats():
 @user_bp.route('/sessions', methods=['GET'])
 @require_auth
 def get_user_sessions():
-    """Get user's roleplay sessions"""
+    """Get user's roleplay sessions - FIXED"""
     try:
         user_id = session['user_id']
         page = request.args.get('page', 1, type=int)
         limit = request.args.get('limit', 20, type=int)
         
-        logger.info(f"Getting sessions for user {user_id}, page {page}, limit {limit}")
+        logger.info(f"Getting completions for user {user_id}, page {page}, limit {limit}")
         
-        # Get sessions from database using service client
         offset = (page - 1) * limit
-        user_sessions = supabase_service.get_user_sessions(user_id, limit=limit, offset=offset)
+        # FIX: Get completions from the new table
+        user_completions = supabase_service.get_user_completions(user_id, limit=limit, offset=offset)
+        total_count = supabase_service.get_completion_count(user_id)
         
-        # Get total count
-        total_count = supabase_service.get_session_count(user_id)
-        
-        logger.info(f"Successfully retrieved {len(user_sessions)} sessions for user {user_id}")
+        logger.info(f"Successfully retrieved {len(user_completions)} completions for user {user_id}")
         return jsonify({
-            'sessions': user_sessions,
+            'sessions': user_completions, # Frontend expects 'sessions' key
             'total_count': total_count,
             'page': page,
             'limit': limit,
@@ -160,11 +145,9 @@ def get_user_sessions():
     except Exception as e:
         logger.error(f"Error getting user sessions: {e}")
         return jsonify({'error': 'Internal server error'}), 500
-
 @user_bp.route('/profile', methods=['PUT'])
 @require_auth
 def update_profile():
-    """Update user profile"""
     try:
         user_id = session['user_id']
         data = request.get_json()
@@ -191,7 +174,7 @@ def update_profile():
     except Exception as e:
         logger.error(f"Error updating profile: {e}")
         return jsonify({'error': 'Internal server error'}), 500
-
+    
 def _calculate_access_info(profile):
     """Calculate user's access limits and usage"""
     access_level = profile.get('access_level', 'limited_trial')
@@ -316,8 +299,6 @@ def _parse_iso_datetime(date_string: str) -> datetime:
     except (ValueError, TypeError) as e:
         logger.warning(f"Could not parse datetime {date_string}: {e}")
         return datetime.now(timezone.utc)
-
-# ===== COMPLETE FIX: Replace these functions in routes/user.py =====
 
 @user_bp.route('/roleplay-progress', methods=['GET'])
 @require_auth
