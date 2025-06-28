@@ -130,26 +130,34 @@ class Roleplay12(BaseRoleplay):
         session['current_call_data']['current_stage'] = next_stage
         logger.info(f"Session {session['session_id']} moved to stage: {next_stage}")
 
+    # This is the NEW, intelligent version to use
     def _generate_ai_response(self, session: Dict) -> str:
-        """Generate the AI's response, such as an objection or positive reply."""
+        """Generate the AI's response, either a specific objection or a natural reply."""
         current_stage = session['current_call_data']['current_stage']
+        
+        # Rule: At the 'early_objection' stage, pick a unique objection.
         if current_stage == 'early_objection':
             available_objections = [obj for obj in EARLY_OBJECTIONS if obj not in session['used_objections']]
             if not available_objections:
+                logger.warning("All objections used, resetting list for this marathon.")
                 session['used_objections'] = []
                 available_objections = EARLY_OBJECTIONS
+            
             objection = random.choice(available_objections)
             session['used_objections'].append(objection)
             return objection
         
-        # --- START: USE OPENAI FOR NATURAL RESPONSES ---
-        return self.openai_service.generate_roleplay_response(
-            session['current_call_data']['conversation_history'][-1]['content'],
-            session['current_call_data']['conversation_history'],
-            session['user_context'],
-            current_stage
-        ).get('response', "That's interesting. What do you mean by that?")
-        # --- END: USE OPENAI FOR NATURAL RESPONSES ---
+        # Rule: For all other stages, generate a natural, contextual response using AI.
+        if self.is_openai_available():
+            return self.openai_service.generate_roleplay_response(
+                session['current_call_data']['conversation_history'][-1]['content'],
+                session['current_call_data']['conversation_history'],
+                session['user_context'],
+                current_stage
+            ).get('response', "That's interesting. What do you mean by that?")
+        else:
+            # Fallback for when OpenAI is not available
+            return "Okay, I'm listening. Go on."
 
     def _handle_call_success(self, session: Dict) -> Dict:
         """Handle a successfully completed call."""

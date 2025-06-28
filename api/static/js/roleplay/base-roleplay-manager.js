@@ -607,7 +607,7 @@ class BaseRoleplayManager {
     }
     
     async endCall(forcedEnd = false) {
-        if (!this.isActive) return null; // Return null if not active
+        if (!this.isActive) return null;
 
         console.log('📞 Ending call. Forced:', forcedEnd);
         this.isProcessing = true;
@@ -629,16 +629,16 @@ class BaseRoleplayManager {
             if (response.ok) {
                 const data = await response.json();
                 console.log('📊 Final session data received:', data);
-                return data; // Return the final data
+                return data; // Simply return the data
             } else {
                 console.error('❌ Failed to end session gracefully.');
                 this.showError('Could not retrieve final feedback.');
-                return null; // Return null on failure
+                return null;
             }
         } catch (error) {
             console.error('❌ Error during endCall API request:', error);
             this.showError('An error occurred while ending the call.');
-            return null; // Return null on exception
+            return null;
         } finally {
             this.isProcessing = false;
         }
@@ -663,12 +663,16 @@ class BaseRoleplayManager {
             modeGrid.appendChild(modeCard);
         });
     }
-    showFeedback(coaching, score = 75) {
+    showFeedback(data) {
+        // The base method is now only responsible for showing the feedback container
+        // and rendering the score circle. Subclasses will add specific content.
         console.log('📊 Displaying feedback section...');
         document.getElementById('call-interface').style.display = 'none';
         document.getElementById('feedback-section').style.display = 'flex';
         
         const scoreCircle = document.getElementById('score-circle');
+        const score = data.overall_score || 0;
+
         if (scoreCircle) {
             UIHelpers.animateScore(scoreCircle, score);
             scoreCircle.className = 'score-circle';

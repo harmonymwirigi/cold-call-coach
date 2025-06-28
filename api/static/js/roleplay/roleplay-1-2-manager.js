@@ -178,20 +178,26 @@ class Roleplay12Manager extends BaseRoleplayManager {
             this.marathonProgressElement.style.display = 'none';
         }
 
-        // If the API call was successful, show the feedback
+        // If the API call was successful, show the specific feedback for this mode
         if (finalData) {
-            this.showFeedback(finalData.coaching, finalData.overall_score, finalData.marathon_results);
+            this.showFeedback(finalData); // Pass the whole data object
         } else {
             // If API failed, show a generic failure screen
-            this.showFeedback({}, 0, { marathon_passed: false, calls_passed: this.marathonState?.calls_passed || 0 });
+            this.showFeedback({ 
+                overall_score: 0, 
+                coaching: { error: "Failed to retrieve feedback." },
+                marathon_results: { marathon_passed: false, calls_passed: this.marathonState?.calls_passed || 0 }
+            });
         }
     }
     
-    showFeedback(coaching, score, marathonResults) {
-        // This method is now correctly called by the child's endCall method.
-        super.showFeedback(coaching, score); // This just shows the container
+    showFeedback(data) {
+        const { coaching, overall_score, marathon_results } = data;
+
+        // First, call the base method to render the score and container
+        super.showFeedback(data);
         
-        if (!marathonResults) {
+        if (!marathon_results) {
              console.warn("Marathon results missing in showFeedback");
              return;
         }
@@ -199,17 +205,17 @@ class Roleplay12Manager extends BaseRoleplayManager {
         const feedbackContent = document.getElementById('feedback-content');
         let message = '';
 
-        if(marathonResults.marathon_passed) {
+        if(marathon_results.marathon_passed) {
             message = `<div class="feedback-item" style="background: #10b98120; border-left-color: #10b981;">
                 <h5>🎉 Marathon Passed!</h5>
-                <p>Nice work—you passed ${marathonResults.calls_passed} out of 10! You've unlocked the next modules and earned one shot at Legend Mode.</p>
+                <p>Nice work—you passed ${marathon_results.calls_passed} out of 10! You've unlocked the next modules and earned one shot at Legend Mode.</p>
             </div>`;
         } else {
             message = `<div class="feedback-item" style="background: #f59e0b20; border-left-color: #f59e0b;">
                 <h5>Marathon Complete</h5>
-                <p>You completed all 10 calls and scored ${marathonResults.calls_passed}/10. Keep practising—the more reps you get, the easier it becomes.</p>
+                <p>You completed all 10 calls and scored ${marathon_results.calls_passed}/10. Keep practising—the more reps you get, the easier it becomes.</p>
             </div>`;
         }
-        feedbackContent.insertAdjacentHTML('afterbegin', message);
+        feedbackContent.innerHTML = message; // Use innerHTML to replace content
     }
 }
