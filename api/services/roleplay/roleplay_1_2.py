@@ -73,7 +73,6 @@ class Roleplay12(BaseRoleplay):
         return {'conversation_history': [], 'current_stage': 'phone_pickup', 'turn_count': 0, 'call_status': 'in_progress'}
 
     def process_user_input(self, session_id: str, user_input: str) -> Dict[str, Any]:
-        """Process user input for the current call in the marathon."""
         session = self.active_sessions[session_id]
         call = session['current_call_data']
         marathon = session['marathon_state']
@@ -81,16 +80,15 @@ class Roleplay12(BaseRoleplay):
         if marathon['is_complete']:
             return {'success': False, 'error': 'Marathon is already complete.'}
         
-        # --- START: CORRECTED SILENCE HANDLING ---
         if user_input == '[SILENCE_IMPATIENCE]':
             return {'success': True, 'ai_response': random.choice(IMPATIENCE_PHRASES), 'call_continues': True}
         if user_input == '[SILENCE_HANGUP]':
             return self._handle_call_failure(session, "Hung up due to silence")
-        # --- END: CORRECTED SILENCE HANDLING ---
 
         call['turn_count'] += 1
         call['conversation_history'].append({'role': 'user', 'content': user_input})
         
+        # --- THIS CALL NOW USES THE INTELLIGENT EVALUATION ---
         evaluation_stage = self._get_evaluation_stage(call['current_stage'])
         evaluation = self._evaluate_user_input(session, user_input, evaluation_stage)
         
