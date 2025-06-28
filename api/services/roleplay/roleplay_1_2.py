@@ -7,6 +7,7 @@ from typing import Dict, List, Any
 
 from .base_roleplay import BaseRoleplay
 from .configs.roleplay_1_2_config import Roleplay12Config
+# CORRECTLY IMPORT THE IMPATIENCE PHRASES
 from utils.constants import EARLY_OBJECTIONS, IMPATIENCE_PHRASES
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,6 @@ class Roleplay12(BaseRoleplay):
         self.roleplay_id = self.config.ROLEPLAY_ID
 
     def get_roleplay_info(self) -> Dict[str, Any]:
-        """Return Roleplay 1.2 configuration."""
         return {
             'id': self.config.ROLEPLAY_ID,
             'name': self.config.NAME,
@@ -81,11 +81,12 @@ class Roleplay12(BaseRoleplay):
         if marathon['is_complete']:
             return {'success': False, 'error': 'Marathon is already complete.'}
         
-        # Handle silence triggers from the frontend
+        # --- START: CORRECTED SILENCE HANDLING ---
         if user_input == '[SILENCE_IMPATIENCE]':
             return {'success': True, 'ai_response': random.choice(IMPATIENCE_PHRASES), 'call_continues': True}
         if user_input == '[SILENCE_HANGUP]':
             return self._handle_call_failure(session, "Hung up due to silence")
+        # --- END: CORRECTED SILENCE HANDLING ---
 
         call['turn_count'] += 1
         call['conversation_history'].append({'role': 'user', 'content': user_input})
@@ -93,21 +94,14 @@ class Roleplay12(BaseRoleplay):
         evaluation_stage = self._get_evaluation_stage(call['current_stage'])
         evaluation = self._evaluate_user_input(session, user_input, evaluation_stage)
         
-        # Rule: Fail at opener -> scripted hang-up
-        if evaluation_stage == 'opener' and not evaluation.get('passed', False):
-            return self._handle_call_failure(session, "Failed opener evaluation")
-
-        # Rule: Marathon only - random hang-up on PASSED opener
-        if evaluation_stage == 'opener' and evaluation.get('passed', True) and random.random() < self.config.RANDOM_HANGUP_CHANCE:
-            return self._handle_call_failure(session, "Random opener hang-up (unlucky!)")
-
-        # Rule: Fail at any other stage -> hang-up
         if not evaluation.get('passed', False):
-             return self._handle_call_failure(session, f"Failed evaluation at {evaluation_stage}")
+            return self._handle_call_failure(session, f"Failed evaluation at {evaluation_stage}")
+
+        if evaluation_stage == 'opener' and random.random() < self.config.RANDOM_HANGUP_CHANCE:
+            return self._handle_call_failure(session, "Random opener hang-up (unlucky!)")
 
         self._update_session_state(session)
         
-        # Rule: If pass, respond positively and hang up to start next call
         if call['current_stage'] == 'call_ended':
             return self._handle_call_success(session)
 
@@ -122,7 +116,6 @@ class Roleplay12(BaseRoleplay):
             logger.warning("OpenAI not available, using basic evaluation.")
             return {'passed': len(user_input.split()) > 4, 'score': 3}
 
-        # This now uses the same detailed evaluation as Practice Mode
         evaluation_result = self.openai_service.evaluate_user_input(
             user_input,
             session['current_call_data']['conversation_history'],
@@ -149,18 +142,21 @@ class Roleplay12(BaseRoleplay):
             session['used_objections'].append(objection)
             return objection
         
+        # --- START: USE OPENAI FOR NATURAL RESPONSES ---
         return self.openai_service.generate_roleplay_response(
             session['current_call_data']['conversation_history'][-1]['content'],
             session['current_call_data']['conversation_history'],
             session['user_context'],
             current_stage
-        ).get('response', "That's interesting. Please continue.")
+        ).get('response', "That's interesting. What do you mean by that?")
+        # --- END: USE OPENAI FOR NATURAL RESPONSES ---
 
     def _handle_call_success(self, session: Dict) -> Dict:
         """Handle a successfully completed call."""
         session['marathon_state']['calls_passed'] += 1
         session['current_call_data']['call_status'] = 'passed'
-        ai_response = "That's interesting. I have to run, but send me an email with the details."
+        # The AI should give a positive, wrap-up response.
+        ai_response = "That sounds interesting. I have to run, but send me an email with the details."
         session['current_call_data']['conversation_history'].append({'role': 'assistant', 'content': ai_response})
         return self._start_next_call(session, "Call passed! Great job.")
 
@@ -196,8 +192,7 @@ class Roleplay12(BaseRoleplay):
         if not session: return {'success': False, 'error': 'Session not found.'}
 
         marathon = session['marathon_state']
-        if not marathon['is_complete']:
-             # If ended prematurely, mark the current call as failed
+        if not marathon.get('is_complete'):
             if session['current_call_data']['call_status'] == 'in_progress':
                 marathon['calls_failed'] += 1
                 session['all_calls_data'].append(session['current_call_data'])

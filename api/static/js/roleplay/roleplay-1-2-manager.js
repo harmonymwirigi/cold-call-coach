@@ -170,17 +170,31 @@ class Roleplay12Manager extends BaseRoleplayManager {
         `;
     }
     
-    endCall(data) {
-        super.endCall(data);
+    async endCall(forcedEnd = false) {
+        // Call the base method to handle the API request and get the final data
+        const finalData = await super.endCall(forcedEnd);
+
         if (this.marathonProgressElement) {
             this.marathonProgressElement.style.display = 'none';
         }
-        this.showFeedback(data.coaching, data.overall_score, data.marathon_results);
+
+        // If the API call was successful, show the feedback
+        if (finalData) {
+            this.showFeedback(finalData.coaching, finalData.overall_score, finalData.marathon_results);
+        } else {
+            // If API failed, show a generic failure screen
+            this.showFeedback({}, 0, { marathon_passed: false, calls_passed: this.marathonState?.calls_passed || 0 });
+        }
     }
     
     showFeedback(coaching, score, marathonResults) {
-        super.showFeedback(coaching, score);
-        if (!marathonResults) return;
+        // This method is now correctly called by the child's endCall method.
+        super.showFeedback(coaching, score); // This just shows the container
+        
+        if (!marathonResults) {
+             console.warn("Marathon results missing in showFeedback");
+             return;
+        }
         
         const feedbackContent = document.getElementById('feedback-content');
         let message = '';

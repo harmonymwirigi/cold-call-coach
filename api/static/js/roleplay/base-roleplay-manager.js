@@ -607,13 +607,12 @@ class BaseRoleplayManager {
     }
     
     async endCall(forcedEnd = false) {
-        if (!this.isActive) return;
+        if (!this.isActive) return null; // Return null if not active
 
-        console.log('ðŸ“ž Ending call. Forced:', forcedEnd);
+        console.log('📞 Ending call. Forced:', forcedEnd);
         this.isProcessing = true;
         this.isActive = false;
 
-        // Stop timer and voice recognition
         clearInterval(this.durationInterval);
         if (this.voiceHandler) {
             this.voiceHandler.stopListening();
@@ -629,17 +628,17 @@ class BaseRoleplayManager {
 
             if (response.ok) {
                 const data = await response.json();
-                console.log('ðŸ“Š Final session data received:', data);
-                this.showFeedback(data.coaching, data.overall_score);
+                console.log('📊 Final session data received:', data);
+                return data; // Return the final data
             } else {
-                console.error('â Œ Failed to end session gracefully.');
+                console.error('❌ Failed to end session gracefully.');
                 this.showError('Could not retrieve final feedback.');
-                this.showFeedback({}, 50); // Show generic feedback
+                return null; // Return null on failure
             }
         } catch (error) {
-            console.error('â Œ Error during endCall API request:', error);
+            console.error('❌ Error during endCall API request:', error);
             this.showError('An error occurred while ending the call.');
-            this.showFeedback({}, 50); // Show generic feedback
+            return null; // Return null on exception
         } finally {
             this.isProcessing = false;
         }
@@ -665,7 +664,18 @@ class BaseRoleplayManager {
         });
     }
     showFeedback(coaching, score = 75) {
-        throw new Error('showFeedback must be implemented by subclass');
+        console.log('📊 Displaying feedback section...');
+        document.getElementById('call-interface').style.display = 'none';
+        document.getElementById('feedback-section').style.display = 'flex';
+        
+        const scoreCircle = document.getElementById('score-circle');
+        if (scoreCircle) {
+            UIHelpers.animateScore(scoreCircle, score);
+            scoreCircle.className = 'score-circle';
+            if (score >= 85) scoreCircle.classList.add('excellent');
+            else if (score >= 70) scoreCircle.classList.add('good');
+            else scoreCircle.classList.add('needs-improvement');
+        }
     }
     
     async playAIResponseAndWaitForUser(text) {
