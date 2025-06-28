@@ -114,8 +114,10 @@ class Roleplay12(BaseRoleplay):
         """Evaluate user input using OpenAI service, based on rubrics."""
         if not self.is_openai_available():
             logger.warning("OpenAI not available, using basic evaluation.")
+            # Fallback evaluation if OpenAI fails
             return {'passed': len(user_input.split()) > 4, 'score': 3}
 
+        # This now uses the same detailed evaluation as Practice Mode
         evaluation_result = self.openai_service.evaluate_user_input(
             user_input,
             session['current_call_data']['conversation_history'],
