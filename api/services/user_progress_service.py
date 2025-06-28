@@ -82,45 +82,29 @@ class UserProgressService:
             if not self.supabase:
                 return {}
             
-            table_to_query = 'user_roleplay_stats' # <--- CORRECT TABLE NAME
-            
-            # Get progress records
+            # This part is correct, it queries the right table.
+            client = self.supabase.get_service_client()
+            query = client.table('user_roleplay_progress').select('*').eq('user_id', user_id)
             if roleplay_ids:
-                progress_records = []
-                for roleplay_id in roleplay_ids:
-                    records = self.supabase.get_data_with_filter(
-                        table_to_query, # <--- USE THE VARIABLE
-                        'user_id',
-                        user_id,
-                        additional_filters={'roleplay_id': roleplay_id}
-                    )
-                    progress_records.extend(records)
-            else:
-                progress_records = self.supabase.get_data_with_filter(
-                    table_to_query, # <--- USE THE VARIABLE
-                    'user_id',
-                    user_id
-                )
+                query = query.in_('roleplay_id', roleplay_ids)
             
-            # Get recent completions for additional context
-            completions = self.supabase.get_data_with_filter(
-                'roleplay_completions',
-                'user_id',
-                user_id,
-                limit=50,
-                order_by='created_at',
-                ascending=False
-            )
+            progress_records = query.execute().data or []
             
-            # Build progress dictionary
+            # Build the progress dictionary
             progress = {}
-            
             for record in progress_records:
                 roleplay_id = record['roleplay_id']
                 
-                # Get recent completions for this roleplay
-                roleplay_completions = [c for c in completions if c['roleplay_id'] == roleplay_id]
-                
+                # THIS IS THE CRITICAL FIX:
+                # We determine the 'passed' status based on the specific rules for each mode.
+                is_passed = False
+                if roleplay_id.endswith('.1'):  # Practice Mode (e.g., '1.1')
+                    is_passed = record.get('best_score', 0) >= 70
+                elif roleplay_id.endswith('.2'):  # Marathon Mode (e.g., '1.2')
+                    is_passed = record.get('marathon_passed', False)
+                elif roleplay_id.endswith('.3'):  # Legend Mode (e.g., '1.3')
+                    is_passed = record.get('legend_completed', False)
+
                 progress[roleplay_id] = {
                     'best_score': record.get('best_score', 0),
                     'total_attempts': record.get('total_attempts', 0),
@@ -133,15 +117,15 @@ class UserProgressService:
                     'is_unlocked': record.get('is_unlocked', True),
                     'first_attempt_at': record.get('first_attempt_at'),
                     'last_attempt_at': record.get('last_attempt_at'),
-                    'recent_completions': roleplay_completions[:5],  # Last 5 attempts
-                    'completed': self._determine_completion_status(roleplay_id, record, roleplay_completions),
-                    'passed': self._determine_pass_status(roleplay_id, record, roleplay_completions)
+                    # The 'passed' key is now correctly determined by our logic above.
+                    'passed': is_passed,
+                    # We can remove the 'completed' key as 'passed' is more specific and useful.
                 }
             
             return progress
             
         except Exception as e:
-            logger.error(f"Error getting user roleplay progress: {e}")
+            logger.error(f"Error getting user roleplay progress: {e}", exc_info=True)
             return {}
 
     def _determine_completion_status(self, roleplay_id: str, progress_record: Dict, completions: List[Dict]) -> bool:

@@ -240,12 +240,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (marathonData) {
             const statusEl = document.getElementById('marathon-status');
             const bestRun = marathonData.marathon_best_run || 0;
-            statusEl.textContent = `${bestRun}/10 Passed`;
-            statusEl.className = 'progress-status ' + (marathonData.passed ? 'status-pass' : 'status-pending');
+            // THIS IS THE FIX: Check the specific `marathon_passed` flag
+            const passed = marathonData.marathon_passed;
+            statusEl.textContent = passed ? `Passed (${bestRun}/10)` : `${bestRun}/10 Passed`;
+            statusEl.className = 'progress-status ' + (passed ? 'status-pass' : 'status-pending');
         }
 
         // Update Legend Mode (1.3) availability
-        const legendUnlocked = marathonData && marathonData.passed;
+        const legendUnlocked = marathonData && marathonData.marathon_passed;
         const legendCard = document.querySelector('[data-mode-id="1.3"]');
         if (legendCard) {
             if (legendUnlocked) {
@@ -258,7 +260,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         // Update Roleplay 2 access status
-        const legendCompleted = userProgress['1.3']?.completed;
+        const legendCompleted = userProgress['1.3']?.legend_completed;
         const rp2StatusEl = document.getElementById('roleplay2-status');
         if (rp2StatusEl && legendCompleted) {
             rp2StatusEl.textContent = 'Unlocked!';
