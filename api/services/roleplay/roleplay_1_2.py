@@ -1,29 +1,30 @@
 # ===== FIXED: services/roleplay/roleplay_1_2.py =====
-# This is a complete rewrite to strictly follow the Marathon Mode specification.
+# This version INHERITS from Roleplay11 for intelligent conversation.
 
 import random
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List, Any
+from typing import Dict, Any
 
-from .base_roleplay import BaseRoleplay
+from .roleplay_1_1 import Roleplay11  # <-- Inherit from the working implementation
 from .configs.roleplay_1_2_config import Roleplay12Config
-from utils.constants import EARLY_OBJECTIONS, IMPATIENCE_PHRASES, ROLEPLAY_1_RUBRICS, SUCCESS_MESSAGES
+from utils.constants import EARLY_OBJECTIONS, SUCCESS_MESSAGES
 
 logger = logging.getLogger(__name__)
 
-class Roleplay12(BaseRoleplay):
+class Roleplay12(Roleplay11):
     """
     Roleplay 1.2 - Marathon Mode.
-    Implements the structured, game-like flow from the specification.
+    Manages a sequence of 10 intelligent calls by inheriting from Roleplay11.
     """
     
     def __init__(self, openai_service=None):
-        super().__init__(openai_service)
+        super().__init__(openai_service)  # Initialize the parent Roleplay11 class
         self.config = Roleplay12Config()
         self.roleplay_id = self.config.ROLEPLAY_ID
 
     def get_roleplay_info(self) -> Dict[str, Any]:
+        # Override to provide marathon-specific info
         return {
             'id': self.config.ROLEPLAY_ID, 'name': self.config.NAME,
             'description': self.config.DESCRIPTION, 'type': 'marathon',
@@ -31,73 +32,28 @@ class Roleplay12(BaseRoleplay):
         }
 
     def create_session(self, user_id: str, mode: str, user_context: Dict) -> Dict[str, Any]:
-        session_id = f"{user_id}_{self.config.ROLEPLAY_ID}_{mode}_{int(datetime.now().timestamp())}"
-        session_data = {
-            'session_id': session_id, 'user_id': user_id, 'roleplay_id': self.roleplay_id,
-            'mode': 'marathon', 'started_at': datetime.now(timezone.utc).isoformat(),
-            'user_context': user_context, 'session_active': True,
-            'marathon_state': { 'current_call_number': 1, 'calls_passed': 0, 'calls_failed': 0 },
-            'all_calls_data': [], 'used_objections': set(),
-            'current_call_data': self._initialize_call_data(),
-        }
-        self.active_sessions[session_id] = session_data
-        initial_response = self._get_contextual_initial_response(user_context)
-        session_data['current_call_data']['conversation_history'].append({'role': 'assistant', 'content': initial_response})
-        return {
-            'success': True, 'session_id': session_id, 'initial_response': initial_response,
-            'roleplay_info': self.get_roleplay_info(), 'marathon_status': session_data['marathon_state']
-        }
-
-    def _initialize_call_data(self) -> Dict[str, Any]:
-        return {
-            'conversation_history': [], 'current_stage': 'opener_stage', 'turn_count': 0, 
-            'call_status': 'in_progress'
-        }
-
-    def process_user_input(self, session_id: str, user_input: str) -> Dict[str, Any]:
+        # Override to add marathon-specific state
+        result = super().create_session(user_id, 'marathon', user_context)
+        if not result.get('success'):
+            return result
+        
+        session_id = result['session_id']
         session = self.active_sessions.get(session_id)
-        if not session: return {'success': False, 'error': 'Session not found.'}
-
-        if user_input == '[SILENCE_IMPATIENCE]':
-            return {'success': True, 'ai_response': random.choice(IMPATIENCE_PHRASES), 'call_continues': True, 'marathon_status': session['marathon_state']}
-        if user_input == '[SILENCE_HANGUP]':
-            return self._handle_call_failure(session, "Hung up due to silence")
-
-        call = session['current_call_data']
-        call['conversation_history'].append({'role': 'user', 'content': user_input})
         
-        stage = call['current_stage']
+        session['marathon_state'] = {
+            'current_call_number': 1, 'calls_passed': 0, 'calls_failed': 0
+        }
+        session['used_objections'] = set()
         
-        if stage == 'opener_stage':
-            passed = self._evaluate_with_rubric(user_input, ROLEPLAY_1_RUBRICS['opener'])
-            if not passed: return self._handle_call_failure(session, "Failed opener")
-            if random.random() < self.config.RANDOM_HANGUP_CHANCE: return self._handle_call_failure(session, "Random hang-up")
-            call['current_stage'] = 'objection_stage'
-            objection = self._get_unique_objection(session)
-            call['conversation_history'].append({'role': 'assistant', 'content': objection})
-            return {'success': True, 'ai_response': objection, 'call_continues': True, 'marathon_status': session['marathon_state']}
+        # Override the initial objection to be one from the unused list
+        objection = self._get_unique_objection(session)
+        session['initial_objection'] = objection
 
-        elif stage == 'objection_stage':
-            passed = self._evaluate_with_rubric(user_input, ROLEPLAY_1_RUBRICS['objection_handling'])
-            if not passed: return self._handle_call_failure(session, "Failed objection handling")
-            call['current_stage'] = 'mini_pitch_stage'
-            pitch_prompt = "Okay, you have 30 seconds. Go ahead."
-            call['conversation_history'].append({'role': 'assistant', 'content': pitch_prompt})
-            return {'success': True, 'ai_response': pitch_prompt, 'call_continues': True, 'marathon_status': session['marathon_state']}
-            
-        elif stage == 'mini_pitch_stage':
-            passed = self._evaluate_with_rubric(user_input, ROLEPLAY_1_RUBRICS['mini_pitch'])
-            if not passed: return self._handle_call_failure(session, "Failed mini-pitch")
-            return self._handle_call_success(session)
-
-        return self._handle_call_failure(session, "Invalid call stage")
-
-    def _evaluate_with_rubric(self, user_input: str, rubric: dict) -> bool:
-        if not self.is_openai_available(): return len(user_input.split()) > 3
-        evaluation = self.openai_service.evaluate_user_input(user_input, [], rubric['name'])
-        return evaluation.get('passed', False)
+        logger.info(f"Marathon session {session_id} created.")
+        return result
 
     def _get_unique_objection(self, session: Dict) -> str:
+        """Picks a unique objection for the current marathon run."""
         available = [obj for obj in EARLY_OBJECTIONS if obj not in session['used_objections']]
         if not available:
             session['used_objections'].clear()
@@ -106,48 +62,84 @@ class Roleplay12(BaseRoleplay):
         session['used_objections'].add(objection)
         return objection
 
-    def _handle_call_success(self, session: Dict) -> Dict:
+    def _generate_contextual_ai_response(self, session: Dict, user_input: str, evaluation: Dict) -> str:
+        # Override to inject the unique objection at the correct stage
+        if session['current_stage'] == 'opener_evaluation':
+            return session.get('initial_objection', "I'm not interested.")
+        
+        # For all other stages, use the intelligent parent logic
+        return super()._generate_contextual_ai_response(session, user_input, evaluation)
+
+    def _is_call_successful(self, session: Dict) -> bool:
+        """Determines if a single call within the marathon was a pass."""
+        # A call passes if all applicable rubric stages were passed.
+        # This aligns with the spec: "A call scores PASS only if all applicable rubrics pass".
+        rubrics = session.get('rubric_scores', {})
+        if not rubrics: return False # Must have at least one evaluation
+
+        # Check if opener and objection handling were passed. Mini-pitch is a bonus.
+        opener_passed = rubrics.get('opener', {}).get('passed', False)
+        objection_passed = rubrics.get('objection_handling', {}).get('passed', False)
+
+        return opener_passed and objection_passed
+
+    def process_user_input(self, session_id: str, user_input: str) -> Dict[str, Any]:
+        # Wrap the parent's logic to handle marathon state transitions
+        result = super().process_user_input(session_id, user_input)
+        
+        session = self.active_sessions.get(session_id)
+        if not session: return result
+
+        # Check if the call just ended
+        if not result.get('call_continues', True):
+            if self._is_call_successful(session):
+                return self._handle_call_success(session)
+            else:
+                return self._handle_call_failure(session, "Call did not meet success criteria")
+        
+        # The call continues, just return the result from the parent
+        result['marathon_status'] = session['marathon_state']
+        return result
+        
+    def _handle_call_success(self, session: Dict) -> Dict[str, Any]:
         session['marathon_state']['calls_passed'] += 1
-        session['current_call_data']['call_status'] = 'passed'
-        ai_response = "That sounds interesting. I have to run, but send me an email with the details." # Scripted positive response
-        session['current_call_data']['conversation_history'].append({'role': 'assistant', 'content': ai_response})
         return self._start_next_call(session, "Call passed! Great job.")
 
-    def _handle_call_failure(self, session: Dict, reason: str) -> Dict:
+    def _handle_call_failure(self, session: Dict, reason: str) -> Dict[str, Any]:
         session['marathon_state']['calls_failed'] += 1
-        session['current_call_data']['call_status'] = 'failed'
-        ai_response = "Sorry, I'm not interested. Goodbye." # Scripted hang-up
-        session['current_call_data']['conversation_history'].append({'role': 'assistant', 'content': ai_response})
         logger.warning(f"Call failed for {session['session_id']}. Reason: {reason}")
         return self._start_next_call(session, f"Call failed: {reason}")
 
-    def _start_next_call(self, session: Dict, transition_message: str) -> Dict:
-        session['all_calls_data'].append(session['current_call_data'])
+    def _start_next_call(self, session: Dict, transition_message: str) -> Dict[str, Any]:
         marathon = session['marathon_state']
         
         if marathon['current_call_number'] >= self.config.TOTAL_CALLS:
             return self.end_session(session['session_id'])
 
         marathon['current_call_number'] += 1
-        session['current_call_data'] = self._initialize_call_data()
         
-        ai_response = self._get_contextual_initial_response(session['user_context'])
-        session['current_call_data']['conversation_history'].append({'role': 'assistant', 'content': ai_response})
+        # Reset the state for the next call (like in create_session)
+        session['conversation_history'] = []
+        session['current_stage'] = 'phone_pickup'
+        session['hang_up_triggered'] = False
+        session['turn_count'] = 0
+        session['rubric_scores'] = {}
+        session['initial_objection'] = self._get_unique_objection(session)
+        
+        # Get a new initial "Hello" response
+        initial_response = self._get_contextual_initial_response(session['user_context'])
+        session['conversation_history'].append({'role': 'assistant', 'content': initial_response})
         
         return {
-            'success': True, 'ai_response': ai_response, 'call_continues': True,
+            'success': True, 'ai_response': initial_response, 'call_continues': True,
             'marathon_status': marathon, 'new_call_started': True, 'transition_message': transition_message
         }
-    
+
     def end_session(self, session_id: str, forced_end: bool = False) -> Dict[str, Any]:
-        session = self.active_sessions.pop(session_id, None)
+        session = self.active_sessions.get(session_id)
         if not session: return {'success': True, 'message': 'Session already ended.'}
 
         marathon = session['marathon_state']
-        if marathon['current_call_number'] <= self.config.TOTAL_CALLS and session['current_call_data']['call_status'] == 'in_progress':
-             session['marathon_state']['calls_failed'] += 1
-             session['all_calls_data'].append(session['current_call_data'])
-
         passed_marathon = marathon['calls_passed'] >= self.config.CALLS_TO_PASS
         
         if passed_marathon:
@@ -155,10 +147,14 @@ class Roleplay12(BaseRoleplay):
         else:
             completion_message = SUCCESS_MESSAGES["marathon_fail"].format(score=marathon['calls_passed'])
 
-        return {
-            'success': True, 'session_success': passed_marathon, 'call_continues': False,
+        # Now, call the parent's end_session to do the cleanup and get a base result
+        result = super().end_session(session_id, forced_end)
+        
+        # Override with marathon-specific results
+        result.update({
+            'session_success': passed_marathon,
             'overall_score': int((marathon['calls_passed'] / self.config.TOTAL_CALLS) * 100),
-            'duration_minutes': (datetime.now(timezone.utc) - datetime.fromisoformat(session['started_at'])).total_seconds() / 60,
-            'coaching': {'overall': completion_message}, 'session_data': session,
+            'coaching': {'overall': completion_message},
             'marathon_results': {'calls_passed': marathon['calls_passed'], 'marathon_passed': passed_marathon}
-        }
+        })
+        return result

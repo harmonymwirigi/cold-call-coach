@@ -2,10 +2,9 @@
 
 class BaseRoleplayManager {
     constructor(options = {}) {
-        // DO NOT call init() here anymore. The child class will call it.
         this.containerId = options.containerId || null;
         this.selectedMode = null;
-        this.callState = 'idle';
+        this.callState = 'idle'; // idle, dialing, ringing, connected, ended
         this.callStartTime = null;
         this.durationInterval = null;
         this.currentSession = null;
@@ -13,7 +12,11 @@ class BaseRoleplayManager {
         this.voiceHandler = null;
         this.isProcessing = false;
         this.conversationHistory = [];
+        
+        // Debug flag
         this.debugMode = options.debugMode || true;
+        
+        this.init();
     }
     
     init() {
@@ -24,8 +27,9 @@ class BaseRoleplayManager {
         
         this.loadRoleplayData();
         this.setupEventListeners();
-        this.initializeModeSelection(); // This will call the child's version
+        this.initializeModeSelection();
         
+        // Initialize voice handler
         if (typeof VoiceHandler !== 'undefined') {
             this.voiceHandler = new VoiceHandler(this);
             console.log('✅ Voice Handler initialized');
@@ -33,7 +37,6 @@ class BaseRoleplayManager {
             console.warn('⚠️ VoiceHandler not available');
         }
     }
-
     
     updateTime() {
         const now = new Date();
@@ -301,17 +304,7 @@ class BaseRoleplayManager {
             startBtn.textContent = `Start ${this.capitalizeFirst(mode)} Mode`;
         }
     }
-    async playAIResponse(text) {
-        if (this.voiceHandler) {
-             // Let the voice handler manage playing audio and starting the next user turn
-            await this.voiceHandler.playAudio(text);
-        } else {
-            // Fallback if voice handler isn't ready
-            console.warn("Voice handler not available, simulating speech time.");
-            await this.simulateSpeakingTime(text);
-            this.startUserTurn();
-        }
-    }
+    
     updateStartButton(text, disabled = false) {
         const startBtn = document.getElementById('start-call-btn');
         if (startBtn) {
@@ -607,12 +600,13 @@ class BaseRoleplayManager {
     }
     
     async endCall(forcedEnd = false) {
-        if (!this.isActive) return null;
+        if (!this.isActive) return;
 
-        console.log('📞 Ending call. Forced:', forcedEnd);
+        console.log('ðŸ“ž Ending call. Forced:', forcedEnd);
         this.isProcessing = true;
         this.isActive = false;
 
+        // Stop timer and voice recognition
         clearInterval(this.durationInterval);
         if (this.voiceHandler) {
             this.voiceHandler.stopListening();
@@ -628,17 +622,17 @@ class BaseRoleplayManager {
 
             if (response.ok) {
                 const data = await response.json();
-                console.log('📊 Final session data received:', data);
-                return data; // Simply return the data
+                console.log('ðŸ“Š Final session data received:', data);
+                this.showFeedback(data.coaching, data.overall_score);
             } else {
-                console.error('❌ Failed to end session gracefully.');
+                console.error('â Œ Failed to end session gracefully.');
                 this.showError('Could not retrieve final feedback.');
-                return null;
+                this.showFeedback({}, 50); // Show generic feedback
             }
         } catch (error) {
-            console.error('❌ Error during endCall API request:', error);
+            console.error('â Œ Error during endCall API request:', error);
             this.showError('An error occurred while ending the call.');
-            return null;
+            this.showFeedback({}, 50); // Show generic feedback
         } finally {
             this.isProcessing = false;
         }
@@ -663,29 +657,11 @@ class BaseRoleplayManager {
             modeGrid.appendChild(modeCard);
         });
     }
-    showFeedback(data) {
-        // The base method is now only responsible for showing the feedback container
-        // and rendering the score circle. Subclasses will add specific content.
-        console.log('📊 Displaying feedback section...');
-        document.getElementById('call-interface').style.display = 'none';
-        document.getElementById('feedback-section').style.display = 'flex';
-        
-        const scoreCircle = document.getElementById('score-circle');
-        const score = data.overall_score || 0;
-
-        if (scoreCircle) {
-            UIHelpers.animateScore(scoreCircle, score);
-            scoreCircle.className = 'score-circle';
-            if (score >= 85) scoreCircle.classList.add('excellent');
-            else if (score >= 70) scoreCircle.classList.add('good');
-            else scoreCircle.classList.add('needs-improvement');
-        }
+    showFeedback(coaching, score = 75) {
+        throw new Error('showFeedback must be implemented by subclass');
     }
     
     async playAIResponseAndWaitForUser(text) {
-        // This is a placeholder that MUST be overridden by child classes.
-        // Each roleplay mode (Practice, Marathon) has a different logic for what happens
-        // after the AI speaks, so they need their own implementation.
         throw new Error('playAIResponseAndWaitForUser must be implemented by subclass');
     }
     

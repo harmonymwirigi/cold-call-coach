@@ -48,7 +48,7 @@ class Roleplay11(BaseRoleplay):
             session_data = {
                 'session_id': session_id,
                 'user_id': user_id,
-                'roleplay_id': self.config.ROLEPLAY_ID,
+                'roleplay_id': self.roleplay_id,
                 'mode': mode,
                 'started_at': datetime.now(timezone.utc).isoformat(),
                 'user_context': user_context,

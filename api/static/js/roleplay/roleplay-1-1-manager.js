@@ -155,11 +155,81 @@ class Roleplay11Manager extends BaseRoleplayManager {
     }
     
     async playAIResponseAndWaitForUser(text) {
-        console.log('Practice Mode: Playing AI response and waiting for user...');
-        this.addToConversationHistory('ai', text);
-        this.updateTranscript(`ðŸ—£ï¸  Prospect: "${text}"`);
-        
-        await this.playAIResponse(text); // This helper will play audio and then start the user's turn
+        try {
+            console.log('ðŸŽ­ Playing AI response (interruptible):', text.substring(0, 50) + '...');
+            this.aiIsSpeaking = true;
+            
+            this.addToConversationHistory('ai', text);
+            this.updateTranscript(`ðŸ¤– Prospect: "${text}"`);
+            
+            // Try to play TTS audio (interruptible)
+            try {
+                const response = await this.apiCall('/api/roleplay/tts', {
+                    method: 'POST',
+                    body: JSON.stringify({ text: text })
+                });
+                
+                if (response.ok) {
+                    const audioBlob = await response.blob();
+                    
+                    if (audioBlob.size > 100) {
+                        console.log('ðŸ”Š Playing interruptible AI audio');
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        this.currentAudio = new Audio(audioUrl);
+                        
+                        // Setup audio event handlers
+                        this.currentAudio.onended = () => {
+                            console.log('âœ… AI audio finished - starting user turn');
+                            URL.revokeObjectURL(audioUrl);
+                            this.currentAudio = null;
+                            
+                            // Only start user turn if AI is still speaking (not interrupted)
+                            if (this.aiIsSpeaking) {
+                                this.startUserTurn();
+                            }
+                        };
+                        
+                        this.currentAudio.onerror = () => {
+                            console.log('â Œ AI audio error - starting user turn');
+                            URL.revokeObjectURL(audioUrl);
+                            this.currentAudio = null;
+                            
+                            if (this.aiIsSpeaking) {
+                                this.startUserTurn();
+                            }
+                        };
+                        
+                        // Play the audio
+                        await this.currentAudio.play();
+                        
+                    } else {
+                        console.log('ðŸ“¢ Audio too small, simulating speech time');
+                        await this.simulateSpeakingTime(text);
+                        if (this.aiIsSpeaking) {
+                            this.startUserTurn();
+                        }
+                    }
+                } else {
+                    console.log('ðŸŽµ TTS failed, simulating speech time');
+                    await this.simulateSpeakingTime(text);
+                    if (this.aiIsSpeaking) {
+                        this.startUserTurn();
+                    }
+                }
+            } catch (ttsError) {
+                console.log('ðŸ”Š TTS error:', ttsError);
+                await this.simulateSpeakingTime(text);
+                if (this.aiIsSpeaking) {
+                    this.startUserTurn();
+                }
+            }
+            
+        } catch (error) {
+            console.error('â Œ Error playing AI response:', error);
+            this.aiIsSpeaking = false;
+            await this.simulateSpeakingTime(text);
+            this.startUserTurn();
+        }
     }
     
     startUserTurn() {
