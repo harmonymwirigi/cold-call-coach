@@ -26,13 +26,17 @@ class UserProgressService:
             '2.1': {'requires_completion': '1.3', 'pass_needed': True},
         }
         logger.info("UserProgressService initialized")
-    def get_user_roleplay_stats(self, user_id: str, roleplay_id: str = None) -> Dict[str, Any]:
-        """Gets all roleplay stats for a user, or for a specific roleplay."""
+
+    def get_user_roleplay_stats(self, user_id: str, roleplay_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Gets all roleplay stats for a user from the CORRECT `user_roleplay_progress` table.
+        """
         try:
             if not self.supabase: return {}
             
             client = self.supabase.get_service_client()
-            query = client.table('user_roleplay_stats').select('*').eq('user_id', user_id)
+            # TARGET THE CORRECT TABLE
+            query = client.table('user_roleplay_progress').select('*').eq('user_id', user_id)
             
             if roleplay_id:
                 query = query.eq('roleplay_id', roleplay_id)
@@ -42,7 +46,7 @@ class UserProgressService:
             stats_dict = {stat['roleplay_id']: stat for stat in response.data} if response.data else {}
             return stats_dict
         except Exception as e:
-            logger.error(f"Error getting user roleplay stats: {e}", exc_info=True)
+            logger.error(f"Error getting user roleplay stats from user_roleplay_progress: {e}", exc_info=True)
             return {}
         
     def check_roleplay_access(self, user_id: str, roleplay_id: str) -> Dict[str, Any]:
