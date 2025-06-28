@@ -16,7 +16,6 @@ class BaseRoleplayManager {
         // Debug flag
         this.debugMode = options.debugMode || true;
         
-        this.init();
     }
     
     init() {
