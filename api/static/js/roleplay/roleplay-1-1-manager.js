@@ -36,7 +36,30 @@ class Roleplay11Manager extends BaseRoleplayManager {
         this.createModeSelectionUI(modes);
         this.selectMode('practice');
     }
+    createModeSelectionUI(modes) {
+        const modeGrid = document.getElementById('mode-grid');
+        if (!modeGrid) return;
     
+        if (modes.length === 1 && modes[0].id === 'practice') {
+             modeGrid.innerHTML = `
+                <div class="text-white text-center">
+                     <p class="lead">Starting a single practice call.</p>
+                     <p>You will receive detailed feedback after the call.</p>
+                </div>
+            `;
+            return;
+        }
+
+        modeGrid.innerHTML = modes.map(mode => `
+            <div class="mode-card" data-mode="${mode.id}">
+                <div class="mode-icon"><i class="fas fa-${mode.icon}"></i></div>
+                <h5>${mode.name}</h5>
+                <small>${mode.description}</small>
+            </div>
+        `).join('');
+
+        // Re-bind events if needed, though this is simple enough not to require it
+    }
     
     setupPracticeSpecificFeatures() {
         console.log('Practice mode features are being set up.');
@@ -113,7 +136,27 @@ class Roleplay11Manager extends BaseRoleplayManager {
             }
         }
     }
+    async endCall(isFinishedByApi = false, finalData = null) {
+        if (!this.isActive) return;
+        this.isActive = false;
+        if (this.durationInterval) clearInterval(this.durationInterval);
+        if (this.voiceHandler) this.voiceHandler.stopListening();
     
+        try {
+            let data_to_show = finalData;
+            if (!isFinishedByApi) {
+                const response = await this.apiCall('/api/roleplay/end', { method: 'POST', body: JSON.stringify({ forced_end: true }) });
+                if (!response.ok) throw new Error((await response.json()).error || 'Failed to end session');
+                data_to_show = await response.json();
+            }
+            console.log('📊 Final session data received:', data_to_show);
+            this.showFeedback(data_to_show.coaching, data_to_show.overall_score);
+        } catch (error) {
+            console.error('Error ending call:', error);
+            this.showError('Could not end session. Please refresh.');
+        }
+    }
+
     async processUserInput(transcript) {
         if (!this.isActive || !this.currentSession || this.isProcessing) {
             console.warn('â Œ Cannot process input: call not active or already processing.');
@@ -154,79 +197,13 @@ class Roleplay11Manager extends BaseRoleplayManager {
         }
     }
     
-    async playAIResponseAndWaitForUser(text) {
-        try {
-            console.log('ðŸŽ­ Playing AI response (interruptible):', text.substring(0, 50) + '...');
-            this.aiIsSpeaking = true;
-            
-            this.addToConversationHistory('ai', text);
-            this.updateTranscript(`ðŸ¤– Prospect: "${text}"`);
-            
-            // Try to play TTS audio (interruptible)
-            try {
-                const response = await this.apiCall('/api/roleplay/tts', {
-                    method: 'POST',
-                    body: JSON.stringify({ text: text })
-                });
-                
-                if (response.ok) {
-                    const audioBlob = await response.blob();
-                    
-                    if (audioBlob.size > 100) {
-                        console.log('ðŸ”Š Playing interruptible AI audio');
-                        const audioUrl = URL.createObjectURL(audioBlob);
-                        this.currentAudio = new Audio(audioUrl);
-                        
-                        // Setup audio event handlers
-                        this.currentAudio.onended = () => {
-                            console.log('âœ… AI audio finished - starting user turn');
-                            URL.revokeObjectURL(audioUrl);
-                            this.currentAudio = null;
-                            
-                            // Only start user turn if AI is still speaking (not interrupted)
-                            if (this.aiIsSpeaking) {
-                                this.startUserTurn();
-                            }
-                        };
-                        
-                        this.currentAudio.onerror = () => {
-                            console.log('â Œ AI audio error - starting user turn');
-                            URL.revokeObjectURL(audioUrl);
-                            this.currentAudio = null;
-                            
-                            if (this.aiIsSpeaking) {
-                                this.startUserTurn();
-                            }
-                        };
-                        
-                        // Play the audio
-                        await this.currentAudio.play();
-                        
-                    } else {
-                        console.log('ðŸ“¢ Audio too small, simulating speech time');
-                        await this.simulateSpeakingTime(text);
-                        if (this.aiIsSpeaking) {
-                            this.startUserTurn();
-                        }
-                    }
-                } else {
-                    console.log('ðŸŽµ TTS failed, simulating speech time');
-                    await this.simulateSpeakingTime(text);
-                    if (this.aiIsSpeaking) {
-                        this.startUserTurn();
-                    }
-                }
-            } catch (ttsError) {
-                console.log('ðŸ”Š TTS error:', ttsError);
-                await this.simulateSpeakingTime(text);
-                if (this.aiIsSpeaking) {
-                    this.startUserTurn();
-                }
-            }
-            
-        } catch (error) {
-            console.error('â Œ Error playing AI response:', error);
-            this.aiIsSpeaking = false;
+    async playAIResponse(text) {
+        if (this.voiceHandler) {
+             // Let the voice handler manage playing audio and starting the next user turn
+            await this.voiceHandler.playAudio(text);
+        } else {
+            // Fallback if voice handler isn't ready
+            console.warn("Voice handler not available, simulating speech time.");
             await this.simulateSpeakingTime(text);
             this.startUserTurn();
         }
@@ -239,8 +216,9 @@ class Roleplay11Manager extends BaseRoleplayManager {
             this.voiceHandler.startAutoListening();
         }
         this.updateTranscript('ðŸŽ¤ Your turn... speak now.');
+        // The original file was missing this call, which makes the mic button pulse.
+        this.addPulseToMicButton(); 
     }
-    
     handleUserInterruption() {
         console.log('âš¡ User interrupted AI - switching to user turn');
         

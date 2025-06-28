@@ -15,7 +15,6 @@ class BaseRoleplayManager {
         
         // Debug flag
         this.debugMode = options.debugMode || true;
-        
     }
     
     init() {
@@ -417,8 +416,7 @@ class BaseRoleplayManager {
             message: message,
             timestamp: new Date()
         });
-        
-        console.log(`📝 Added to conversation: ${sender} - ${message.substring(0, 50)}...`);
+        console.log(`ðŸ“  Added to conversation: ${sender} - ${message.substring(0, 50)}...`);
     }
     
     updateTranscript(text) {
@@ -427,28 +425,27 @@ class BaseRoleplayManager {
             transcriptElement.textContent = text;
         }
     }
-    
     addPulseToMicButton() {
         const micBtn = document.getElementById('mic-btn');
         if (micBtn) {
             micBtn.classList.add('pulse-animation');
             setTimeout(() => {
-                micBtn.classList.remove('pulse-animation');
+                if(micBtn) micBtn.classList.remove('pulse-animation');
             }, 3000);
         }
     }
     
     async simulateSpeakingTime(text) {
         const wordsPerMinute = 150;
-        const words = text.split(' ').length;
+        const words = text ? text.split(' ').length : 0;
         const speakingTimeMs = (words / wordsPerMinute) * 60 * 1000;
         const minTime = 1000;
         const maxTime = 5000;
         
-        const delay = Math.max(minTime, Math.min(maxTime, speakingTimeMs));
-        console.log(`⏱️ Simulating speaking time: ${delay}ms for ${words} words`);
+        const delayTime = Math.max(minTime, Math.min(maxTime, speakingTimeMs));
+        console.log(`â ±ï¸  Simulating speaking time: ${delayTime}ms for ${words} words`);
         
-        return new Promise(resolve => setTimeout(resolve, delay));
+        return new Promise(resolve => setTimeout(resolve, delayTime));
     }
     
     updateUI(className) {
@@ -534,6 +531,7 @@ class BaseRoleplayManager {
     }
     
     capitalizeFirst(str) {
+        if (!str) return '';
         return str.charAt(0).toUpperCase() + str.slice(1);
     }
     
@@ -663,9 +661,25 @@ class BaseRoleplayManager {
     async playAIResponseAndWaitForUser(text) {
         throw new Error('playAIResponseAndWaitForUser must be implemented by subclass');
     }
-    
+    async playAIResponse(text) {
+        if (this.voiceHandler) {
+             // Let the voice handler manage playing audio and starting the next user turn
+            await this.voiceHandler.playAudio(text);
+        } else {
+            // Fallback if voice handler isn't ready
+            console.warn("Voice handler not available, simulating speech time.");
+            await this.simulateSpeakingTime(text);
+            this.startUserTurn();
+        }
+    }
     startUserTurn() {
-        throw new Error('startUserTurn must be implemented by subclass');
+        console.log('ðŸ‘¤ Base: Starting user turn.');
+        if (this.voiceHandler) {
+            this.voiceHandler.setUserTurn(true);
+            this.voiceHandler.startAutoListening();
+        }
+        this.updateTranscript('ðŸŽ¤ Your turn... speak now.');
+        this.addPulseToMicButton();
     }
 }
 
