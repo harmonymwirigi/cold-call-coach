@@ -20,6 +20,16 @@ class Roleplay12Manager extends BaseRoleplayManager {
         }
     }
 
+    // --- THIS IS THE NEW, REQUIRED METHOD ---
+    async playAIResponseAndWaitForUser(text) {
+        console.log('Marathon Mode: Playing AI response and starting user turn.');
+        this.addToConversationHistory('ai', text);
+        this.updateTranscript(`ðŸ—£ï¸  Prospect: "${text}"`);
+        await this.playAIResponse(text);
+    }
+
+    // --- EXISTING METHODS (Verified and Kept) ---
+
     initializeModeSelection() {
         console.log('ðŸ   Marathon Mode: Initializing single-mode selection.');
         const modeGrid = document.getElementById('mode-grid');
@@ -47,8 +57,10 @@ class Roleplay12Manager extends BaseRoleplayManager {
             this.currentSession = data;
             this.marathonState = data.marathon_status;
             this.isActive = true;
+            
             this.updateMarathonUI();
             await this.startPhoneCallSequence(data.initial_response);
+
         } catch (error) {
             this.showError(`Could not start Marathon: ${error.message}`);
             this.updateStartButton('Start Marathon', false);
@@ -73,16 +85,15 @@ class Roleplay12Manager extends BaseRoleplayManager {
                 this.updateMarathonUI();
             }
 
-            // This is the key transition logic
             if (data.new_call_started) {
                 this.updateTranscript(`ðŸ“ž ${data.transition_message || 'Starting next call...'}`);
-                await this.delay(1500); // Give user a moment
+                await this.delay(1500);
             }
             
             if (!data.call_continues) {
-                this.endCall(true, data); // Marathon is over, end with final data
+                this.endCall(true, data);
             } else {
-                await this.playAIResponse(data.ai_response); // Continue the current call
+                await this.playAIResponse(data.ai_response);
             }
         } catch (error) {
             this.showError(`Error during marathon: ${error.message}`);
@@ -93,6 +104,7 @@ class Roleplay12Manager extends BaseRoleplayManager {
     }
 
     async endCall(isFinishedByApi = false, finalData = null) {
+        // ... (This method remains the same as the previous correct version)
         if (!this.isActive) return;
         this.isActive = false;
         if (this.durationInterval) clearInterval(this.durationInterval);
@@ -114,8 +126,8 @@ class Roleplay12Manager extends BaseRoleplayManager {
     }
 
     showFeedback(data) {
-        // This method now correctly receives the final payload from endCall
-        super.showFeedback(data); // Call base method to show score circle, etc.
+        // ... (This method remains the same as the previous correct version)
+        super.showFeedback(data);
         
         const { marathon_results, coaching } = data;
         
@@ -125,7 +137,6 @@ class Roleplay12Manager extends BaseRoleplayManager {
         
         const feedbackContent = document.getElementById('feedback-content');
         if (feedbackContent && coaching && coaching.overall) {
-            // Use the pre-formatted message from the backend
             const passed = marathon_results ? marathon_results.marathon_passed : false;
             const message = `<div class="feedback-item" style="background: ${passed ? '#10b98120' : '#f59e0b20'}; border-left-color: ${passed ? '#10b981' : '#f59e0b'};">
                 <h5>${passed ? 'ðŸŽ‰ Marathon Passed!' : 'Marathon Complete'}</h5>
@@ -136,6 +147,7 @@ class Roleplay12Manager extends BaseRoleplayManager {
     }
 
     updateMarathonUI() {
+        // ... (This method remains the same)
         if (!this.marathonState || !this.marathonProgressElement) return;
         this.marathonProgressElement.style.display = 'block';
         this.marathonProgressElement.innerHTML = `
@@ -147,9 +159,4 @@ class Roleplay12Manager extends BaseRoleplayManager {
             </div>
         `;
     }
-
-    // Inherited methods like playAIResponse, startUserTurn, etc., will be used from BaseRoleplayManager
-    // Adding stubs for clarity
-    async playAIResponseAndWaitForUser(text) { await super.playAIResponseAndWaitForUser(text); }
-    startUserTurn() { super.startUserTurn(); }
 }

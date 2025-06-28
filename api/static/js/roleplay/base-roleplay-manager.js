@@ -683,6 +683,9 @@ class BaseRoleplayManager {
     }
     
     async playAIResponseAndWaitForUser(text) {
+        // This is a placeholder that MUST be overridden by child classes.
+        // Each roleplay mode (Practice, Marathon) has a different logic for what happens
+        // after the AI speaks, so they need their own implementation.
         throw new Error('playAIResponseAndWaitForUser must be implemented by subclass');
     }
     
