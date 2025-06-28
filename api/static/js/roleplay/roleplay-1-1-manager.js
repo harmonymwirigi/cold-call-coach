@@ -2,38 +2,41 @@
 
 class Roleplay11Manager extends BaseRoleplayManager {
     constructor(options = {}) {
-        // This part is correct.
         super(options);
         this.roleplayId = "1.1";
         this.roleplayType = "practice";
-        // This `init()` call starts the setup process.
+        this.aiIsSpeaking = false; // Add this property
+        this.currentAudio = null; // Add this property
         this.init();
     }
 
-    // --- START: ADD THIS ENTIRE NEW METHOD ---
-    // This method ensures the manager is properly set up.
     init() {
         console.log('🚀 Initializing Roleplay 1.1 (Practice) Manager...');
-        // First, run the standard setup from the base class.
         super.init();
-        
-        // This is the CRITICAL FIX:
-        // Tell the voice handler, "When you have a transcript, send it to my processUserInput function."
         if (this.voiceHandler) {
             this.voiceHandler.onTranscript = this.processUserInput.bind(this);
             console.log('✅ Voice handler callback connected for Practice Mode.');
         }
-
-        // You can also move other setup logic here if needed.
-        this.setupPracticeSpecificFeatures();
     }
+    async playAIResponseAndWaitForUser(text) {
+        console.log('ðŸŽ­ Practice Mode: Playing AI response (interruptible)...');
+        this.aiIsSpeaking = true;
+        this.addToConversationHistory('ai', text);
+        this.updateTranscript(`ðŸ—£ï¸  Prospect: "${text}"`);
 
+        // This now correctly calls the method from the base class
+        await this.playAIResponse(text);
+    }
     initializeModeSelection() {
-        console.log('🎯 Roleplay 1.1: Initializing specific mode selection.');
-        const modes = [
-            { id: 'practice', name: 'Practice Mode', description: 'A single, detailed call with full AI coaching and feedback.', icon: 'user-graduate' }
-        ];
-        this.createModeSelectionUI(modes);
+        const modeGrid = document.getElementById('mode-grid');
+        if (modeGrid) {
+            modeGrid.innerHTML = `
+                <div class="text-white text-center">
+                     <p class="lead">Starting a single practice call.</p>
+                     <p>You will receive detailed feedback after the call.</p>
+                </div>
+            `;
+        }
         this.selectMode('practice');
     }
     createModeSelectionUI(modes) {
@@ -94,46 +97,19 @@ class Roleplay11Manager extends BaseRoleplayManager {
     
     async startCall() {
         console.log('ðŸš€ Starting Practice Mode call...');
-        
-        if (!this.selectedMode || this.isProcessing) {
-            console.log('â Œ Cannot start call: missing mode or already processing');
-            return;
-        }
-        
-        this.isProcessing = true;
-        this.updateStartButton('Connecting to Practice Mode...', true);
-        
+        this.updateStartButton('Connecting...', true);
         try {
             const response = await this.apiCall('/api/roleplay/start', {
-                method: 'POST',
-                body: JSON.stringify({
-                    roleplay_id: this.roleplayId,
-                    mode: this.selectedMode
-                })
+                method: 'POST', body: JSON.stringify({ roleplay_id: this.roleplayId, mode: this.selectedMode })
             });
-            
-            if (response.ok) {
-                const data = await response.json();
-                console.log('âœ… Practice Mode started successfully:', data);
-                
-                this.currentSession = data;
-                this.isActive = true;
-                
-                await this.startPhoneCallSequence(data.initial_response);
-                
-            } else {
-                const errorData = await response.json();
-                console.error('â Œ Failed to start Practice Mode:', errorData);
-                this.showError(errorData.error || 'Failed to start Practice Mode call');
-            }
+            if (!response.ok) throw new Error((await response.json()).error || 'Failed to start');
+            const data = await response.json();
+            this.currentSession = data;
+            this.isActive = true;
+            await this.startPhoneCallSequence(data.initial_response);
         } catch (error) {
-            console.error('â Œ Error starting Practice Mode:', error);
-            this.showError('Network error. Please try again.');
-        } finally {
-            this.isProcessing = false;
-            if (!this.isActive) {
-                this.updateStartButton(`Start Practice Mode ${this.capitalizeFirst(this.selectedMode)}`, false);
-            }
+            this.showError(`Could not start Practice Mode: ${error.message}`);
+            this.updateStartButton('Start Practice', false);
         }
     }
     async endCall(isFinishedByApi = false, finalData = null) {
@@ -149,54 +125,38 @@ class Roleplay11Manager extends BaseRoleplayManager {
                 if (!response.ok) throw new Error((await response.json()).error || 'Failed to end session');
                 data_to_show = await response.json();
             }
-            console.log('📊 Final session data received:', data_to_show);
+            console.log('📊 Final practice session data received:', data_to_show);
+            // Directly call the method to display feedback
             this.showFeedback(data_to_show.coaching, data_to_show.overall_score);
         } catch (error) {
-            console.error('Error ending call:', error);
+            console.error('Error ending practice call:', error);
             this.showError('Could not end session. Please refresh.');
         }
     }
 
     async processUserInput(transcript) {
-        if (!this.isActive || !this.currentSession || this.isProcessing) {
-            console.warn('â Œ Cannot process input: call not active or already processing.');
-            return;
-        }
-        
-        console.log('ðŸ’¬ Processing Practice Mode input:', transcript);
+        if (!this.isActive || this.isProcessing) return;
         this.isProcessing = true;
-        this.updateTranscript('ðŸ¤– Processing your response...');
-
+        this.updateTranscript('ðŸ§  Processing...');
         try {
             const response = await this.apiCall('/api/roleplay/respond', {
-                method: 'POST',
-                body: JSON.stringify({ user_input: transcript })
+                method: 'POST', body: JSON.stringify({ user_input: transcript })
             });
-            
             const data = await response.json();
-
-            if (response.ok) {
-                console.log('âœ… AI response received:', data);
-                this.updateTranscript(`ðŸ¤– Prospect: "${data.ai_response}"`);
-                
-                if (!data.call_continues) {
-                    console.log('ðŸ“ž Call ending based on API response...');
-                    setTimeout(() => this.endCall(), 1500); // End the call after a short delay
-                } else {
-                    await this.playAIResponse(data.ai_response);
-                }
+            if (!response.ok) throw new Error(data.error || 'Failed to get AI response');
+            
+            if (!data.call_continues) {
+                this.endCall(true, data);
             } else {
-                this.showError(data.error || 'Failed to get AI response.');
-                this.startUserTurn();
+                await this.playAIResponseAndWaitForUser(data.ai_response);
             }
         } catch (error) {
-            this.showError('Network error. Please try again.');
+            this.showError(`Error during practice call: ${error.message}`);
             this.startUserTurn();
         } finally {
             this.isProcessing = false;
         }
     }
-    
     async playAIResponse(text) {
         if (this.voiceHandler) {
              // Let the voice handler manage playing audio and starting the next user turn
@@ -265,66 +225,35 @@ class Roleplay11Manager extends BaseRoleplayManager {
     
     showFeedback(coaching, score = 75) {
         console.log('ðŸ“Š Showing Practice Mode feedback');
-        
-        document.getElementById('call-interface').style.display = 'none';
-        document.getElementById('feedback-section').style.display = 'flex';
-        
-        // Animate the score circle
-        const scoreCircle = document.getElementById('score-circle');
-        if(scoreCircle) {
-            UIHelpers.animateScore(scoreCircle, score);
-            scoreCircle.className = 'score-circle';
-            if (score >= 85) scoreCircle.classList.add('excellent');
-            else if (score >= 70) scoreCircle.classList.add('good');
-            else scoreCircle.classList.add('needs-improvement');
-        }
-
-        // Populate coaching details
-        const content = document.getElementById('feedback-content');
-        if (!content) return;
-        
-        if (coaching && Object.keys(coaching).length > 0) {
-             content.innerHTML = Object.entries(coaching).map(([key, value]) => {
-                const title = key.replace(/_/g, ' ').replace(/(^\w|\s\w)/g, m => m.toUpperCase());
-                return `<div class="feedback-item"><h5>${title}</h5><p>${value}</p></div>`;
-             }).join('');
-        } else {
-            content.innerHTML = `<div class="feedback-item"><p>Great job completing the session! Keep practicing.</p></div>`;
-        }
+        // Call the base method to handle the UI changes
+        super.showFeedback(coaching, score); 
+        // You can add practice-specific feedback UI updates here if needed
+        this.populatePracticeCoaching(coaching);
     }
     
     populatePracticeCoaching(coaching) {
         const content = document.getElementById('feedback-content');
         if (!content) return;
-        
         content.innerHTML = '';
-        
         if (coaching) {
             const feedbackItems = [
-                { key: 'sales_coaching', icon: 'chart-line', title: 'Sales Performance (Natural Conversation)' },
+                { key: 'sales_coaching', icon: 'chart-line', title: 'Sales Performance' },
                 { key: 'grammar_coaching', icon: 'spell-check', title: 'Grammar & Structure' },
                 { key: 'vocabulary_coaching', icon: 'book', title: 'Vocabulary' },
                 { key: 'pronunciation_coaching', icon: 'volume-up', title: 'Pronunciation' },
                 { key: 'rapport_assertiveness', icon: 'handshake', title: 'Rapport & Confidence' }
             ];
-            
             feedbackItems.forEach(item => {
                 if (coaching[item.key]) {
                     content.innerHTML += `
                         <div class="feedback-item">
                             <h6><i class="fas fa-${item.icon} me-2"></i>${item.title}</h6>
                             <p style="margin: 0; font-size: 14px;">${coaching[item.key]}</p>
-                        </div>
-                    `;
+                        </div>`;
                 }
             });
         } else {
-            content.innerHTML = `
-                <div class="feedback-item">
-                    <h6><i class="fas fa-info-circle me-2"></i>Practice Mode Complete</h6>
-                    <p style="margin: 0; font-size: 14px;">Your natural conversation call is complete. Great job!</p>
-                </div>
-            `;
+            content.innerHTML = `<div class="feedback-item"><p>Practice complete. Great job!</p></div>`;
         }
     }
 }

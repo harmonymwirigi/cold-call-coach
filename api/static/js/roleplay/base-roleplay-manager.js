@@ -655,9 +655,29 @@ class BaseRoleplayManager {
         });
     }
     showFeedback(coaching, score = 75) {
-        throw new Error('showFeedback must be implemented by subclass');
+        console.log('ðŸ“Š Base: Showing feedback screen.');
+        
+        const callInterface = document.getElementById('call-interface');
+        const feedbackSection = document.getElementById('feedback-section');
+        if (callInterface) callInterface.style.display = 'none';
+        if (feedbackSection) feedbackSection.style.display = 'flex';
+
+        this.animateScore(score);
+        this.updateScoreCircleColor(score);
+        
+        const content = document.getElementById('feedback-content');
+        if (!content) return;
+        
+        if (coaching && Object.keys(coaching).length > 0) {
+             content.innerHTML = Object.entries(coaching).map(([key, value]) => {
+                if(typeof value !== 'string') return ''; // Safety check
+                const title = key.replace(/_/g, ' ').replace(/(^\w|\s\w)/g, m => m.toUpperCase());
+                return `<div class="feedback-item"><h5>${title}</h5><p>${value}</p></div>`;
+             }).join('');
+        } else {
+            content.innerHTML = `<div class="feedback-item"><p>Great job completing the session! Keep practicing.</p></div>`;
+        }
     }
-    
     async playAIResponseAndWaitForUser(text) {
         throw new Error('playAIResponseAndWaitForUser must be implemented by subclass');
     }

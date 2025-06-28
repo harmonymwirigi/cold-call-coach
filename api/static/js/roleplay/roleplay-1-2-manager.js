@@ -126,23 +126,26 @@ class Roleplay12Manager extends BaseRoleplayManager {
     }
 
     showFeedback(data) {
-        // ... (This method remains the same as the previous correct version)
-        super.showFeedback(data);
+        // This call will now work correctly and display the score and base coaching.
+        super.showFeedback(data); 
         
         const { marathon_results, coaching } = data;
         
         if (!marathon_results) {
-             console.warn("Marathon results missing in showFeedback data. Displaying overall coaching.");
+             console.warn("Marathon results missing in showFeedback data.");
+             return; // Exit if there's no marathon data to add
         }
         
         const feedbackContent = document.getElementById('feedback-content');
         if (feedbackContent && coaching && coaching.overall) {
-            const passed = marathon_results ? marathon_results.marathon_passed : false;
+            const passed = marathon_results.marathon_passed;
+            // Create the marathon-specific message
             const message = `<div class="feedback-item" style="background: ${passed ? '#10b98120' : '#f59e0b20'}; border-left-color: ${passed ? '#10b981' : '#f59e0b'};">
                 <h5>${passed ? 'ðŸŽ‰ Marathon Passed!' : 'Marathon Complete'}</h5>
                 <p>${coaching.overall}</p>
             </div>`;
-            feedbackContent.innerHTML = message;
+            // Prepend it to the feedback content, so it appears at the top.
+            feedbackContent.innerHTML = message + feedbackContent.innerHTML;
         }
     }
 
