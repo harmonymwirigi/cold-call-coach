@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
 import json
-
+from datetime import datetime, timedelta, timezone
 logger = logging.getLogger(__name__)
 
 class UserProgressService:
@@ -214,19 +214,27 @@ class UserProgressService:
     def save_roleplay_completion(self, completion_data: Dict[str, Any]) -> Optional[str]:
         """Save a completed roleplay session to the completions table."""
         try:
-            if not self.supabase: return None
+            if not self.supabase: 
+                return None
             
-            for key in ['ai_evaluation', 'coaching_feedback', 'conversation_data', 'rubric_scores']:
-                if key in completion_data and not isinstance(completion_data.get(key), (str, type(None))):
-                    completion_data[key] = json.dumps(completion_data[key])
+            # The Supabase client library automatically handles converting Python dicts
+            # to jsonb. Manually calling json.dumps() causes an error.
+            # We are REMOVING the loop that did this.
             
-            response = self.supabase.insert_data('roleplay_completions', completion_data)
+            # Create a copy to ensure we don't modify the original dict
+            data_to_insert = completion_data.copy()
+
+            response = self.supabase.insert_data('roleplay_completions', data_to_insert)
+            
             if response:
-                logger.info(f"Saved roleplay completion ID: {response.get('id')}")
+                logger.info(f"✅ Successfully saved roleplay completion ID: {response.get('id')}")
                 return response.get('id')
-            return None
+            else:
+                logger.error(f"❌ Failed to save roleplay completion. insert_data returned None.")
+                return None
+
         except Exception as e:
-            logger.error(f"Error saving roleplay completion: {e}", exc_info=True)
+            logger.error(f"❌ Exception in save_roleplay_completion: {e}", exc_info=True)
             return None
         
     def update_user_progress_after_completion(self, completion_data: Dict[str, Any]) -> bool:

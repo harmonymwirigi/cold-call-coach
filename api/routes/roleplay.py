@@ -91,51 +91,38 @@ def store_session_reliably(session_id: str, user_id: str, session_data: Dict) ->
     except Exception as e:
         logger.error(f"Failed to store session reliably: {e}")
         return False
-
 def retrieve_session_reliably(session_id: str, user_id: str) -> Optional[Dict]:
-    """Retrieve session from multiple sources"""
+    """Retrieve session from multiple sources, with robust recovery."""
     try:
-        # First check roleplay engine (primary source)
+        # 1. Primary Check: Roleplay engine's active memory
         if roleplay_engine and session_id in roleplay_engine.active_sessions:
             session_data = roleplay_engine.active_sessions[session_id]
-            logger.info(f"Session {session_id} found in roleplay engine")
-            return session_data
-        
-        # Check memory backup
-        if session_id in session_storage:
-            stored_data = session_storage[session_id]
-            if stored_data['user_id'] == user_id:
-                logger.info(f"Session {session_id} found in memory backup")
-                # Restore to roleplay engine
-                if roleplay_engine:
-                    roleplay_engine.active_sessions[session_id] = stored_data['session_data']
-                return stored_data['session_data']
-        
-        # Check database (if available)
+            # Double-check ownership
+            if session_data.get('user_id') == user_id:
+                logger.info(f"Session {session_id} found in roleplay engine memory.")
+                return session_data
+
+        # 2. Secondary Check: Database recovery
         if DATABASE_SESSION_STORAGE and supabase_service:
-            try:
-                db_sessions = supabase_service.get_data_with_filter(
-                    'active_roleplay_sessions',
-                    'session_id',
-                    session_id
-                )
-                if db_sessions and len(db_sessions) > 0:
-                    db_session = db_sessions[0]
-                    if db_session['user_id'] == user_id and db_session.get('is_active'):
-                        session_data = db_session['session_data']
-                        logger.info(f"Session {session_id} restored from database")
-                        # Restore to roleplay engine
-                        if roleplay_engine:
-                            roleplay_engine.active_sessions[session_id] = session_data
-                        return session_data
-            except Exception as db_error:
-                logger.warning(f"Failed to retrieve session from database: {db_error}")
-        
-        logger.warning(f"Session {session_id} not found in any storage")
+            logger.warning(f"Session {session_id} not in memory. Attempting DB recovery...")
+            records = supabase_service.get_data_with_filter(
+                'active_roleplay_sessions', 'session_id', session_id,
+                additional_filters={'user_id': user_id, 'is_active': True}
+            )
+            if records:
+                session_data = records[0].get('session_data')
+                if session_data:
+                    logger.info(f"Session {session_id} successfully recovered from database.")
+                    # Restore to roleplay engine's memory for subsequent requests
+                    if roleplay_engine:
+                        roleplay_engine.active_sessions[session_id] = session_data
+                    return session_data
+
+        logger.error(f"SESSION RECOVERY FAILED for user {user_id} and session {session_id}. Not found in memory or DB.")
         return None
         
     except Exception as e:
-        logger.error(f"Error retrieving session: {e}")
+        logger.error(f"Critical error during session retrieval for {session_id}: {e}", exc_info=True)
         return None
 
 def update_session_activity(session_id: str) -> None:
@@ -282,7 +269,6 @@ def start_roleplay():
     except Exception as e:
         logger.error(f"❌ Critical error starting roleplay: {e}")
         return jsonify({'error': 'Internal server error during session creation'}), 500
-
 @roleplay_bp.route('/respond', methods=['POST'])
 def handle_user_response():
     """FIXED: Handle user input with robust session recovery"""
@@ -290,93 +276,37 @@ def handle_user_response():
         data = request.get_json()
         user_input = data.get('user_input', '').strip()
         user_id = session.get('user_id')
+        if not user_id: return jsonify({'error': 'User not authenticated'}), 401
         
-        if not user_id:
-            return jsonify({'error': 'User not authenticated'}), 401
+        # This is the session_id from the browser's cookie session
+        session_id_from_cookie = session.get('current_roleplay_session')
+        if not session_id_from_cookie:
+            return jsonify({'error': 'No active roleplay session found in browser. Please start a new call.'}), 400
+
+        logger.info(f"💬 Processing input for session {session_id_from_cookie}: '{user_input[:50]}...'")
         
-        if not user_input:
-            return jsonify({'error': 'User input is required'}), 400
-        
-        # CRITICAL: Check if roleplay engine is available
-        if not roleplay_engine:
-            logger.error("❌ Roleplay engine not available")
-            return jsonify({'error': 'Roleplay service unavailable'}), 503
-        
-        # Get session ID with fallback logic
-        session_id = session.get('current_roleplay_session')
-        
-        if not session_id:
-            logger.error("❌ No session ID found in Flask session")
-            return jsonify({'error': 'No active roleplay session found. Please start a new call.'}), 400
-        
-        logger.info(f"💬 Processing user input for session {session_id}: '{user_input[:50]}...'")
-        
-        # Retrieve session with robust recovery
-        session_data = retrieve_session_reliably(session_id, user_id)
+        # CRITICAL: Retrieve the session data using our robust function
+        session_data = retrieve_session_reliably(session_id_from_cookie, user_id)
         
         if not session_data:
-            logger.error(f"❌ Session {session_id} not found in any storage location")
             return jsonify({
-                'error': 'Session not found. Please start a new call.',
-                'session_expired': True,
-                'action_required': 'restart_call'
+                'error': 'Session not found or has expired. Please start a new call.',
+                'session_expired': True, 'action_required': 'restart_call'
             }), 404
         
-        # Update session activity
-        update_session_activity(session_id)
+        # Now that we have the session, process the input
+        response_result = roleplay_engine.process_user_input(session_id_from_cookie, user_input)
         
-        # Validate session belongs to user
-        if session_data.get('user_id') != user_id:
-            logger.error(f"❌ Session {session_id} belongs to different user")
-            return jsonify({'error': 'Session access denied'}), 403
-        
-        # Check if session is still active
-        if not session_data.get('session_active', True):
-            logger.error(f"❌ Session {session_id} is no longer active")
-            return jsonify({
-                'error': 'Session has ended. Please start a new call.',
-                'session_expired': True,
-                'action_required': 'restart_call'
-            }), 400
-        
-        # CRITICAL: Process input through roleplay engine
-        try:
-            logger.info(f"🔄 Processing through roleplay engine...")
-            response_result = roleplay_engine.process_user_input(session_id, user_input)
-            logger.info(f"🔄 Engine response success: {response_result.get('success', False)}")
-        except Exception as processing_error:
-            logger.error(f"❌ Input processing error: {processing_error}")
-            return jsonify({
-                'error': 'Failed to process your response. Please try again.',
-                'technical_error': str(processing_error)
-            }), 500
-        
-        if not response_result.get('success'):
-            error_msg = response_result.get('error', 'Failed to process input')
-            logger.error(f"❌ Input processing failed: {error_msg}")
-            return jsonify({'error': error_msg}), 500
-        
-        # Prepare response
-        response_data = {
-            'ai_response': response_result.get('ai_response', 'I see.'),
-            'call_continues': response_result.get('call_continues', True),
-            'session_state': response_result.get('session_state', 'in_progress'),
-            'evaluation': response_result.get('evaluation', {}),
-            'session_id': session_id,  # Include for verification
-            'turn_count': response_result.get('turn_count'),
-            'conversation_quality': response_result.get('conversation_quality')
-        }
-        
-        logger.info(f"✅ Response sent: '{response_data['ai_response'][:50]}...' | Continues: {response_data['call_continues']}")
-        return jsonify(response_data)
+        # Persist the updated state back to the DB
+        updated_session_data = roleplay_engine.active_sessions.get(session_id_from_cookie)
+        if updated_session_data:
+            store_session_reliably(session_id_from_cookie, user_id, updated_session_data)
+
+        return jsonify(response_result)
         
     except Exception as e:
-        logger.error(f"❌ Critical error handling user response: {e}")
-        return jsonify({
-            'error': 'Internal server error',
-            'action_required': 'restart_call',
-            'technical_details': str(e)
-        }), 500
+        logger.error(f"❌ Critical error handling user response: {e}", exc_info=True)
+        return jsonify({'error': 'Internal server error', 'action_required': 'restart_call'}), 500
 
 @roleplay_bp.route('/end', methods=['POST'])
 def end_roleplay():
