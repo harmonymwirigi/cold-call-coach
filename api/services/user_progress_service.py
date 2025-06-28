@@ -238,70 +238,76 @@ class UserProgressService:
             roleplay_id = completion_data.get('roleplay_id')
             score = completion_data.get('score', 0)
             duration = completion_data.get('duration_minutes', 1)
-            marathon_passed = completion_data.get('marathon_results', {}).get('marathon_passed', False)
+            marathon_results = completion_data.get('marathon_results', {})
 
-            if roleplay_id == '1.2' and marathon_passed:
-                logger.info(f"Marathon passed for user {user_id}. Unlocking content.")
-                
-                # 1. Reset the legend attempt flag
-                # This requires a table with user-specific flags. Let's assume it's `user_profiles`.
-                unlock_timestamp = datetime.now(timezone.utc).isoformat()
-                twenty_four_hours_from_now = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
-                
-                profile_updates = {
-                    'legend_attempt_used': False,
-                    'module_2_unlocked_until': twenty_four_hours_from_now
-                }
-                self.supabase.update_data_by_id('user_profiles', {'id': user_id}, profile_updates)
-
-            if roleplay_id == '1.3': # Legend Mode
-                # Mark the legend attempt as used when the run starts
-                # This should ideally be done in create_session, but we can do it here too.
-                 self.supabase.update_data_by_id('user_profiles', {'id': user_id}, {'legend_attempt_used': True})
             if not all([user_id, roleplay_id, score is not None]):
                 logger.warning(f"Insufficient data to update progress: {completion_data}")
                 return False
 
             client = self.supabase.get_service_client()
             
-            # 1. Update user_roleplay_stats
+            # --- START: NEW MARATHON PASS LOGIC ---
+            if roleplay_id == '1.2' and marathon_results.get('marathon_passed', False):
+                logger.info(f"Marathon passed for user {user_id}. Unlocking content and Legend Mode.")
+                
+                unlock_timestamp = datetime.now(timezone.utc)
+                twenty_four_hours_from_now = (unlock_timestamp + timedelta(hours=24)).isoformat()
+                
+                profile_updates = {
+                    'legend_attempt_used': False, # Grant one Legend try
+                    'module_2_unlocked_until': twenty_four_hours_from_now, # Unlock modules
+                    'updated_at': unlock_timestamp.isoformat()
+                }
+                self.supabase.update_data_by_id('user_profiles', {'id': user_id}, profile_updates)
+                logger.info(f"User {user_id} profile updated with Marathon Pass rewards.")
+            # --- END: NEW MARATHON PASS LOGIC ---
+
+            # --- START: NEW LEGEND MODE START LOGIC ---
+            if roleplay_id == '1.3': # If Legend Mode is starting
+                 self.supabase.update_data_by_id('user_profiles', {'id': user_id}, {'legend_attempt_used': True})
+                 logger.info(f"User {user_id} started Legend Mode, flag set to used.")
+            # --- END: NEW LEGEND MODE START LOGIC ---
+
+            # 1. Update user_roleplay_stats (existing logic is fine)
             current_stats_dict = self.get_user_roleplay_stats(user_id, roleplay_id)
             current_stats = current_stats_dict.get(roleplay_id)
             
+            updates = {
+                'last_score': score,
+                'last_attempt_at': datetime.now(timezone.utc).isoformat(),
+            }
+            
             if current_stats:
-                updates = {
+                updates.update({
                     'total_attempts': current_stats.get('total_attempts', 0) + 1,
-                    'last_score': score,
-                    'last_attempt_at': datetime.now(timezone.utc).isoformat(),
                     'best_score': max(current_stats.get('best_score', 0), score),
                     'completed': current_stats.get('completed') or (score >= 70)
-                }
+                })
+                # Add marathon-specific updates
+                if marathon_results:
+                    updates['marathon_passed'] = current_stats.get('marathon_passed') or marathon_results.get('marathon_passed')
+
                 client.table('user_roleplay_stats').update(updates).eq('id', current_stats['id']).execute()
             else:
-                new_stats = {
-                    'user_id': user_id,
-                    'roleplay_id': roleplay_id,
-                    'total_attempts': 1,
-                    'best_score': score,
-                    'last_score': score,
-                    'completed': score >= 70,
-                    'last_attempt_at': datetime.now(timezone.utc).isoformat()
-                }
-                client.table('user_roleplay_stats').insert(new_stats).execute()
+                updates.update({
+                    'user_id': user_id, 'roleplay_id': roleplay_id, 'total_attempts': 1, 'best_score': score,
+                    'completed': score >= 70
+                })
+                if marathon_results:
+                    updates['marathon_passed'] = marathon_results.get('marathon_passed')
+                client.table('user_roleplay_stats').insert(updates).execute()
+            
             logger.info(f"Updated stats for user {user_id} on roleplay {roleplay_id}")
 
-            # 2. Update user_profiles for usage time
-            # Using a transaction to safely increment the usage minutes
-            client.rpc('increment_usage_minutes', {
-                'p_user_id': user_id,
-                'p_duration': duration
-            }).execute()
+            # 2. Update user_profiles for usage time (existing logic is fine)
+            client.rpc('increment_usage_minutes', { 'p_user_id': user_id, 'p_duration': duration }).execute()
             logger.info(f"Updated usage for user {user_id}: +{duration} minutes via RPC.")
             
             return True
         except Exception as e:
             logger.error(f"Error in update_user_progress_after_completion: {e}", exc_info=True)
             return False
+
         
     def update_user_progress(self, user_id: str, roleplay_id: str, completion_data: Dict[str, Any]) -> Dict[str, Any]:
         """Update user's overall progress based on a completion"""

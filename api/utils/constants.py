@@ -666,3 +666,11 @@ VOICE_SETTINGS = {
         'style': 'collaborative'
     }
 }
+
+
+SUCCESS_MESSAGES = {
+    "marathon_pass": "Nice work—you passed {score} out of 10! You've unlocked the next modules and earned one shot at Legend Mode. Want to go for Legend now or run another Marathon?",
+    "marathon_fail": "You completed all 10 calls and scored {score}/10. Keep practising—the more reps you get, the easier it becomes. Ready to try Marathon again?",
+    "legend_pass": "Wow—six for six! That's legendary. Very few reps pull this off, so enjoy the bragging rights!",
+    "legend_fail": "Legend attempt over this time. To earn another shot, just pass Marathon again. Meanwhile, modules 2.1 and 2.2 are open for the next 24 hours—feel free to explore them."
+}

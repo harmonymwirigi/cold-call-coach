@@ -6919,6 +6919,7 @@
           
           from .base_roleplay import BaseRoleplay
           from .configs.roleplay_1_2_config import Roleplay12Config
+          # CORRECTLY IMPORT THE IMPATIENCE PHRASES
           from utils.constants import EARLY_OBJECTIONS, IMPATIENCE_PHRASES
           
           logger = logging.getLogger(__name__)
@@ -6935,7 +6936,6 @@
                   self.roleplay_id = self.config.ROLEPLAY_ID
           
               def get_roleplay_info(self) -> Dict[str, Any]:
-                  """Return Roleplay 1.2 configuration."""
                   return {
                       'id': self.config.ROLEPLAY_ID,
                       'name': self.config.NAME,
@@ -6985,7 +6985,6 @@
                   return {'conversation_history': [], 'current_stage': 'phone_pickup', 'turn_count': 0, 'call_status': 'in_progress'}
           
               def process_user_input(self, session_id: str, user_input: str) -> Dict[str, Any]:
-                  """Process user input for the current call in the marathon."""
                   session = self.active_sessions[session_id]
                   call = session['current_call_data']
                   marathon = session['marathon_state']
@@ -6993,7 +6992,6 @@
                   if marathon['is_complete']:
                       return {'success': False, 'error': 'Marathon is already complete.'}
                   
-                  # Handle silence triggers from the frontend
                   if user_input == '[SILENCE_IMPATIENCE]':
                       return {'success': True, 'ai_response': random.choice(IMPATIENCE_PHRASES), 'call_continues': True}
                   if user_input == '[SILENCE_HANGUP]':
@@ -7002,24 +7000,18 @@
                   call['turn_count'] += 1
                   call['conversation_history'].append({'role': 'user', 'content': user_input})
                   
+                  # --- THIS CALL NOW USES THE INTELLIGENT EVALUATION ---
                   evaluation_stage = self._get_evaluation_stage(call['current_stage'])
                   evaluation = self._evaluate_user_input(session, user_input, evaluation_stage)
                   
-                  # Rule: Fail at opener -> scripted hang-up
-                  if evaluation_stage == 'opener' and not evaluation.get('passed', False):
-                      return self._handle_call_failure(session, "Failed opener evaluation")
-          
-                  # Rule: Marathon only - random hang-up on PASSED opener
-                  if evaluation_stage == 'opener' and evaluation.get('passed', True) and random.random() < self.config.RANDOM_HANGUP_CHANCE:
-                      return self._handle_call_failure(session, "Random opener hang-up (unlucky!)")
-          
-                  # Rule: Fail at any other stage -> hang-up
                   if not evaluation.get('passed', False):
-                       return self._handle_call_failure(session, f"Failed evaluation at {evaluation_stage}")
+                      return self._handle_call_failure(session, f"Failed evaluation at {evaluation_stage}")
+          
+                  if evaluation_stage == 'opener' and random.random() < self.config.RANDOM_HANGUP_CHANCE:
+                      return self._handle_call_failure(session, "Random opener hang-up (unlucky!)")
           
                   self._update_session_state(session)
                   
-                  # Rule: If pass, respond positively and hang up to start next call
                   if call['current_stage'] == 'call_ended':
                       return self._handle_call_success(session)
           
@@ -7032,6 +7024,7 @@
                   """Evaluate user input using OpenAI service, based on rubrics."""
                   if not self.is_openai_available():
                       logger.warning("OpenAI not available, using basic evaluation.")
+                      # Fallback evaluation if OpenAI fails
                       return {'passed': len(user_input.split()) > 4, 'score': 3}
           
                   # This now uses the same detailed evaluation as Practice Mode
@@ -7049,30 +7042,41 @@
                   session['current_call_data']['current_stage'] = next_stage
                   logger.info(f"Session {session['session_id']} moved to stage: {next_stage}")
           
+              # This is the NEW, intelligent version to use
               def _generate_ai_response(self, session: Dict) -> str:
-                  """Generate the AI's response, such as an objection or positive reply."""
+                  """Generate the AI's response, either a specific objection or a natural reply."""
                   current_stage = session['current_call_data']['current_stage']
+                  
+                  # Rule: At the 'early_objection' stage, pick a unique objection.
                   if current_stage == 'early_objection':
                       available_objections = [obj for obj in EARLY_OBJECTIONS if obj not in session['used_objections']]
                       if not available_objections:
+                          logger.warning("All objections used, resetting list for this marathon.")
                           session['used_objections'] = []
                           available_objections = EARLY_OBJECTIONS
+                      
                       objection = random.choice(available_objections)
                       session['used_objections'].append(objection)
                       return objection
                   
-                  return self.openai_service.generate_roleplay_response(
-                      session['current_call_data']['conversation_history'][-1]['content'],
-                      session['current_call_data']['conversation_history'],
-                      session['user_context'],
-                      current_stage
-                  ).get('response', "That's interesting. Please continue.")
+                  # Rule: For all other stages, generate a natural, contextual response using AI.
+                  if self.is_openai_available():
+                      return self.openai_service.generate_roleplay_response(
+                          session['current_call_data']['conversation_history'][-1]['content'],
+                          session['current_call_data']['conversation_history'],
+                          session['user_context'],
+                          current_stage
+                      ).get('response', "That's interesting. What do you mean by that?")
+                  else:
+                      # Fallback for when OpenAI is not available
+                      return "Okay, I'm listening. Go on."
           
               def _handle_call_success(self, session: Dict) -> Dict:
                   """Handle a successfully completed call."""
                   session['marathon_state']['calls_passed'] += 1
                   session['current_call_data']['call_status'] = 'passed'
-                  ai_response = "That's interesting. I have to run, but send me an email with the details."
+                  # The AI should give a positive, wrap-up response.
+                  ai_response = "That sounds interesting. I have to run, but send me an email with the details."
                   session['current_call_data']['conversation_history'].append({'role': 'assistant', 'content': ai_response})
                   return self._start_next_call(session, "Call passed! Great job.")
           
@@ -7108,8 +7112,7 @@
                   if not session: return {'success': False, 'error': 'Session not found.'}
           
                   marathon = session['marathon_state']
-                  if not marathon['is_complete']:
-                       # If ended prematurely, mark the current call as failed
+                  if not marathon.get('is_complete'):
                       if session['current_call_data']['call_status'] == 'in_progress':
                           marathon['calls_failed'] += 1
                           session['all_calls_data'].append(session['current_call_data'])
@@ -12056,7 +12059,7 @@
                       } catch (e) {
 
     📁 roleplay/
-      📄 base-roleplay-manager.js (24KB)
+      📄 base-roleplay-manager.js (24.6KB)
           Content:
             // ===== FIXED static/js/roleplay/base-roleplay-manager.js =====
             
@@ -12918,7 +12921,7 @@
             // Export for global access
             window.Roleplay11Manager = Roleplay11Manager;
 
-      📄 roleplay-1-2-manager.js (8.4KB)
+      📄 roleplay-1-2-manager.js (9.2KB)
           Content:
             // ===== FIXED: static/js/roleplay/roleplay-1-2-manager.js =====
             
@@ -13092,33 +13095,53 @@
                     `;
                 }
                 
-                endCall(data) {
-                    super.endCall(data);
+                async endCall(forcedEnd = false) {
+                    // Call the base method to handle the API request and get the final data
+                    const finalData = await super.endCall(forcedEnd);
+            
                     if (this.marathonProgressElement) {
                         this.marathonProgressElement.style.display = 'none';
                     }
-                    this.showFeedback(data.coaching, data.overall_score, data.marathon_results);
+            
+                    // If the API call was successful, show the specific feedback for this mode
+                    if (finalData) {
+                        this.showFeedback(finalData); // Pass the whole data object
+                    } else {
+                        // If API failed, show a generic failure screen
+                        this.showFeedback({ 
+                            overall_score: 0, 
+                            coaching: { error: "Failed to retrieve feedback." },
+                            marathon_results: { marathon_passed: false, calls_passed: this.marathonState?.calls_passed || 0 }
+                        });
+                    }
                 }
                 
-                showFeedback(coaching, score, marathonResults) {
-                    super.showFeedback(coaching, score);
-                    if (!marathonResults) return;
+                showFeedback(data) {
+                    const { coaching, overall_score, marathon_results } = data;
+            
+                    // First, call the base method to render the score and container
+                    super.showFeedback(data);
+                    
+                    if (!marathon_results) {
+                         console.warn("Marathon results missing in showFeedback");
+                         return;
+                    }
                     
                     const feedbackContent = document.getElementById('feedback-content');
                     let message = '';
             
-                    if(marathonResults.marathon_passed) {
+                    if(marathon_results.marathon_passed) {
                         message = `<div class="feedback-item" style="background: #10b98120; border-left-color: #10b981;">
                             <h5>ðŸŽ‰ Marathon Passed!</h5>
-                            <p>Nice workâ€”you passed ${marathonResults.calls_passed} out of 10! You've unlocked the next modules and earned one shot at Legend Mode.</p>
+                            <p>Nice workâ€”you passed ${marathon_results.calls_passed} out of 10! You've unlocked the next modules and earned one shot at Legend Mode.</p>
                         </div>`;
                     } else {
                         message = `<div class="feedback-item" style="background: #f59e0b20; border-left-color: #f59e0b;">
                             <h5>Marathon Complete</h5>
-                            <p>You completed all 10 calls and scored ${marathonResults.calls_passed}/10. Keep practisingâ€”the more reps you get, the easier it becomes.</p>
+                            <p>You completed all 10 calls and scored ${marathon_results.calls_passed}/10. Keep practisingâ€”the more reps you get, the easier it becomes.</p>
                         </div>`;
                     }
-                    feedbackContent.insertAdjacentHTML('afterbegin', message);
+                    feedbackContent.innerHTML = message; // Use innerHTML to replace content
                 }
             }
 

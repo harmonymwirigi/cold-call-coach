@@ -13,17 +13,24 @@ class Roleplay12Config:
     # Marathon specific settings
     TOTAL_CALLS = 10
     CALLS_TO_PASS = 6
-    RANDOM_HANGUP_CHANCE = 0.25  # 20-30% range, we'll use a fixed 25% for simplicity
     
-    # Stage flow for a single call within the marathon
+    # --- STAGE FLOW UPDATED FOR NATURAL CONVERSATION ---
+    # This now mirrors the practice mode flow, allowing for a real conversation.
     STAGE_FLOW = {
         'phone_pickup': 'opener_evaluation',
         'opener_evaluation': 'early_objection',
         'early_objection': 'objection_handling',
         'objection_handling': 'mini_pitch',
-        'mini_pitch': 'call_ended' # A successful call ends after the mini-pitch
+        'mini_pitch': 'extended_conversation', # Allows for a short natural conversation
+        'extended_conversation': 'call_ended' # Ends the individual call
     }
     
+    # --- NEW: CONVERSATION LIMITS FOR EACH CALL ---
+    CONVERSATION_LIMITS = {
+        'max_total_turns': 8,  # Each marathon call is shorter than practice
+        'min_turns_for_success': 4, # A call needs at least 4 user turns to be successful
+    }
+
     # Silence thresholds from the spec
     IMPATIENCE_THRESHOLD_S = 10
     HANGUP_THRESHOLD_S = 15
