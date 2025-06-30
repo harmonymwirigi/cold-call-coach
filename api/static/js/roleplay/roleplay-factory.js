@@ -11,7 +11,7 @@ class RoleplayFactory {
             if (typeof Roleplay11Manager !== 'undefined') {
                 this.managerClasses["1.1"] = Roleplay11Manager;
             }
-            if (typeof Roleplay12Manager !== 'undefined') {
+            if (typeof Roleplay12Manager !== 'undefined') { // <--- ADD THIS BLOCK
                 this.managerClasses["1.2"] = Roleplay12Manager;
             }
             // Add Roleplay13Manager here when it's created
@@ -23,6 +23,7 @@ class RoleplayFactory {
             console.error('❌ Failed to initialize Roleplay Factory:', error);
         }
     }
+    
     
     static createManager(roleplayId, options = {}) {
         this.initialize();

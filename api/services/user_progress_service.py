@@ -265,6 +265,7 @@ class UserProgressService:
             # --- END: NEW LEGEND MODE START LOGIC ---
 
             # 1. Update user_roleplay_stats (existing logic is fine)
+            # THIS IS NOW user_roleplay_progress table
             current_stats_dict = self.get_user_roleplay_stats(user_id, roleplay_id)
             current_stats = current_stats_dict.get(roleplay_id)
             
@@ -283,7 +284,7 @@ class UserProgressService:
                 if marathon_results:
                     updates['marathon_passed'] = current_stats.get('marathon_passed') or marathon_results.get('marathon_passed')
 
-                client.table('user_roleplay_stats').update(updates).eq('id', current_stats['id']).execute()
+                client.table('user_roleplay_progress').update(updates).eq('id', current_stats['id']).execute()
             else:
                 updates.update({
                     'user_id': user_id, 'roleplay_id': roleplay_id, 'total_attempts': 1, 'best_score': score,
@@ -291,7 +292,7 @@ class UserProgressService:
                 })
                 if marathon_results:
                     updates['marathon_passed'] = marathon_results.get('marathon_passed')
-                client.table('user_roleplay_stats').insert(updates).execute()
+                client.table('user_roleplay_progress').insert(updates).execute()
             
             logger.info(f"Updated stats for user {user_id} on roleplay {roleplay_id}")
 
@@ -303,90 +304,6 @@ class UserProgressService:
         except Exception as e:
             logger.error(f"Error in update_user_progress_after_completion: {e}", exc_info=True)
             return False
-
-        
-    def update_user_progress(self, user_id: str, roleplay_id: str, completion_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Update user's overall progress based on a completion"""
-        try:
-            if not self.supabase:
-                return {'updated': False, 'error': 'Service unavailable'}
-            
-            score = completion_data.get('score', 0)
-            success = completion_data.get('success', False)
-            marathon_results = completion_data.get('marathon_results')
-            
-            table_to_query = 'user_roleplay_stats' # This is correct
-            
-            existing_progress = self.supabase.get_data_with_filter(
-                table_to_query,
-                'user_id',
-                user_id,
-                additional_filters={'roleplay_id': roleplay_id}
-            )
-            
-            if not existing_progress:
-                progress_data = {
-                    'user_id': user_id,
-                    'roleplay_id': roleplay_id,
-                    'best_score': score,
-                    'total_attempts': 1,
-                    'successful_attempts': 1 if success else 0,
-                    'is_unlocked': True,
-                    'first_attempt_at': completion_data.get('started_at'),
-                    'last_attempt_at': completion_data.get('ended_at'),
-                    'created_at': datetime.now(timezone.utc).isoformat()
-                }
-                
-                if roleplay_id.endswith('.2') and marathon_results:
-                    progress_data.update({
-                        'marathon_best_run': marathon_results.get('calls_passed', 0),
-                        'marathon_completed': marathon_results.get('marathon_complete', False),
-                        'marathon_passed': marathon_results.get('marathon_passed', False)
-                    })
-                elif roleplay_id.endswith('.3'):
-                    progress_data.update({
-                        'legend_streak': score // 10,
-                        'legend_completed': success
-                    })
-                
-                # FIX: This was inserting into 'user_roleplay_progress' instead of `table_to_query`
-                self.supabase.insert_data(table_to_query, progress_data)
-                
-            else:
-                current_progress = existing_progress[0]
-                progress_id = current_progress['id']
-                
-                updates = {
-                    'last_attempt_at': completion_data.get('ended_at'),
-                    'updated_at': datetime.now(timezone.utc).isoformat()
-                }
-                
-                if score > current_progress.get('best_score', 0):
-                    updates['best_score'] = score
-                
-                if success:
-                    updates['successful_attempts'] = current_progress.get('successful_attempts', 0) + 1
-                
-                # ... (mode specific updates are correct) ...
-                if roleplay_id.endswith('.2') and marathon_results:
-                    calls_passed = marathon_results.get('calls_passed', 0)
-                    if calls_passed > current_progress.get('marathon_best_run', 0):
-                        updates['marathon_best_run'] = calls_passed
-                    if marathon_results.get('marathon_complete', False):
-                        updates['marathon_completed'] = True
-                    if marathon_results.get('marathon_passed', False):
-                        updates['marathon_passed'] = True
-                
-                # FIX: This was updating 'user_roleplay_progress'
-                self.supabase.update_data_by_id(table_to_query, {'id': progress_id}, updates)
-            
-            logger.info(f"Updated user progress: {user_id} -> {roleplay_id} (score: {score})")
-            
-            return {'updated': True, 'best_score': score, 'completion_recorded': True}
-            
-        except Exception as e:
-            logger.error(f"Error updating user progress: {e}", exc_info=True)
-            return {'updated': False, 'error': str(e)}
 
     def check_new_unlocks(self, user_id: str) -> List[str]:
         """Check for new roleplay unlocks based on current progress"""

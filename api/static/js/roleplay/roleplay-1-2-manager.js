@@ -1,4 +1,4 @@
-// ===== FIXED: static/js/roleplay/roleplay-1-2-manager.js =====
+// ===== static/js/roleplay/roleplay-1-2-manager.js =====
 // Implements the structured, game-like flow for Marathon Mode.
 
 class Roleplay12Manager extends BaseRoleplayManager {
@@ -12,47 +12,53 @@ class Roleplay12Manager extends BaseRoleplayManager {
     }
 
     init() {
-        console.log('ðŸš€ Initializing Roleplay 1.2 (Marathon) Manager...');
+        console.log('🚀 Initializing Roleplay 1.2 (Marathon) Manager...');
         super.init();
         if (this.voiceHandler) {
             this.voiceHandler.onTranscript = this.processUserInput.bind(this);
-            console.log('âœ… Voice handler callback connected for Marathon Mode.');
+            console.log('✅ Voice handler callback connected for Marathon Mode.');
         }
     }
 
-    // --- THIS IS THE NEW, REQUIRED METHOD ---
     async playAIResponseAndWaitForUser(text) {
-        console.log('Marathon Mode: Playing AI response and starting user turn.');
+        console.log('Marathon Mode: Playing AI response and setting up user turn.');
         this.addToConversationHistory('ai', text);
-        this.updateTranscript(`ðŸ—£ï¸  Prospect: "${text}"`);
+        this.updateTranscript(`🗣️ Prospect: "${text}"`);
+
         await this.playAIResponse(text);
     }
-
-    // --- EXISTING METHODS (Verified and Kept) ---
-
+    
     initializeModeSelection() {
-        console.log('ðŸ   Marathon Mode: Initializing single-mode selection.');
+        console.log('🏁 Marathon Mode: Initializing single-mode selection.');
         const modeGrid = document.getElementById('mode-grid');
+        
         if (modeGrid) {
             modeGrid.innerHTML = `
                 <div class="text-white text-center">
-                    <p class="lead">You are about to start a 10-call marathon.</p>
-                    <p>You must successfully complete <strong>${this.config.CALLS_TO_PASS} out of ${this.config.TOTAL_CALLS}</strong> calls to pass.</p>
+                     <p class="lead">You are about to start a 10-call marathon.</p>
+                     <p>You must successfully complete <strong>${this.config.CALLS_TO_PASS} out of ${this.config.TOTAL_CALLS}</strong> calls to pass.</p>
                 </div>
             `;
         }
+        
         this.selectMode('marathon');
     }
 
     async startCall() {
-        console.log('ðŸ   Starting Marathon Mode...');
+        console.log('🏁 Starting Marathon Mode call...');
         this.updateStartButton('Starting Marathon...', true);
+        
         try {
             const response = await this.apiCall('/api/roleplay/start', {
-                method: 'POST', body: JSON.stringify({ roleplay_id: this.roleplayId, mode: this.selectedMode })
+                method: 'POST',
+                body: JSON.stringify({ roleplay_id: this.roleplayId, mode: this.selectedMode })
             });
-            if (!response.ok) throw new Error((await response.json()).error || 'Failed to start');
-            
+
+            if (!response.ok) {
+                 const errorData = await response.json();
+                 throw new Error(errorData.error || 'Failed to start marathon');
+            }
+
             const data = await response.json();
             this.currentSession = data;
             this.marathonState = data.marathon_status;
@@ -60,9 +66,9 @@ class Roleplay12Manager extends BaseRoleplayManager {
             
             this.updateMarathonUI();
             await this.startPhoneCallSequence(data.initial_response);
-
         } catch (error) {
-            this.showError(`Could not start Marathon: ${error.message}`);
+            console.error('Error starting Marathon Mode:', error);
+            this.showError('Could not start Marathon Mode. Please try again.');
             this.updateStartButton('Start Marathon', false);
         }
     }
@@ -70,13 +76,18 @@ class Roleplay12Manager extends BaseRoleplayManager {
     async processUserInput(transcript) {
         if (!this.isActive || this.isProcessing) return;
         this.isProcessing = true;
-        this.updateTranscript('ðŸ§  Processing...');
+        this.updateTranscript('🧠 Processing...');
 
         try {
             const response = await this.apiCall('/api/roleplay/respond', {
-                method: 'POST', body: JSON.stringify({ user_input: transcript })
+                method: 'POST',
+                body: JSON.stringify({ user_input: transcript })
             });
-            if (!response.ok) throw new Error((await response.json()).error || 'Failed to get response');
+
+            if (!response.ok) {
+                 const errorData = await response.json();
+                 throw new Error(errorData.error || 'Failed to get AI response');
+            }
 
             const data = await response.json();
             
@@ -86,30 +97,29 @@ class Roleplay12Manager extends BaseRoleplayManager {
             }
 
             if (data.new_call_started) {
-                this.updateTranscript(`ðŸ“ž ${data.transition_message || 'Starting next call...'}`);
+                this.updateTranscript(`📞 ${data.transition_message || 'Starting next call...'}`);
                 await this.delay(1500);
             }
             
             if (!data.call_continues) {
                 this.endCall(true, data);
             } else {
-                await this.playAIResponse(data.ai_response);
+                await this.playAIResponseAndWaitForUser(data.ai_response);
             }
         } catch (error) {
-            this.showError(`Error during marathon: ${error.message}`);
+            this.showError(`Error during marathon call: ${error.message}`);
             this.startUserTurn();
         } finally {
             this.isProcessing = false;
         }
     }
-
+    
     async endCall(isFinishedByApi = false, finalData = null) {
-        // ... (This method remains the same as the previous correct version)
         if (!this.isActive) return;
         this.isActive = false;
         if (this.durationInterval) clearInterval(this.durationInterval);
         if (this.voiceHandler) this.voiceHandler.stopListening();
-    
+
         try {
             let data_to_show = finalData;
             if (!isFinishedByApi) {
@@ -124,33 +134,29 @@ class Roleplay12Manager extends BaseRoleplayManager {
             this.showError('Could not end session. Please refresh.');
         }
     }
-
+    
     showFeedback(data) {
-        // This call will now work correctly and display the score and base coaching.
-        super.showFeedback(data); 
+        const { coaching, marathon_results } = data;
         
-        const { marathon_results, coaching } = data;
+        super.showFeedback(data); // Render base feedback UI
         
         if (!marathon_results) {
              console.warn("Marathon results missing in showFeedback data.");
-             return; // Exit if there's no marathon data to add
+             return;
         }
         
         const feedbackContent = document.getElementById('feedback-content');
         if (feedbackContent && coaching && coaching.overall) {
             const passed = marathon_results.marathon_passed;
-            // Create the marathon-specific message
             const message = `<div class="feedback-item" style="background: ${passed ? '#10b98120' : '#f59e0b20'}; border-left-color: ${passed ? '#10b981' : '#f59e0b'};">
-                <h5>${passed ? 'ðŸŽ‰ Marathon Passed!' : 'Marathon Complete'}</h5>
+                <h5>${passed ? '🎉 Marathon Passed!' : 'Marathon Complete'}</h5>
                 <p>${coaching.overall}</p>
             </div>`;
-            // Prepend it to the feedback content, so it appears at the top.
-            feedbackContent.innerHTML = message + feedbackContent.innerHTML;
+            feedbackContent.innerHTML = message;
         }
     }
 
     updateMarathonUI() {
-        // ... (This method remains the same)
         if (!this.marathonState || !this.marathonProgressElement) return;
         this.marathonProgressElement.style.display = 'block';
         this.marathonProgressElement.innerHTML = `

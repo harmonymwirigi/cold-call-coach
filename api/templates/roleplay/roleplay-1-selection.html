@@ -235,7 +235,6 @@ document.addEventListener('DOMContentLoaded', () => {
             scoreEl.className = 'progress-status ' + (practiceData.best_score >= 70 ? 'status-pass' : 'status-fail');
         }
 
-        // Update Marathon Mode (1.2) status
         const marathonData = userProgress['1.2'];
         if (marathonData) {
             const statusEl = document.getElementById('marathon-status');
