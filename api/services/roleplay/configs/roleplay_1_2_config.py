@@ -17,11 +17,12 @@ class Roleplay12Config:
     
     # Stage flow for a single call within the marathon
     STAGE_FLOW = {
-        'phone_pickup': 'opener_evaluation',
-        'opener_evaluation': 'early_objection',
-        'early_objection': 'objection_handling',
-        'objection_handling': 'mini_pitch',
-        'mini_pitch': 'call_ended' # A successful call ends after the mini-pitch
+        'phone_pickup': 'initial_greeting',      # Prospect says "Hello?", user gives initial greeting.
+        'initial_greeting': 'opener_evaluation', # Prospect says "Yes?", user gives the real opener to be evaluated.
+        'opener_evaluation': 'early_objection',  # Prospect evaluates opener and gives an objection.
+        'early_objection': 'objection_handling', # User handles the objection.
+        'objection_handling': 'mini_pitch',      # User gives the mini-pitch.
+        'mini_pitch': 'call_ended'               # A successful call ends after the mini-pitch.
     }
     
     # Silence thresholds from the spec
