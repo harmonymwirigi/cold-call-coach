@@ -1,4 +1,4 @@
-# ===== services/roleplay/roleplay_1_2.py =====
+# ===== FIXED: services/roleplay/roleplay_1_2.py =====
 
 import random
 import logging
@@ -33,9 +33,7 @@ class Roleplay12(BaseRoleplay):
         }
 
     def create_session(self, user_id: str, mode: str, user_context: Dict) -> Dict[str, Any]:
-        """Create a new Marathon session."""
         session_id = f"{user_id}_{self.config.ROLEPLAY_ID}_{mode}_{int(datetime.now().timestamp())}"
-        
         session_data = {
             'session_id': session_id,
             'user_id': user_id,
@@ -44,21 +42,15 @@ class Roleplay12(BaseRoleplay):
             'started_at': datetime.now(timezone.utc).isoformat(),
             'user_context': user_context,
             'session_active': True,
-            'marathon_state': {
-                'current_call_number': 1,
-                'calls_passed': 0,
-                'calls_failed': 0,
-                'is_complete': False,
-            },
+            'marathon_state': {'current_call_number': 1, 'calls_passed': 0, 'calls_failed': 0, 'is_complete': False},
             'all_calls_data': [],
             'used_objections': [],
             'current_call_data': self._initialize_call_data(),
         }
-        
         self.active_sessions[session_id] = session_data
         initial_response = self._get_contextual_initial_response(user_context)
         session_data['current_call_data']['conversation_history'].append({'role': 'assistant', 'content': initial_response})
-        
+        session_data['current_call_data']['current_stage'] = 'initial_greeting' # Set the initial stage for the user's first response
         return {
             'success': True,
             'session_id': session_id,
@@ -68,9 +60,28 @@ class Roleplay12(BaseRoleplay):
         }
 
     def _initialize_call_data(self) -> Dict[str, Any]:
-        """Initialize data for a new call within the marathon."""
         return {'conversation_history': [], 'current_stage': 'phone_pickup', 'turn_count': 0, 'call_status': 'in_progress'}
 
+    ### --- FIX #1: NEW HELPER METHOD TO CONTROL EVALUATION --- ###
+    def _get_evaluation_stage(self, current_stage: str) -> str:
+        """
+        Determines which evaluation rubric to use based on the current stage of the call.
+        Returns 'none' if no evaluation should occur at this stage.
+        """
+        # After the prospect says "Yes?", the user's input is their opener.
+        if current_stage == 'initial_greeting':
+            return 'opener'
+        # After the prospect gives an objection, the user's input is their handling.
+        elif current_stage == 'early_objection':
+            return 'objection_handling'
+        # After the user handles the objection, their next input is the mini-pitch.
+        elif current_stage == 'objection_handling':
+            return 'mini_pitch'
+        # All other stages in this flow do not require user input evaluation.
+        else:
+            return 'none'
+
+    ### --- FIX #2: REFACTORED INPUT PROCESSING LOGIC --- ###
     def process_user_input(self, session_id: str, user_input: str) -> Dict[str, Any]:
         session = self.active_sessions[session_id]
         call = session['current_call_data']
@@ -79,83 +90,70 @@ class Roleplay12(BaseRoleplay):
         if marathon['is_complete']:
             return {'success': False, 'error': 'Marathon is already complete.'}
         
-        # ... (silence handling is the same)
+        # Silence handling remains the same
+        if user_input == '[SILENCE_IMPATIENCE]':
+            return {'success': True, 'ai_response': random.choice(IMPATIENCE_PHRASES), 'call_continues': True}
+        if user_input == '[SILENCE_HANGUP]':
+            return self._handle_call_failure(session, "Hung up due to silence")
 
         call['turn_count'] += 1
         call['conversation_history'].append({'role': 'user', 'content': user_input})
         
-        # --- START OF THE FIX ---
-        # If this is the very first thing the user says, do NOT evaluate it.
-        # Just get the AI's "go-ahead" response.
-        if call['current_stage'] == 'phone_pickup':
-            self._update_session_state(session) # Moves stage to 'initial_greeting'
-            ai_response = self._generate_ai_response(session) # Gets the "Yes?" response
-            call['conversation_history'].append({'role': 'assistant', 'content': ai_response})
-            return {
-                'success': True, 
-                'ai_response': ai_response, 
-                'call_continues': True, 
-                'marathon_status': marathon
-            }
-        # --- END OF THE FIX ---
-
-        # For all subsequent turns, run the evaluation logic as before.
+        # Determine if this stage needs evaluation
         evaluation_stage = self._get_evaluation_stage(call['current_stage'])
-        evaluation = self._evaluate_user_input(session, user_input, evaluation_stage)
         
-        if not evaluation.get('passed', False):
-            # This is where the error was happening. It will no longer happen on the first turn.
-            return self._handle_call_failure(session, f"Failed evaluation at {evaluation_stage}")
+        # Only evaluate if the stage requires it
+        if evaluation_stage != 'none':
+            evaluation = self._evaluate_user_input(session, user_input, evaluation_stage)
+            
+            if not evaluation.get('passed', False):
+                return self._handle_call_failure(session, f"Failed evaluation at {evaluation_stage}")
+            
+            # Special rule: random hang-up only after a SUCCESSFUL opener evaluation
+            if evaluation_stage == 'opener' and random.random() < self.config.RANDOM_HANGUP_CHANCE:
+                return self._handle_call_failure(session, "Random opener hang-up (unlucky!)")
+        else:
+            evaluation = {'passed': True, 'feedback': 'Greeting received.'} # Default passing evaluation for non-evaluated stages
 
-        if evaluation_stage == 'opener' and random.random() < self.config.RANDOM_HANGUP_CHANCE:
-            return self._handle_call_failure(session, "Random opener hang-up (unlucky!)")
-
+        # Move to the next stage in the conversation flow
         self._update_session_state(session)
         
+        # Check if the call has reached its successful conclusion
         if call['current_stage'] == 'call_ended':
             return self._handle_call_success(session)
 
+        # Generate the AI's response for the new stage
         ai_response = self._generate_ai_response(session)
         call['conversation_history'].append({'role': 'assistant', 'content': ai_response})
         
         return {'success': True, 'ai_response': ai_response, 'call_continues': True, 'marathon_status': marathon, 'evaluation': evaluation}
+
     def _evaluate_user_input(self, session: Dict, user_input: str, stage: str) -> Dict:
-        """Evaluate user input using OpenAI service, based on rubrics."""
         if not self.is_openai_available():
             logger.warning("OpenAI not available, using basic evaluation.")
             return {'passed': len(user_input.split()) > 4, 'score': 3}
-
-        return self.openai_service.evaluate_user_input(
-            user_input,
-            session['current_call_data']['conversation_history'],
-            stage
+        evaluation_result = self.openai_service.evaluate_user_input(
+            user_input, session['current_call_data']['conversation_history'], stage
         )
+        return evaluation_result
 
     def _update_session_state(self, session: Dict):
-        """Move to the next stage in the call flow."""
         current_stage = session['current_call_data']['current_stage']
         next_stage = self.config.STAGE_FLOW.get(current_stage)
         session['current_call_data']['current_stage'] = next_stage
         logger.info(f"Session {session['session_id']} moved to stage: {next_stage}")
 
     def _generate_ai_response(self, session: Dict) -> str:
-        """Generate the AI's response, either a specific objection or a natural reply."""
         current_stage = session['current_call_data']['current_stage']
         
-        # --- START OF THE FIX ---
-        # When the stage is 'initial_greeting', the AI should give a simple prompt.
-        if current_stage == 'initial_greeting':
+        if current_stage == 'opener_evaluation':
             return random.choice(["Yes?", "I'm listening.", "Okay..."])
-        # --- END OF THE FIX ---
         
-        # The rest of the logic for objections and other responses remains the same.
         if current_stage == 'early_objection':
             available_objections = [obj for obj in EARLY_OBJECTIONS if obj not in session['used_objections']]
             if not available_objections:
-                logger.warning("All objections used, resetting list for this marathon.")
                 session['used_objections'] = []
                 available_objections = EARLY_OBJECTIONS
-            
             objection = random.choice(available_objections)
             session['used_objections'].append(objection)
             return objection
@@ -171,7 +169,6 @@ class Roleplay12(BaseRoleplay):
             return "Okay, I'm listening. Go on."
 
     def _handle_call_success(self, session: Dict) -> Dict:
-        """Handle a successfully completed call."""
         session['marathon_state']['calls_passed'] += 1
         session['current_call_data']['call_status'] = 'passed'
         ai_response = "That sounds interesting. I have to run, but send me an email with the details."
@@ -179,7 +176,6 @@ class Roleplay12(BaseRoleplay):
         return self._start_next_call(session, "Call passed! Great job.")
 
     def _handle_call_failure(self, session: Dict, reason: str) -> Dict:
-        """Handle a failed call."""
         session['marathon_state']['calls_failed'] += 1
         session['current_call_data']['call_status'] = 'failed'
         ai_response = "Sorry, I'm not interested. Goodbye."
@@ -188,7 +184,6 @@ class Roleplay12(BaseRoleplay):
         return self._start_next_call(session, f"Call failed: {reason}.")
 
     def _start_next_call(self, session: Dict, transition_message: str) -> Dict:
-        """Finalize the current call and set up the next one."""
         session['all_calls_data'].append(session['current_call_data'])
         marathon = session['marathon_state']
         
@@ -198,6 +193,7 @@ class Roleplay12(BaseRoleplay):
 
         marathon['current_call_number'] += 1
         session['current_call_data'] = self._initialize_call_data()
+        session['current_call_data']['current_stage'] = 'initial_greeting' # Reset stage for next call
         
         ai_response = self._get_contextual_initial_response(session['user_context'])
         session['current_call_data']['conversation_history'].append({'role': 'assistant', 'content': ai_response})
@@ -205,7 +201,7 @@ class Roleplay12(BaseRoleplay):
         return {'success': True, 'ai_response': ai_response, 'call_continues': True, 'marathon_status': marathon, 'new_call_started': True, 'transition_message': transition_message}
     
     def end_session(self, session_id: str, forced_end: bool = False) -> Dict[str, Any]:
-        """Ends the entire marathon session and provides final results."""
+        # This method remains unchanged from the previous correct version.
         session = self.active_sessions.pop(session_id, None)
         if not session: return {'success': False, 'error': 'Session not found.'}
 
@@ -218,7 +214,6 @@ class Roleplay12(BaseRoleplay):
         
         passed_marathon = marathon['calls_passed'] >= self.config.CALLS_TO_PASS
         
-        # --- THIS IS THE FIX: Using the exact messages from the PDF ---
         if passed_marathon:
             feedback_message = f"Nice work—you passed {marathon['calls_passed']} out of 10! You've unlocked the next modules and earned one shot at Legend Mode. Want to go for Legend now or run another Marathon?"
         else:
