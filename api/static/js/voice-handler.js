@@ -1,4 +1,4 @@
-// ===== SIMPLE & RELIABLE: voice-handler.js (Mobile-First Design) =====
+// ===== FIXED: static/js/voice-handler.js - Enhanced Error Handling =====
 
 class VoiceHandler {
     constructor(roleplayManager) {
@@ -18,14 +18,19 @@ class VoiceHandler {
         // Conversation state
         this.isUserTurn = false;
         this.isAITurn = false;
-        this.isInterruptible = false; // ADDED: Flag for enabling interruptions
+        this.isInterruptible = false;
         
         // Callback interface
         this.onTranscript = null;
         this.onError = null;
         
+        // Enhanced error handling
+        this.sessionErrors = 0;
+        this.maxSessionErrors = 3;
+        this.lastSessionError = null;
+        
         // SIMPLE APPROACH: Minimal auto-restart, maximum reliability
-        this.autoRestartEnabled = !this.isMobile; // MOBILE: No auto-restart
+        this.autoRestartEnabled = !this.isMobile;
         this.shouldRestart = false;
         this.restartTimeout = null;
         this.lastSuccessfulStart = 0;
@@ -35,7 +40,7 @@ class VoiceHandler {
         // Recognition settings (optimized for reliability)
         this.settings = {
             continuous: true,
-            interimResults: !this.isMobile, // MOBILE: Final results only
+            interimResults: !this.isMobile,
             language: 'en-US',
             maxAlternatives: 1
         };
@@ -46,7 +51,7 @@ class VoiceHandler {
         this.isAutoListening = false;
         
         // Simplified silence detection
-        this.silenceThreshold = this.isMobile ? 3000 : 2000; // Longer on mobile
+        this.silenceThreshold = this.isMobile ? 3000 : 2000;
         this.lastSpeechTime = null;
         this.silenceTimer = null;
         
@@ -56,14 +61,14 @@ class VoiceHandler {
         this.total_silence_start = null;
         this.impatience_triggered = false;
         this.hangupSilenceTimer = null;
-        this.hangupDetectionEnabled = !this.isMobile; // MOBILE: Disabled
+        this.hangupDetectionEnabled = !this.isMobile;
         
-        console.log(`ðŸŽ¤ Simple Voice Handler - Mobile: ${this.isMobile}, Auto-restart: ${this.autoRestartEnabled}`);
+        console.log(`🎤 Enhanced Voice Handler - Mobile: ${this.isMobile}, Auto-restart: ${this.autoRestartEnabled}`);
         this.init();
     }
 
     enableInterruption() {
-        console.log('âš¡ï¸  Interruptions enabled for AI speech.');
+        console.log('⚡️ Interruptions enabled for AI speech.');
         this.isInterruptible = true;
     }
 
@@ -71,9 +76,8 @@ class VoiceHandler {
         this.isAITurn = isAITurn;
         if (isAITurn) {
             this.isUserTurn = false;
-            // Stop listening if AI is about to speak
             if (this.isListening) {
-                this.stopListening(false); // don't trigger restart
+                this.stopListening(false);
             }
         }
     }
@@ -82,8 +86,11 @@ class VoiceHandler {
         this.isUserTurn = isUserTurn;
         if (isUserTurn) {
             this.isAITurn = false;
+            // Reset session error count on new turn
+            this.sessionErrors = 0;
         }
     }
+
     detectMobile() {
         return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
                (window.innerWidth <= 768 && 'ontouchstart' in window);
@@ -94,7 +101,7 @@ class VoiceHandler {
     }
 
     init() {
-        console.log('🎤 Initializing Simple Voice Handler...');
+        console.log('🎤 Initializing Enhanced Voice Handler...');
         
         this.checkBrowserSupport();
         this.initializeUIElements();
@@ -104,7 +111,7 @@ class VoiceHandler {
             this.initializeSpeechRecognition();
         }
         
-        console.log(`✅ Simple Voice Handler ready. Mobile mode: ${this.isMobile}`);
+        console.log(`✅ Enhanced Voice Handler ready. Mobile mode: ${this.isMobile}`);
     }
 
     checkBrowserSupport() {
@@ -231,15 +238,13 @@ class VoiceHandler {
     setupRecognitionEventHandlers() {
         if (!this.recognition) return;
         
-        // ... (keep onstart, onend handlers)
-        
         this.recognition.onstart = () => {
-            console.log('ðŸŽ¤ Voice recognition started');
+            console.log('🎤 Voice recognition started');
             this.isListening = true;
             this.updateMicrophoneUI(true);
             this.clearError();
             this.lastSuccessfulStart = Date.now();
-            this.consecutiveFailures = 0; // Reset on successful start
+            this.consecutiveFailures = 0;
             
             if (this.hangupDetectionEnabled && this.isUserTurn) {
                 this.total_silence_start = Date.now();
@@ -249,7 +254,7 @@ class VoiceHandler {
         };
         
         this.recognition.onend = () => {
-            console.log('ðŸ›‘ Voice recognition ended');
+            console.log('🛑 Voice recognition ended');
             this.isListening = false;
             this.updateMicrophoneUI(false);
             this.stopSilenceDetection();
@@ -266,21 +271,17 @@ class VoiceHandler {
             this.handleRecognitionError(event);
         };
 
-        // ===== MODIFIED onspeechstart HANDLER =====
         this.recognition.onspeechstart = () => {
-            console.log('ðŸ—£ï¸  Speech detected');
+            console.log('🗣️ Speech detected');
             this.lastSpeechTime = Date.now();
             
-            // Use the new flag to check if interruption is allowed
             if (this.isInterruptible && this.isAudioPlaying) {
-                console.log('âš¡ User interrupted - stopping AI audio');
+                console.log('⚡ User interrupted - stopping AI audio');
                 this.stopAllAudio();
                 
-                // Let the roleplay manager handle the turn change
                 if (this.roleplayManager && typeof this.roleplayManager.handleUserInterruption === 'function') {
                     this.roleplayManager.handleUserInterruption();
                 } else {
-                    // Fallback if the manager doesn't have the specific handler
                     this.setAITurn(false);
                     this.setUserTurn(true);
                 }
@@ -290,10 +291,9 @@ class VoiceHandler {
             this.total_silence_start = null;
             this.impatience_triggered = false;
         };
-        // ===== END OF MODIFICATION =====
         
         this.recognition.onspeechend = () => {
-            console.log('ðŸ¤  Speech ended');
+            console.log('🤫 Speech ended');
             this.lastSpeechTime = Date.now();
             this.startSilenceDetection();
             if (this.hangupDetectionEnabled) {
@@ -301,8 +301,6 @@ class VoiceHandler {
             }
         };
     }
-
-    // ===== SIMPLE RESTART LOGIC =====
 
     handleSimpleRestart() {
         // Clear any pending restart
@@ -334,12 +332,11 @@ class VoiceHandler {
         
         // DESKTOP: Simple auto-restart with delay
         const timeSinceLastStart = Date.now() - this.lastSuccessfulStart;
-        const restartDelay = Math.max(1000, 2000 - timeSinceLastStart); // At least 1 second delay
+        const restartDelay = Math.max(1000, 2000 - timeSinceLastStart);
         
         console.log(`🔄 Auto-restart in ${restartDelay}ms`);
         
         this.restartTimeout = setTimeout(() => {
-            // Double-check conditions before restart
             if (this.shouldRestart && this.isUserTurn && !this.isAudioPlaying && !this.isListening) {
                 console.log('🔄 Executing auto-restart');
                 this.startListening();
@@ -376,7 +373,7 @@ class VoiceHandler {
                 finalTranscript += transcript + ' ';
                 console.log(`✅ Final transcript: "${transcript}"`);
                 this.lastSpeechTime = Date.now();
-            } else if (!this.isMobile) { // Only show interim on desktop
+            } else if (!this.isMobile) {
                 interimTranscript += transcript;
                 this.lastSpeechTime = Date.now();
             }
@@ -489,7 +486,7 @@ class VoiceHandler {
             if (this.isUserTurn && !this.isAudioPlaying) {
                 this.startAutoListening();
             }
-        }, this.isMobile ? 1000 : 500); // Longer delay on mobile
+        }, this.isMobile ? 1000 : 500);
     }
 
     stopAllAudio() {
@@ -529,7 +526,8 @@ class VoiceHandler {
         console.log(`👤 User turn: ${isUserTurn}`);
         
         if (isUserTurn) {
-            this.consecutiveFailures = 0; // Reset failures on new turn
+            this.consecutiveFailures = 0;
+            this.sessionErrors = 0; // Reset session errors on new turn
             
             if (this.isMobile) {
                 this.updateTranscript('📱 Your turn - voice will start automatically');
@@ -569,7 +567,7 @@ class VoiceHandler {
         console.log(`🎤 Starting listening (Mobile: ${this.isMobile})`);
         
         try {
-            this.shouldRestart = this.autoRestartEnabled; // Only on desktop
+            this.shouldRestart = this.autoRestartEnabled;
             this.finalTranscript = '';
             this.currentTranscript = '';
             this.lastSpeechTime = null;
@@ -632,6 +630,7 @@ class VoiceHandler {
         }
     }
 
+    // ===== ENHANCED: Process final speech with session error handling =====
     processFinalUserSpeech() {
         if (this.silenceTimer) {
             clearTimeout(this.silenceTimer);
@@ -641,13 +640,18 @@ class VoiceHandler {
         const final_transcript = this.finalTranscript.trim();
         if (final_transcript.length > 0) {
             console.log(`✅ Processing final speech: "${final_transcript}"`);
-            this.stopListening(); // Stop listening before processing
+            this.stopListening();
             
-            // CRITICAL FIX: Check if the callback exists before calling it
+            // ENHANCED: Check if callback exists and handle errors gracefully
             if (this.onTranscript && typeof this.onTranscript === 'function') {
-                this.onTranscript(final_transcript);
+                // Enhanced error handling for session issues
+                try {
+                    this.onTranscript(final_transcript);
+                } catch (error) {
+                    console.error('❌ Error in transcript callback:', error);
+                    this.handleSessionError(error);
+                }
             } else {
-                // This is the source of your "No callback" warning
                 console.warn('⚠️ No callback available for transcript');
                 this.triggerError("Could not process speech. Please try again.");
             }
@@ -656,6 +660,68 @@ class VoiceHandler {
         // Reset transcripts for the next turn
         this.finalTranscript = '';
         this.currentTranscript = '';
+    }
+
+    // ===== NEW: Enhanced session error handling =====
+    handleSessionError(error) {
+        this.sessionErrors++;
+        this.lastSessionError = error;
+        
+        console.error(`❌ Session error ${this.sessionErrors}/${this.maxSessionErrors}:`, error);
+        
+        // If error mentions session expiration or 404, try recovery
+        const errorMessage = error.message || error.toString();
+        if (errorMessage.includes('Session not found') || 
+            errorMessage.includes('expired') || 
+            errorMessage.includes('404')) {
+            
+            if (this.sessionErrors < this.maxSessionErrors) {
+                console.log('🔄 Attempting session recovery...');
+                this.updateTranscript('🔄 Session issue detected. Attempting recovery...');
+                
+                // Try to recover session through roleplay manager
+                if (this.roleplayManager && typeof this.roleplayManager.retrySessionRecovery === 'function') {
+                    this.roleplayManager.retrySessionRecovery().then(recovered => {
+                        if (recovered) {
+                            console.log('✅ Session recovered, retrying...');
+                            this.updateTranscript('✅ Session recovered. Please speak again.');
+                            this.startAutoListening();
+                        } else {
+                            console.log('❌ Session recovery failed');
+                            this.handleSessionRecoveryFailure();
+                        }
+                    }).catch(recoveryError => {
+                        console.error('❌ Session recovery error:', recoveryError);
+                        this.handleSessionRecoveryFailure();
+                    });
+                } else {
+                    this.handleSessionRecoveryFailure();
+                }
+            } else {
+                console.log('❌ Max session errors reached');
+                this.handleSessionRecoveryFailure();
+            }
+        } else {
+            // For other errors, just show the error and try to continue
+            this.triggerError('Error processing speech. Please try again.');
+            setTimeout(() => {
+                if (this.isUserTurn) {
+                    this.startAutoListening();
+                }
+            }, 2000);
+        }
+    }
+
+    handleSessionRecoveryFailure() {
+        this.updateTranscript('❌ Session expired. Please start a new call.');
+        this.triggerError('Session expired. Please start a new call.');
+        
+        // Inform the roleplay manager that the session has failed
+        if (this.roleplayManager && typeof this.roleplayManager.showModeSelection === 'function') {
+            setTimeout(() => {
+                this.roleplayManager.showModeSelection();
+            }, 3000);
+        }
     }
 
     // ===== HANG-UP DETECTION (DESKTOP ONLY) =====
@@ -703,7 +769,12 @@ class VoiceHandler {
         this.updateTranscript(`⏰ Prospect: "${phrase}"`);
         
         if (this.onTranscript) {
-            this.onTranscript('[SILENCE_IMPATIENCE]');
+            try {
+                this.onTranscript('[SILENCE_IMPATIENCE]');
+            } catch (error) {
+                console.error('❌ Error handling impatience:', error);
+                this.handleSessionError(error);
+            }
         }
     }
 
@@ -712,7 +783,12 @@ class VoiceHandler {
         this.updateTranscript('📞 15 seconds of silence - The prospect hung up.');
         
         if (this.onTranscript) {
-            this.onTranscript('[SILENCE_HANGUP]');
+            try {
+                this.onTranscript('[SILENCE_HANGUP]');
+            } catch (error) {
+                console.error('❌ Error handling silence hangup:', error);
+                this.handleSessionError(error);
+            }
         }
     }
 
@@ -741,13 +817,7 @@ class VoiceHandler {
     }
 
     showMessage(message, type = 'info') {
-        // Simple message system
         console.log(`📢 ${type.toUpperCase()}: ${message}`);
-        
-        // You could enhance this with a toast notification system
-        if (this.isMobile && type === 'info') {
-            // Simple mobile notification could go here
-        }
     }
 
     triggerError(message) {
@@ -814,7 +884,9 @@ class VoiceHandler {
             isAudioPlaying: this.isAudioPlaying,
             isMobile: this.isMobile,
             autoRestartEnabled: this.autoRestartEnabled,
-            consecutiveFailures: this.consecutiveFailures
+            consecutiveFailures: this.consecutiveFailures,
+            sessionErrors: this.sessionErrors,
+            lastSessionError: this.lastSessionError
         };
     }
 
@@ -857,4 +929,4 @@ if (typeof module !== 'undefined' && module.exports) {
     window.VoiceHandler = VoiceHandler;
 }
 
-console.log('✅ Simple Reliable Voice Handler loaded');
+console.log('✅ Enhanced Voice Handler with session error handling loaded');

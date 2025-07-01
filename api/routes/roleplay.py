@@ -1,4 +1,4 @@
-# ===== FIXED: api/routes/roleplay.py =====
+# ===== FIXED: api/routes/roleplay.py - Session Management =====
 
 from flask import Blueprint, request, jsonify, session, Response, redirect, render_template, url_for
 import logging
@@ -16,7 +16,6 @@ try:
     from services.user_progress_service import UserProgressService 
 except ImportError as e:
     logger.error(f"Service import error: {e}")
-    # Create placeholder classes if needed
 
 # Import utilities with error handling  
 try:
@@ -25,7 +24,6 @@ try:
     from utils.constants import ROLEPLAY_CONFIG
 except ImportError as e:
     logger.error(f"Utils import error: {e}")
-    # Create placeholder functions if needed
 
 # Create blueprint
 roleplay_bp = Blueprint('roleplay', __name__, url_prefix='/api/roleplay')
@@ -39,18 +37,17 @@ try:
     logger.info("✅ Roleplay services initialized successfully")
 except Exception as e:
     logger.error(f"❌ Error initializing services: {e}")
-    # Initialize with fallbacks
     supabase_service = None
     elevenlabs_service = None
     roleplay_engine = None
     progress_service = None
 
-# ===== FIXED SESSION STORAGE =====
+# ===== ENHANCED SESSION STORAGE =====
 session_storage = {}  # In-memory backup
-DATABASE_SESSION_STORAGE = True  # Flag to use database storage
+DATABASE_SESSION_STORAGE = True
 
 def store_session_reliably(session_id: str, user_id: str, session_data: Dict) -> bool:
-    """Store session in multiple places for reliability"""
+    """Enhanced session storage with multiple fallbacks"""
     try:
         # Store in Flask session
         session['current_roleplay_session'] = session_id
@@ -60,15 +57,21 @@ def store_session_reliably(session_id: str, user_id: str, session_data: Dict) ->
             'user_id': user_id,
             'roleplay_id': session_data.get('roleplay_id'),
             'started_at': session_data.get('started_at'),
-            'current_stage': session_data.get('current_stage', 'phone_pickup')
+            'current_stage': session_data.get('current_stage', 'phone_pickup'),
+            'last_activity': datetime.now(timezone.utc).isoformat()
         }
         
-        # Store in memory backup
+        # Store in memory backup (CRITICAL for marathon mode)
         session_storage[session_id] = {
             'user_id': user_id,
             'session_data': session_data,
-            'stored_at': datetime.now(timezone.utc).isoformat()
+            'stored_at': datetime.now(timezone.utc).isoformat(),
+            'last_activity': datetime.now(timezone.utc).isoformat()
         }
+        
+        # Also store a user-to-session mapping for quick lookup
+        user_session_key = f"user_{user_id}_current_session"
+        session_storage[user_session_key] = session_id
         
         # Store in database for persistence (if available)
         if DATABASE_SESSION_STORAGE and supabase_service:
@@ -92,17 +95,46 @@ def store_session_reliably(session_id: str, user_id: str, session_data: Dict) ->
         logger.error(f"Failed to store session reliably: {e}")
         return False
 def retrieve_session_reliably(session_id: str, user_id: str) -> Optional[Dict]:
-    """Retrieve session from multiple sources, with robust recovery."""
+    """Enhanced session retrieval with multiple fallbacks"""
     try:
-        # 1. Primary Check: Roleplay engine's active memory
+        # 1. Check roleplay engine's active memory first
         if roleplay_engine and session_id in roleplay_engine.active_sessions:
             session_data = roleplay_engine.active_sessions[session_id]
-            # Double-check ownership
             if session_data.get('user_id') == user_id:
-                logger.info(f"Session {session_id} found in roleplay engine memory.")
+                logger.info(f"Session {session_id} found in roleplay engine memory")
+                # Update activity timestamp
+                update_session_activity(session_id)
                 return session_data
 
-        # 2. Secondary Check: Database recovery
+        # 2. Check in-memory backup
+        if session_id in session_storage:
+            stored_session = session_storage[session_id]
+            if stored_session.get('user_id') == user_id:
+                session_data = stored_session['session_data']
+                logger.info(f"Session {session_id} recovered from memory backup")
+                
+                # Restore to roleplay engine
+                if roleplay_engine:
+                    roleplay_engine.active_sessions[session_id] = session_data
+                
+                update_session_activity(session_id)
+                return session_data
+
+        # 3. Try to find by user ID if session_id lookup failed
+        user_session_key = f"user_{user_id}_current_session"
+        if user_session_key in session_storage:
+            actual_session_id = session_storage[user_session_key]
+            if actual_session_id != session_id:
+                logger.info(f"Found different session for user {user_id}: {actual_session_id}")
+                return retrieve_session_reliably(actual_session_id, user_id)
+
+        # 4. Check Flask session
+        flask_session_id = session.get('current_roleplay_session')
+        if flask_session_id and flask_session_id != session_id:
+            logger.info(f"Flask session has different session ID: {flask_session_id}")
+            return retrieve_session_reliably(flask_session_id, user_id)
+
+        # 5. Database recovery as last resort
         if DATABASE_SESSION_STORAGE and supabase_service:
             logger.warning(f"Session {session_id} not in memory. Attempting DB recovery...")
             records = supabase_service.get_data_with_filter(
@@ -112,13 +144,19 @@ def retrieve_session_reliably(session_id: str, user_id: str) -> Optional[Dict]:
             if records:
                 session_data = records[0].get('session_data')
                 if session_data:
-                    logger.info(f"Session {session_id} successfully recovered from database.")
-                    # Restore to roleplay engine's memory for subsequent requests
+                    logger.info(f"Session {session_id} successfully recovered from database")
+                    # Restore to both memory stores
                     if roleplay_engine:
                         roleplay_engine.active_sessions[session_id] = session_data
+                    session_storage[session_id] = {
+                        'user_id': user_id,
+                        'session_data': session_data,
+                        'stored_at': datetime.now(timezone.utc).isoformat(),
+                        'last_activity': datetime.now(timezone.utc).isoformat()
+                    }
                     return session_data
 
-        logger.error(f"SESSION RECOVERY FAILED for user {user_id} and session {session_id}. Not found in memory or DB.")
+        logger.error(f"SESSION RECOVERY FAILED for user {user_id} and session {session_id}")
         return None
         
     except Exception as e:
@@ -126,24 +164,40 @@ def retrieve_session_reliably(session_id: str, user_id: str) -> Optional[Dict]:
         return None
 
 def update_session_activity(session_id: str) -> None:
-    """Update session last activity timestamp"""
+    """Update session last activity timestamp in all stores"""
     try:
+        timestamp = datetime.now(timezone.utc).isoformat()
+        
+        # Update in memory
+        if session_id in session_storage:
+            session_storage[session_id]['last_activity'] = timestamp
+        
+        # Update in database
         if DATABASE_SESSION_STORAGE and supabase_service:
-            supabase_service.update_data_by_id(
-                'active_roleplay_sessions',
-                {'session_id': session_id},
-                {'last_activity': datetime.now(timezone.utc).isoformat()}
-            )
+            try:
+                supabase_service.update_data_by_id(
+                    'active_roleplay_sessions',
+                    {'session_id': session_id},
+                    {'last_activity': timestamp}
+                )
+            except Exception as db_error:
+                logger.warning(f"Failed to update session activity in DB: {db_error}")
+                
     except Exception as e:
         logger.warning(f"Failed to update session activity: {e}")
-
 def cleanup_session(session_id: str) -> None:
-    """Clean up session from all storage locations"""
+    """Enhanced session cleanup"""
     try:
-        # Remove from memory
+        # Remove from memory stores
         session_storage.pop(session_id, None)
         
-        # Remove from database (if available)
+        # Remove user-to-session mapping
+        for key in list(session_storage.keys()):
+            if key.startswith('user_') and key.endswith('_current_session'):
+                if session_storage[key] == session_id:
+                    session_storage.pop(key, None)
+        
+        # Remove from database
         if DATABASE_SESSION_STORAGE and supabase_service:
             try:
                 supabase_service.update_data_by_id(
@@ -165,9 +219,45 @@ def cleanup_session(session_id: str) -> None:
     except Exception as e:
         logger.error(f"Error cleaning up session: {e}")
 
+@roleplay_bp.route('/session/debug', methods=['GET'])
+def debug_session_info():
+    """Debug endpoint to check session status"""
+    try:
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'error': 'User not authenticated'}), 401
+        
+        flask_session_id = session.get('current_roleplay_session')
+        user_session_key = f"user_{user_id}_current_session"
+        memory_session_id = session_storage.get(user_session_key)
+        
+        engine_sessions = []
+        if roleplay_engine:
+            for sid, sdata in roleplay_engine.active_sessions.items():
+                if sdata.get('user_id') == user_id:
+                    engine_sessions.append({
+                        'session_id': sid,
+                        'active': sdata.get('session_active', False),
+                        'stage': sdata.get('current_stage', 'unknown'),
+                        'turn_count': sdata.get('turn_count', 0)
+                    })
+        
+        return jsonify({
+            'user_id': user_id,
+            'flask_session_id': flask_session_id,
+            'memory_session_id': memory_session_id,
+            'engine_sessions': engine_sessions,
+            'memory_store_keys': list(session_storage.keys()),
+            'session_storage_count': len([k for k in session_storage.keys() if not k.startswith('user_')])
+        })
+        
+    except Exception as e:
+        logger.error(f"Debug session error: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @roleplay_bp.route('/start', methods=['POST'])
 def start_roleplay():
-    """FIXED: Start roleplay session with robust session management"""
+    """ENHANCED: Start roleplay session with robust session management"""
     try:
         data = request.get_json()
         user_id = session.get('user_id')
@@ -180,20 +270,33 @@ def start_roleplay():
         
         logger.info(f"🚀 Starting roleplay: {roleplay_id}, mode={mode}, user={user_id}")
         
-        # CRITICAL: Check if roleplay engine is available
+        # Check if roleplay engine is available
         if not roleplay_engine:
             logger.error("❌ Roleplay engine not available")
             return jsonify({'error': 'Roleplay service unavailable'}), 503
         
-        # Clean up any existing sessions for this user
+        # Clean up any existing sessions for this user more thoroughly
         existing_session_id = session.get('current_roleplay_session')
-        if existing_session_id:
-            logger.info(f"🧹 Cleaning up existing session: {existing_session_id}")
+        user_session_key = f"user_{user_id}_current_session"
+        
+        # Check memory for existing sessions
+        if user_session_key in session_storage:
+            old_session_id = session_storage[user_session_key]
+            logger.info(f"🧹 Found existing session in memory: {old_session_id}")
+            try:
+                roleplay_engine.end_session(old_session_id, forced_end=True)
+                cleanup_session(old_session_id)
+            except Exception as cleanup_error:
+                logger.warning(f"Error cleaning up memory session: {cleanup_error}")
+        
+        # Clean up Flask session if different
+        if existing_session_id and existing_session_id != session_storage.get(user_session_key):
+            logger.info(f"🧹 Cleaning up Flask session: {existing_session_id}")
             try:
                 roleplay_engine.end_session(existing_session_id, forced_end=True)
                 cleanup_session(existing_session_id)
             except Exception as cleanup_error:
-                logger.warning(f"Error cleaning up existing session: {cleanup_error}")
+                logger.warning(f"Error cleaning up Flask session: {cleanup_error}")
         
         # Get user profile and context
         try:
@@ -220,7 +323,7 @@ def start_roleplay():
             'roleplay_version': roleplay_id
         }
         
-        # CRITICAL: Create roleplay session with enhanced error handling
+        # Create roleplay session
         try:
             logger.info(f"📞 Creating roleplay session: {roleplay_id}")
             session_result = roleplay_engine.create_session(
@@ -242,7 +345,7 @@ def start_roleplay():
         session_id = session_result['session_id']
         logger.info(f"✅ Session created successfully: {session_id}")
         
-        # Store session reliably
+        # Store session reliably with enhanced storage
         session_data = roleplay_engine.active_sessions.get(session_id, {})
         success = store_session_reliably(session_id, user_id, session_data)
         
@@ -260,7 +363,8 @@ def start_roleplay():
             'roleplay_info': session_result.get('roleplay_info', {}),
             'tts_available': elevenlabs_service.is_available() if elevenlabs_service and hasattr(elevenlabs_service, 'is_available') else False,
             'session_stored': True,
-            'user_context': user_context
+            'user_context': user_context,
+            'marathon_status': session_result.get('marathon_status', None)  # Include marathon status
         }
         
         logger.info(f"✅ Roleplay {roleplay_id} session started successfully: {session_id}")
@@ -271,46 +375,81 @@ def start_roleplay():
         return jsonify({'error': 'Internal server error during session creation'}), 500
 @roleplay_bp.route('/respond', methods=['POST'])
 def handle_user_response():
-    """FIXED: Handle user input with robust session recovery"""
+    """ENHANCED: Handle user input with robust session recovery"""
     try:
         data = request.get_json()
         user_input = data.get('user_input', '').strip()
         user_id = session.get('user_id')
-        if not user_id: return jsonify({'error': 'User not authenticated'}), 401
         
-        # This is the session_id from the browser's cookie session
+        if not user_id: 
+            return jsonify({'error': 'User not authenticated'}), 401
+        
+        # Enhanced session recovery
         session_id_from_cookie = session.get('current_roleplay_session')
-        if not session_id_from_cookie:
-            return jsonify({'error': 'No active roleplay session found in browser. Please start a new call.'}), 400
-
-        logger.info(f"💬 Processing input for session {session_id_from_cookie}: '{user_input[:50]}...'")
         
-        # CRITICAL: Retrieve the session data using our robust function
-        session_data = retrieve_session_reliably(session_id_from_cookie, user_id)
+        # Try multiple ways to find the session
+        session_data = None
+        actual_session_id = None
         
+        # 1. Try with the cookie session ID
+        if session_id_from_cookie:
+            session_data = retrieve_session_reliably(session_id_from_cookie, user_id)
+            if session_data:
+                actual_session_id = session_id_from_cookie
+        
+        # 2. Try to find user's current session if cookie failed
         if not session_data:
+            user_session_key = f"user_{user_id}_current_session"
+            if user_session_key in session_storage:
+                potential_session_id = session_storage[user_session_key]
+                session_data = retrieve_session_reliably(potential_session_id, user_id)
+                if session_data:
+                    actual_session_id = potential_session_id
+                    # Update Flask session
+                    session['current_roleplay_session'] = actual_session_id
+        
+        # 3. Check if roleplay engine has any sessions for this user
+        if not session_data and roleplay_engine:
+            for sid, sdata in roleplay_engine.active_sessions.items():
+                if sdata.get('user_id') == user_id and sdata.get('session_active', False):
+                    session_data = sdata
+                    actual_session_id = sid
+                    # Update both session stores
+                    session['current_roleplay_session'] = actual_session_id
+                    session_storage[f"user_{user_id}_current_session"] = actual_session_id
+                    logger.info(f"Found session in roleplay engine: {actual_session_id}")
+                    break
+        
+        if not session_data or not actual_session_id:
+            logger.error(f"No session found for user {user_id}. Cookie session: {session_id_from_cookie}")
             return jsonify({
-                'error': 'Session not found or has expired. Please start a new call.',
-                'session_expired': True, 'action_required': 'restart_call'
+                'error': 'No active roleplay session found. Please start a new call.',
+                'session_expired': True, 
+                'action_required': 'restart_call'
             }), 404
+
+        logger.info(f"💬 Processing input for session {actual_session_id}: '{user_input[:50]}...'")
         
-        # Now that we have the session, process the input
-        response_result = roleplay_engine.process_user_input(session_id_from_cookie, user_input)
+        # Update activity timestamp
+        update_session_activity(actual_session_id)
         
-        # Persist the updated state back to the DB
-        updated_session_data = roleplay_engine.active_sessions.get(session_id_from_cookie)
+        # Process input with the correct session ID
+        response_result = roleplay_engine.process_user_input(actual_session_id, user_input)
+        
+        # Store updated session data
+        updated_session_data = roleplay_engine.active_sessions.get(actual_session_id)
         if updated_session_data:
-            store_session_reliably(session_id_from_cookie, user_id, updated_session_data)
+            store_session_reliably(actual_session_id, user_id, updated_session_data)
 
         return jsonify(response_result)
         
     except Exception as e:
         logger.error(f"❌ Critical error handling user response: {e}", exc_info=True)
         return jsonify({'error': 'Internal server error', 'action_required': 'restart_call'}), 500
-
+# Keep all other existing endpoints...
 @roleplay_bp.route('/end', methods=['POST'])
 def end_roleplay():
-    """FIXED: End roleplay session with comprehensive cleanup"""
+    """End roleplay session with comprehensive cleanup"""
     try:
         data = request.get_json() or {}
         user_id = session.get('user_id')
@@ -321,16 +460,20 @@ def end_roleplay():
         forced_end = data.get('forced_end', False)
         session_id = session.get('current_roleplay_session')
         
+        # Try to find session if not in Flask session
+        if not session_id:
+            user_session_key = f"user_{user_id}_current_session"
+            session_id = session_storage.get(user_session_key)
+        
         if not session_id:
             logger.warning("⚠️ No active session to end")
             return jsonify({'message': 'No active session found'}), 200
         
         logger.info(f"📞 Ending roleplay session {session_id} for user {user_id}")
         
-        # CRITICAL: Check if roleplay engine is available
+        # Check if roleplay engine is available
         if not roleplay_engine:
             logger.error("❌ Roleplay engine not available for session end")
-            # Still clean up what we can
             cleanup_session(session_id)
             return jsonify({
                 'message': 'Session ended (service unavailable)',
@@ -344,7 +487,6 @@ def end_roleplay():
             end_result = roleplay_engine.end_session(session_id, forced_end)
         except Exception as engine_error:
             logger.error(f"❌ Roleplay engine end error: {engine_error}")
-            # Continue with cleanup even if engine fails
             end_result = {
                 'success': True,
                 'duration_minutes': 1,
@@ -352,10 +494,6 @@ def end_roleplay():
                 'coaching': {'error': 'Session ended with errors'},
                 'overall_score': 50
             }
-        
-        if not end_result.get('success'):
-            logger.error(f"❌ Failed to end session properly: {end_result}")
-            # Continue with cleanup
         
         # Clean up session completely
         cleanup_session(session_id)
@@ -369,6 +507,7 @@ def end_roleplay():
             'overall_score': end_result.get('overall_score', 50),
             'completion_message': f"Session complete! Score: {end_result.get('overall_score', 50)}/100",
             'roleplay_type': end_result.get('roleplay_type', 'practice'),
+            'marathon_results': end_result.get('marathon_results', None),
             'session_cleaned': True
         }
         
@@ -391,6 +530,7 @@ def end_roleplay():
             'message': 'Session has been cleaned up',
             'technical_details': str(e)
         }), 500
+
 
 @roleplay_bp.route('/info/<roleplay_id>', methods=['GET'])
 def get_roleplay_info(roleplay_id):

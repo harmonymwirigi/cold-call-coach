@@ -1,4 +1,4 @@
-// ===== FIXED static/js/roleplay/base-roleplay-manager.js =====
+// ===== FIXED: static/js/roleplay/base-roleplay-manager.js =====
 
 class BaseRoleplayManager {
     constructor(options = {}) {
@@ -12,6 +12,10 @@ class BaseRoleplayManager {
         this.voiceHandler = null;
         this.isProcessing = false;
         this.conversationHistory = [];
+        
+        // Enhanced session management
+        this.sessionRetryCount = 0;
+        this.maxRetries = 3;
         
         // Debug flag
         this.debugMode = options.debugMode || true;
@@ -48,6 +52,7 @@ class BaseRoleplayManager {
             timeElement.textContent = time;
         }
     }
+
     async apiCall(endpoint, options = {}) {
         const defaultOptions = {
             headers: {
@@ -56,16 +61,36 @@ class BaseRoleplayManager {
             },
             ...options
         };
-        const response = await fetch(endpoint, defaultOptions);
-        if (!response.ok && response.status === 401) {
-            window.location.href = '/login';
+        
+        try {
+            console.log('🌐 API call:', endpoint, options.method || 'GET');
+            const response = await fetch(endpoint, defaultOptions);
+            
+            if (!response.ok) {
+                if (response.status === 401) {
+                    console.error('🔐 Authentication required');
+                    window.location.href = '/login';
+                    throw new Error('Authentication required');
+                } else if (response.status === 404) {
+                    console.error('🔍 Endpoint not found:', endpoint);
+                    throw new Error('Endpoint not found - please check API routing');
+                } else {
+                    const errorText = await response.text();
+                    console.error('❌ API error:', response.status, errorText);
+                    throw new Error(`API Error ${response.status}: ${errorText}`);
+                }
+            }
+            
+            return response;
+        } catch (error) {
+            console.error('❌ API call failed:', error);
+            throw error;
         }
-        return response;
     }
+
     loadRoleplayData() {
         const roleplayData = document.getElementById('roleplay-data');
         if (roleplayData) {
-            // FIXED: Don't use parseInt() - keep roleplay ID as string
             const roleplayId = roleplayData.dataset.roleplayId || '1.1';
             const isAuthenticated = roleplayData.dataset.userAuthenticated === 'true';
             
@@ -95,7 +120,6 @@ class BaseRoleplayManager {
                 this.updateRoleplayUI(data);
             } else {
                 console.error('❌ Failed to load roleplay info:', await response.text());
-                // Fallback to default if API fails
                 this.updateRoleplayUI({
                     name: `Roleplay ${roleplayId}`,
                     job_title: 'CTO',
@@ -104,7 +128,6 @@ class BaseRoleplayManager {
             }
         } catch (error) {
             console.error('❌ Error loading roleplay info:', error);
-            // Fallback to default
             this.updateRoleplayUI({
                 name: `Roleplay ${roleplayId}`,
                 job_title: 'CTO',
@@ -204,13 +227,13 @@ class BaseRoleplayManager {
                     if (this.voiceHandler.isListening) {
                         this.voiceHandler.stopListening();
                     } else {
-                        this.voiceHandler.startListening(false); // Manual start
+                        this.voiceHandler.startListening(false);
                     }
                 }
             });
         }
         
-        // End call button
+        // FIXED: End call button - make sure it's visible during calls
         const endCallBtn = document.getElementById('end-call-btn');
         if (endCallBtn) {
             endCallBtn.addEventListener('click', (e) => {
@@ -272,6 +295,7 @@ class BaseRoleplayManager {
         this.isActive = false;
         this.isProcessing = false;
         this.conversationHistory = [];
+        this.sessionRetryCount = 0;
         
         // Stop any active audio or voice recognition
         if (this.voiceHandler) {
@@ -316,17 +340,24 @@ class BaseRoleplayManager {
     }
     
     async startPhoneCallSequence(initialResponse) {
-        console.log('ðŸ“ž Starting phone call sequence...');
+        console.log('📞 Starting phone call sequence...');
         
         // Hide mode selection, show call interface
         document.getElementById('mode-selection').style.display = 'none';
-        document.getElementById('phone-container').style.display = 'block'; // Show the phone
+        document.getElementById('phone-container').style.display = 'block';
         document.getElementById('call-interface').style.display = 'flex';
+        
+        // FIXED: Make sure end call button is visible
+        const endCallBtn = document.getElementById('end-call-btn');
+        if (endCallBtn) {
+            endCallBtn.style.display = 'block';
+        }
         
         await this.dialingState();
         await this.ringingState();
         await this.connectedState(initialResponse);
     }
+
     async dialingState() {
         console.log('📱 Dialing state...');
         this.callState = 'dialing';
@@ -416,7 +447,7 @@ class BaseRoleplayManager {
             message: message,
             timestamp: new Date()
         });
-        console.log(`ðŸ“  Added to conversation: ${sender} - ${message.substring(0, 50)}...`);
+        console.log(`📝 Added to conversation: ${sender} - ${message.substring(0, 50)}...`);
     }
     
     updateTranscript(text) {
@@ -425,6 +456,7 @@ class BaseRoleplayManager {
             transcriptElement.textContent = text;
         }
     }
+
     addPulseToMicButton() {
         const micBtn = document.getElementById('mic-btn');
         if (micBtn) {
@@ -443,7 +475,7 @@ class BaseRoleplayManager {
         const maxTime = 5000;
         
         const delayTime = Math.max(minTime, Math.min(maxTime, speakingTimeMs));
-        console.log(`â ±ï¸  Simulating speaking time: ${delayTime}ms for ${words} words`);
+        console.log(`⏱️ Simulating speaking time: ${delayTime}ms for ${words} words`);
         
         return new Promise(resolve => setTimeout(resolve, delayTime));
     }
@@ -474,20 +506,19 @@ class BaseRoleplayManager {
     }
     
     tryAgain() {
-        console.log('ðŸ”„ Trying again');
+        console.log('🔄 Trying again');
         this.showModeSelection();
     }
-
     
     showModeSelection() {
-        console.log('ðŸŽ¯ Showing mode selection');
+        console.log('🎯 Showing mode selection');
         
         // Hide phone and feedback, show mode selection
         document.getElementById('phone-container').style.display = 'none';
         document.getElementById('feedback-section').style.display = 'none';
         document.getElementById('mode-selection').style.display = 'flex';
         
-        this.initializeModeSelection(); // Re-initialize the selection state
+        this.initializeModeSelection();
         
         this.selectedMode = null;
         this.currentSession = null;
@@ -505,29 +536,7 @@ class BaseRoleplayManager {
     
     getRoleplayId() {
         const roleplayData = document.getElementById('roleplay-data');
-        // FIXED: Don't use parseInt() - return string directly
         return roleplayData ? (roleplayData.dataset.roleplayId || '1.1') : '1.1';
-    }
-    
-    async apiCall(endpoint, options = {}) {
-        const defaultOptions = {
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`
-            }
-        };
-        
-        console.log('🌐 API call:', endpoint, options.method || 'GET');
-        
-        const response = await fetch(endpoint, { ...defaultOptions, ...options });
-        
-        if (response.status === 401) {
-            console.error('🔐 Authentication required');
-            window.location.href = '/login';
-            throw new Error('Authentication required');
-        }
-        
-        return response;
     }
     
     capitalizeFirst(str) {
@@ -587,6 +596,41 @@ class BaseRoleplayManager {
         this.isProcessing = false;
     }
     
+    // ENHANCED: Retry session recovery
+    async retrySessionRecovery() {
+        if (this.sessionRetryCount >= this.maxRetries) {
+            console.error('❌ Max session recovery retries reached');
+            this.showError('Session recovery failed. Please start a new call.');
+            this.showModeSelection();
+            return false;
+        }
+        
+        this.sessionRetryCount++;
+        console.log(`🔄 Attempting session recovery... attempt ${this.sessionRetryCount}/${this.maxRetries}`);
+        
+        try {
+            // Try to get session debug info
+            const response = await this.apiCall('/api/roleplay/session/debug');
+            if (response.ok) {
+                const debugData = await response.json();
+                console.log('🔍 Session debug info:', debugData);
+                
+                // If we find active sessions, try to continue
+                if (debugData.engine_sessions && debugData.engine_sessions.length > 0) {
+                    const activeSession = debugData.engine_sessions.find(s => s.active);
+                    if (activeSession) {
+                        console.log('✅ Found active session, continuing...');
+                        return true;
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('❌ Session recovery failed:', error);
+        }
+        
+        return false;
+    }
+    
     // Abstract methods to be implemented by subclasses
     async startCall() {
         throw new Error('startCall must be implemented by subclass');
@@ -599,7 +643,7 @@ class BaseRoleplayManager {
     async endCall(forcedEnd = false) {
         if (!this.isActive) return;
 
-        console.log('ðŸ“ž Ending call. Forced:', forcedEnd);
+        console.log('📞 Ending call. Forced:', forcedEnd);
         this.isProcessing = true;
         this.isActive = false;
 
@@ -619,26 +663,27 @@ class BaseRoleplayManager {
 
             if (response.ok) {
                 const data = await response.json();
-                console.log('ðŸ“Š Final session data received:', data);
+                console.log('📊 Final session data received:', data);
                 this.showFeedback(data.coaching, data.overall_score);
             } else {
-                console.error('â Œ Failed to end session gracefully.');
+                console.error('❌ Failed to end session gracefully.');
                 this.showError('Could not retrieve final feedback.');
-                this.showFeedback({}, 50); // Show generic feedback
+                this.showFeedback({}, 50);
             }
         } catch (error) {
-            console.error('â Œ Error during endCall API request:', error);
+            console.error('❌ Error during endCall API request:', error);
             this.showError('An error occurred while ending the call.');
-            this.showFeedback({}, 50); // Show generic feedback
+            this.showFeedback({}, 50);
         } finally {
             this.isProcessing = false;
         }
     }
+
     createModeSelectionUI(modes) {
         const modeGrid = document.getElementById('mode-grid');
         if (!modeGrid) return;
 
-        modeGrid.innerHTML = ''; // Clear loading spinner
+        modeGrid.innerHTML = '';
 
         modes.forEach(mode => {
             const modeCard = document.createElement('div');
@@ -654,8 +699,9 @@ class BaseRoleplayManager {
             modeGrid.appendChild(modeCard);
         });
     }
+
     showFeedback(coaching, score = 75) {
-        console.log('ðŸ“Š Base: Showing feedback screen.');
+        console.log('📊 Base: Showing feedback screen.');
         
         const callInterface = document.getElementById('call-interface');
         const feedbackSection = document.getElementById('feedback-section');
@@ -670,7 +716,7 @@ class BaseRoleplayManager {
         
         if (coaching && Object.keys(coaching).length > 0) {
              content.innerHTML = Object.entries(coaching).map(([key, value]) => {
-                if(typeof value !== 'string') return ''; // Safety check
+                if(typeof value !== 'string') return '';
                 const title = key.replace(/_/g, ' ').replace(/(^\w|\s\w)/g, m => m.toUpperCase());
                 return `<div class="feedback-item"><h5>${title}</h5><p>${value}</p></div>`;
              }).join('');
@@ -678,20 +724,21 @@ class BaseRoleplayManager {
             content.innerHTML = `<div class="feedback-item"><p>Great job completing the session! Keep practicing.</p></div>`;
         }
     }
+
     async playAIResponseAndWaitForUser(text) {
         throw new Error('playAIResponseAndWaitForUser must be implemented by subclass');
     }
+
     async playAIResponse(text) {
         if (this.voiceHandler) {
-             // Let the voice handler manage playing audio and starting the next user turn
             await this.voiceHandler.playAudio(text);
         } else {
-            // Fallback if voice handler isn't ready
             console.warn("Voice handler not available, simulating speech time.");
             await this.simulateSpeakingTime(text);
             this.startUserTurn();
         }
     }
+
     startUserTurn() {
         console.log('👤 Base: Starting user turn.');
         if (this.voiceHandler) {
@@ -699,7 +746,7 @@ class BaseRoleplayManager {
             this.voiceHandler.startAutoListening();
         }
         this.updateTranscript('🎤 Your turn... speak now.');
-        this.addPulseToMicButton(); // <-- ADD THIS LINE
+        this.addPulseToMicButton();
     }
 }
 
