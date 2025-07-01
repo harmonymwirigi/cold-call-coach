@@ -1,4 +1,4 @@
-// ===== static/js/roleplay/roleplay-1-2-manager.js =====
+// ===== FIXED: static/js/roleplay/roleplay-1-2-manager.js =====
 // Implements the structured, game-like flow for Marathon Mode.
 
 class Roleplay12Manager extends BaseRoleplayManager {
@@ -20,14 +20,17 @@ class Roleplay12Manager extends BaseRoleplayManager {
         }
     }
 
+    // --- THIS IS THE NEW, REQUIRED METHOD ---
+    // It's more robust and ensures the user's turn always starts correctly.
     async playAIResponseAndWaitForUser(text) {
         console.log('Marathon Mode: Playing AI response and setting up user turn.');
         this.addToConversationHistory('ai', text);
         this.updateTranscript(`🗣️ Prospect: "${text}"`);
 
+        // This now calls the more robust playAIResponse method, which handles the user turn transition.
         await this.playAIResponse(text);
     }
-    
+
     initializeModeSelection() {
         console.log('🏁 Marathon Mode: Initializing single-mode selection.');
         const modeGrid = document.getElementById('mode-grid');
@@ -45,13 +48,12 @@ class Roleplay12Manager extends BaseRoleplayManager {
     }
 
     async startCall() {
-        console.log('🏁 Starting Marathon Mode call...');
+        console.log('🏁 Starting Marathon Mode...');
         this.updateStartButton('Starting Marathon...', true);
         
         try {
             const response = await this.apiCall('/api/roleplay/start', {
-                method: 'POST',
-                body: JSON.stringify({ roleplay_id: this.roleplayId, mode: this.selectedMode })
+                method: 'POST', body: JSON.stringify({ roleplay_id: this.roleplayId, mode: this.selectedMode })
             });
 
             if (!response.ok) {
@@ -61,14 +63,14 @@ class Roleplay12Manager extends BaseRoleplayManager {
 
             const data = await response.json();
             this.currentSession = data;
-            this.marathonState = data.marathon_status;
+            this.marathonState = data.marathon_status; // Corrected to match backend response
             this.isActive = true;
             
             this.updateMarathonUI();
             await this.startPhoneCallSequence(data.initial_response);
+
         } catch (error) {
-            console.error('Error starting Marathon Mode:', error);
-            this.showError('Could not start Marathon Mode. Please try again.');
+            this.showError(`Could not start Marathon: ${error.message}`);
             this.updateStartButton('Start Marathon', false);
         }
     }
@@ -80,14 +82,9 @@ class Roleplay12Manager extends BaseRoleplayManager {
 
         try {
             const response = await this.apiCall('/api/roleplay/respond', {
-                method: 'POST',
-                body: JSON.stringify({ user_input: transcript })
+                method: 'POST', body: JSON.stringify({ user_input: transcript })
             });
-
-            if (!response.ok) {
-                 const errorData = await response.json();
-                 throw new Error(errorData.error || 'Failed to get AI response');
-            }
+            if (!response.ok) throw new Error((await response.json()).error || 'Failed to get AI response');
 
             const data = await response.json();
             
@@ -107,19 +104,19 @@ class Roleplay12Manager extends BaseRoleplayManager {
                 await this.playAIResponseAndWaitForUser(data.ai_response);
             }
         } catch (error) {
-            this.showError(`Error during marathon call: ${error.message}`);
+            this.showError(`Error during marathon: ${error.message}`);
             this.startUserTurn();
         } finally {
             this.isProcessing = false;
         }
     }
-    
+
     async endCall(isFinishedByApi = false, finalData = null) {
         if (!this.isActive) return;
         this.isActive = false;
         if (this.durationInterval) clearInterval(this.durationInterval);
         if (this.voiceHandler) this.voiceHandler.stopListening();
-
+    
         try {
             let data_to_show = finalData;
             if (!isFinishedByApi) {
@@ -134,11 +131,12 @@ class Roleplay12Manager extends BaseRoleplayManager {
             this.showError('Could not end session. Please refresh.');
         }
     }
-    
+
     showFeedback(data) {
-        const { coaching, marathon_results } = data;
+        const { coaching, overall_score, marathon_results } = data;
         
-        super.showFeedback(data); // Render base feedback UI
+        // This will show the main feedback screen and animate the score.
+        super.showFeedback(data); 
         
         if (!marathon_results) {
              console.warn("Marathon results missing in showFeedback data.");
@@ -148,10 +146,12 @@ class Roleplay12Manager extends BaseRoleplayManager {
         const feedbackContent = document.getElementById('feedback-content');
         if (feedbackContent && coaching && coaching.overall) {
             const passed = marathon_results.marathon_passed;
+            // Create the marathon-specific message
             const message = `<div class="feedback-item" style="background: ${passed ? '#10b98120' : '#f59e0b20'}; border-left-color: ${passed ? '#10b981' : '#f59e0b'};">
                 <h5>${passed ? '🎉 Marathon Passed!' : 'Marathon Complete'}</h5>
                 <p>${coaching.overall}</p>
             </div>`;
+            // Set the content directly, replacing any base content.
             feedbackContent.innerHTML = message;
         }
     }

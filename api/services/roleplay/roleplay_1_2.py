@@ -198,11 +198,11 @@ class Roleplay12(BaseRoleplay):
         
         passed_marathon = marathon['calls_passed'] >= self.config.CALLS_TO_PASS
         
-        # Format the feedback message according to the PDF spec
+        # --- THIS IS THE FIX: Using the exact messages from the PDF ---
         if passed_marathon:
-            feedback_message = f"Nice work—you passed {marathon['calls_passed']} out of 10! You've unlocked the next modules and earned one shot at Legend Mode."
+            feedback_message = f"Nice work—you passed {marathon['calls_passed']} out of 10! You've unlocked the next modules and earned one shot at Legend Mode. Want to go for Legend now or run another Marathon?"
         else:
-            feedback_message = f"You completed all 10 calls and scored {marathon['calls_passed']}/10. Keep practising—the more reps you get, the easier it becomes."
+            feedback_message = f"You completed all 10 calls and scored {marathon['calls_passed']}/10. Keep practising—the more reps you get, the easier it becomes. Ready to try Marathon again?"
             
         coaching = {"overall": feedback_message}
 
@@ -213,5 +213,5 @@ class Roleplay12(BaseRoleplay):
             'duration_minutes': (datetime.now(timezone.utc) - datetime.fromisoformat(session['started_at'])).total_seconds() / 60,
             'coaching': coaching,
             'session_data': session,
-            'marathon_results': {'calls_passed': marathon['calls_passed'], 'marathon_passed': passed_marathon}
+            'marathon_results': {'calls_passed': marathon['calls_passed'], 'marathon_passed': passed_marathon, 'is_complete': True}
         }

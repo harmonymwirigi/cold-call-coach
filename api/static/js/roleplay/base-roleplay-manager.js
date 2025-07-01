@@ -693,13 +693,13 @@ class BaseRoleplayManager {
         }
     }
     startUserTurn() {
-        console.log('ðŸ‘¤ Base: Starting user turn.');
+        console.log('👤 Base: Starting user turn.');
         if (this.voiceHandler) {
             this.voiceHandler.setUserTurn(true);
             this.voiceHandler.startAutoListening();
         }
-        this.updateTranscript('ðŸŽ¤ Your turn... speak now.');
-        this.addPulseToMicButton();
+        this.updateTranscript('🎤 Your turn... speak now.');
+        this.addPulseToMicButton(); // <-- ADD THIS LINE
     }
 }
 
