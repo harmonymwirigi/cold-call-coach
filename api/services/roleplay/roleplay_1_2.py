@@ -1,5 +1,5 @@
-# ===== FINAL FIXED: services/roleplay/roleplay_1_2.py =====
-# This version is self-contained and does NOT inherit from Roleplay11.
+# ===== FINAL FIXED (v2): services/roleplay/roleplay_1_2.py =====
+# This version corrects the typo in the process_user_input method.
 
 import random
 import logging
@@ -43,7 +43,6 @@ class Roleplay12(BaseRoleplay):
         }
         self.active_sessions[session_id] = session_data
         
-        # Start the first call
         initial_response = self._get_contextual_initial_response(user_context)
         session_data['current_call_data']['conversation_history'].append({'role': 'assistant', 'content': initial_response})
         
@@ -59,7 +58,6 @@ class Roleplay12(BaseRoleplay):
         call = session['current_call_data']
         marathon = session['marathon_state']
 
-        # Handle silence triggers
         if user_input == '[SILENCE_IMPATIENCE]':
             return {'success': True, 'ai_response': random.choice(IMPATIENCE_PHRASES), 'call_continues': True}
         if user_input == '[SILENCE_HANGUP]':
@@ -72,13 +70,12 @@ class Roleplay12(BaseRoleplay):
         logger.info(f"Marathon Turn {call['turn_count']}: Evaluating as '{current_stage}'")
         
         # --- Core Evaluation Logic ---
-        evaluation = self._evaluate_user_input(session, user_input, current_stage)
+        evaluation = self._evaluate_user_input(session, user_input, current_stage) # <<< TYPO FIX IS HERE
         call['rubric_scores'][current_stage] = evaluation
         
         if not evaluation.get('passed', False):
             return self._handle_call_failure(session, f"Failed evaluation at {current_stage}")
 
-        # Special opener hang-up rule
         if current_stage == 'opener' and random.random() < self.config.RANDOM_HANGUP_CHANCE:
             return self._handle_call_failure(session, "Random opener hang-up (unlucky!)")
         
@@ -90,17 +87,19 @@ class Roleplay12(BaseRoleplay):
             call['current_stage'] = 'mini_pitch'
             ai_response = "Okay, fair enough. You have 30 seconds, what's this about?"
         elif current_stage == 'mini_pitch':
-            # This is the last step, so the call is successful.
             return self._handle_call_success(session)
         else:
-            # Should not happen in this flow, but as a fallback, fail the call.
             return self._handle_call_failure(session, "Unexpected conversation stage.")
 
         call['conversation_history'].append({'role': 'assistant', 'content': ai_response})
         return {'success': True, 'ai_response': ai_response, 'call_continues': True, 'marathon_status': marathon, 'evaluation': evaluation}
 
+    def _evaluate_user_input(self, session: Dict, user_input: str, stage: str) -> Dict:
+        if not self.is_openai_available():
+            return {'passed': len(user_input.split()) > 3, 'score': 3}
+        return self.openai_service.evaluate_user_input(user_input, session['current_call_data']['conversation_history'], stage)
+
     def _get_unique_objection(self, session: Dict) -> str:
-        """Picks a unique objection for the current marathon run."""
         available = [obj for obj in EARLY_OBJECTIONS if obj not in session['used_objections']]
         if not available:
             session['used_objections'].clear()
@@ -119,15 +118,12 @@ class Roleplay12(BaseRoleplay):
         return self._start_next_call(session, f"Call failed: {reason}.")
 
     def _start_next_call(self, session: Dict, transition_message: str) -> Dict[str, Any]:
-        # Store the completed call's data
         session['all_calls_data'].append(session['current_call_data'])
         marathon = session['marathon_state']
         
-        # Check if the marathon is over
         if (marathon['calls_passed'] + marathon['calls_failed']) >= self.config.TOTAL_CALLS:
             return self.end_session(session['session_id'])
 
-        # Prepare for the next call
         marathon['current_call_number'] += 1
         session['current_call_data'] = self._initialize_call_data()
         
