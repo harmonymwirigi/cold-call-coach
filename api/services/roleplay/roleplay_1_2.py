@@ -50,25 +50,15 @@ class Roleplay12(BaseRoleplay):
         """Initializes a new call within the marathon."""
         return {'conversation_history': [], 'current_stage': 'phone_pickup', 'turn_count': 0, 'call_status': 'in_progress'}
 
-    def _get_evaluation_stage_for_turn(self, call_data: Dict) -> str:
+    def is_opener(self, text: str) -> bool:
         """
-        Determines which rubric to use based on the number of turns the user has taken.
-        This is much more reliable than using stage names.
+        Heuristic to determine if the user's input is the actual opener,
+        not just a greeting.
         """
-        user_turn_number = call_data['turn_count']
-        
-        if user_turn_number == 1:
-            # The first thing the user says is the opener.
-            return 'opener'
-        elif user_turn_number == 2:
-            # The second thing the user says is the objection handling.
-            return 'objection_handling'
-        elif user_turn_number == 3:
-            # The third thing is the mini-pitch.
-            return 'mini_pitch'
-        else:
-            # No further evaluations in this simple flow.
-            return 'none'
+        text = text.lower()
+        opener_keywords = ["calling about", "reason for my call", "calling from", "i'm with", "work with", "help companies"]
+        # If it's longer than 5 words OR contains opener keywords, it's likely the opener.
+        return len(text.split()) > 5 or any(keyword in text for keyword in opener_keywords)
 
     def process_user_input(self, session_id: str, user_input: str) -> Dict[str, Any]:
         session = self.active_sessions[session_id]
@@ -78,59 +68,74 @@ class Roleplay12(BaseRoleplay):
         if marathon['is_complete']:
             return {'success': False, 'error': 'Marathon is already complete.'}
         
-        # Silence handling
-        if user_input == '[SILENCE_IMPATIENCE]':
-            return {'success': True, 'ai_response': random.choice(IMPATIENCE_PHRASES), 'call_continues': True}
-        if user_input == '[SILENCE_HANGUP]':
-            return self._handle_call_failure(session, "Hung up due to silence")
+        if user_input in ['[SILENCE_IMPATIENCE]', '[SILENCE_HANGUP]']:
+            # Handle silence triggers separately
+            if user_input == '[SILENCE_IMPATIENCE]':
+                return {'success': True, 'ai_response': random.choice(IMPATIENCE_PHRASES), 'call_continues': True}
+            else: # '[SILENCE_HANGUP]'
+                return self._handle_call_failure(session, "Hung up due to silence")
 
         call['turn_count'] += 1
         call['conversation_history'].append({'role': 'user', 'content': user_input})
         
-        # Determine if this turn's input needs evaluation
-        evaluation_stage = self._get_evaluation_stage_for_turn(call)
+        current_stage = call['current_stage']
         
-        if evaluation_stage != 'none':
-            logger.info(f"Turn {call['turn_count']}: Evaluating user input as '{evaluation_stage}'.")
-            evaluation = self._evaluate_user_input(session, user_input, evaluation_stage)
+        # --- THE DEFINITIVE FIX ---
+        # We only evaluate the opener when the conversation is in the 'phone_pickup' stage
+        # AND the user's input looks like a real opener, not just "how are you?".
+        if current_stage == 'phone_pickup' and self.is_opener(user_input):
+            logger.info("Opener detected. Evaluating as 'opener'.")
+            evaluation = self._evaluate_user_input(session, user_input, 'opener')
+            if not evaluation.get('passed', False):
+                return self._handle_call_failure(session, "Failed evaluation at opener")
             
+            # Random hang-up after a SUCCESSFUL opener
+            if random.random() < self.config.RANDOM_HANGUP_CHANCE:
+                return self._handle_call_failure(session, "Random opener hang-up (unlucky!)")
+            
+            self._update_session_state(session) # Move to the next stage
+        
+        # This handles the other evaluation points (objection, mini-pitch)
+        elif current_stage in ['early_objection', 'objection_handling']:
+            evaluation_stage = 'objection_handling' if current_stage == 'early_objection' else 'mini_pitch'
+            logger.info(f"Evaluating user input as '{evaluation_stage}'.")
+            evaluation = self._evaluate_user_input(session, user_input, evaluation_stage)
             if not evaluation.get('passed', False):
                 return self._handle_call_failure(session, f"Failed evaluation at {evaluation_stage}")
-            
-            # Special rule: random hang-up only after a SUCCESSFUL opener
-            if evaluation_stage == 'opener' and random.random() < self.config.RANDOM_HANGUP_CHANCE:
-                return self._handle_call_failure(session, "Random opener hang-up (unlucky!)")
-        else:
-            # This case should not be hit in the new logic but is safe to have.
-            evaluation = {'passed': True, 'feedback': 'Input received.'}
-
-        # Advance the stage to determine the AI's next action
-        self._update_session_state(session)
+            self._update_session_state(session)
         
-        # Check if the call has reached its successful conclusion
+        # This handles the initial "Hi, how are you?" where no evaluation is needed.
+        else:
+            logger.info("Greeting received. Not evaluating. Generating AI response.")
+            evaluation = {'passed': True, 'feedback': 'Greeting received.'}
+            # The stage does NOT advance here. It remains 'phone_pickup'.
+
+        # Check for successful call completion
         if call['current_stage'] == 'call_ended':
             return self._handle_call_success(session)
 
-        # Generate the AI's response for the new stage
         ai_response = self._generate_ai_response(session)
         call['conversation_history'].append({'role': 'assistant', 'content': ai_response})
         
         return {'success': True, 'ai_response': ai_response, 'call_continues': True, 'marathon_status': marathon, 'evaluation': evaluation}
 
     def _evaluate_user_input(self, session: Dict, user_input: str, stage: str) -> Dict:
+        # This method is now only called when an evaluation is actually required.
         if not self.is_openai_available():
-            return {'passed': len(user_input.split()) > 3, 'score': 3}
+            return {'passed': len(user_input.split()) > 3, 'score': 3} # Simple fallback
         return self.openai_service.evaluate_user_input(user_input, session['current_call_data']['conversation_history'], stage)
 
     def _update_session_state(self, session: Dict):
+        """Moves to the next stage in the flow."""
         current_stage = session['current_call_data']['current_stage']
-        next_stage = self.config.STAGE_FLOW.get(current_stage, 'call_ended')
+        next_stage = self.config.STAGE_FLOW.get(current_stage, 'call_ended') # Default to end if stage not found
         session['current_call_data']['current_stage'] = next_stage
         logger.info(f"Session {session['session_id']} moved to stage: {next_stage}")
 
     def _generate_ai_response(self, session: Dict) -> str:
         current_stage = session['current_call_data']['current_stage']
         
+        # If the stage is 'early_objection', the AI must give an objection.
         if current_stage == 'early_objection':
             available_objections = [obj for obj in EARLY_OBJECTIONS if obj not in session['used_objections']]
             if not available_objections:
@@ -140,7 +145,7 @@ class Roleplay12(BaseRoleplay):
             session['used_objections'].append(objection)
             return objection
         
-        # For all other turns, generate a natural, contextual response
+        # For all other stages, generate a natural response.
         if self.is_openai_available():
             return self.openai_service.generate_roleplay_response(
                 session['current_call_data']['conversation_history'][-1]['content'],
@@ -150,6 +155,8 @@ class Roleplay12(BaseRoleplay):
             ).get('response', "I'm listening...")
         else:
             return "Okay, go on."
+
+    # --- The rest of the methods (_handle_call_success, _handle_call_failure, _start_next_call, end_session) are unchanged from the previous version. ---
 
     def _handle_call_success(self, session: Dict) -> Dict:
         session['marathon_state']['calls_passed'] += 1
