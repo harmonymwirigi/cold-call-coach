@@ -1,0 +1,471 @@
+<!-- ===== templates/roleplay/roleplay-2-selection.html ===== -->
+{% extends "base.html" %}
+
+{% block title %}Roleplay 2: Advanced Post-Pitch Training - Cold Calling Coach{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/roleplay.css') }}">
+<style>
+    .selection-container {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 40px 20px;
+    }
+    .back-to-dashboard {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        color: rgba(255, 255, 255, 0.8);
+        text-decoration: none;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        transition: color 0.3s ease;
+    }
+    .back-to-dashboard:hover {
+        color: white;
+    }
+    .selection-card {
+        background: linear-gradient(135deg, #1e1b4b, #3730a3);
+        border-radius: 25px;
+        padding: 40px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        max-width: 900px;
+        width: 100%;
+        border: 3px solid rgba(255, 255, 255, 0.1);
+        text-align: center;
+    }
+    .roleplay-header { 
+        margin-bottom: 40px; 
+    }
+    .roleplay-title {
+        color: white;
+        font-size: 32px;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+    .roleplay-description {
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 18px;
+        margin-bottom: 30px;
+    }
+    .unlock-banner {
+        background: linear-gradient(135deg, #059669, #10b981);
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 30px;
+        text-align: center;
+    }
+    .unlock-banner.locked {
+        background: linear-gradient(135deg, #dc2626, #ef4444);
+    }
+    .unlock-banner h4 {
+        color: white;
+        margin: 0 0 10px 0;
+        font-size: 20px;
+    }
+    .unlock-banner p {
+        color: rgba(255, 255, 255, 0.9);
+        margin: 0;
+        font-size: 14px;
+    }
+    .modes-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 25px;
+        margin-bottom: 30px;
+    }
+    .mode-card {
+        background: rgba(255, 255, 255, 0.1);
+        border: 2px solid transparent;
+        border-radius: 16px;
+        padding: 30px 20px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        backdrop-filter: blur(10px);
+        position: relative;
+        text-decoration: none;
+        min-height: 250px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+    .mode-card:hover:not(.disabled) {
+        background: rgba(255, 255, 255, 0.2);
+        border-color: #a78bfa;
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(167, 139, 250, 0.3);
+    }
+    .mode-card.disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    .mode-icon {
+        font-size: 54px;
+        margin-bottom: 20px;
+        color: #a78bfa;
+    }
+    .mode-name {
+        color: white;
+        font-size: 24px;
+        font-weight: 600;
+        margin-bottom: 12px;
+    }
+    .mode-description {
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 15px;
+        margin-bottom: 15px;
+        line-height: 1.4;
+    }
+    .mode-requirements {
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 13px;
+        font-style: italic;
+    }
+    .mode-status {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        padding: 6px 12px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    .status-available { 
+        background: rgba(16, 185, 129, 0.8); 
+        color: white; 
+    }
+    .status-locked { 
+        background: rgba(239, 68, 68, 0.8); 
+        color: white; 
+    }
+    .status-new {
+        background: rgba(245, 158, 11, 0.8);
+        color: white;
+    }
+    .progress-info {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 25px;
+        margin-top: 25px;
+        text-align: left;
+    }
+    .progress-title {
+        color: white;
+        font-size: 18px;
+        font-weight: 600;
+        margin-bottom: 15px;
+        display: flex;
+        align-items: center;
+    }
+    .progress-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.8);
+        padding: 8px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .progress-item:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+    }
+    .progress-status.status-pass { 
+        color: #10b981; 
+        font-weight: 600;
+    }
+    .progress-status.status-fail { 
+        color: #ef4444; 
+        font-weight: 600;
+    }
+    .progress-status.status-pending { 
+        color: #f59e0b; 
+        font-weight: 600;
+    }
+    .advanced-features {
+        background: rgba(167, 139, 250, 0.2);
+        border-radius: 12px;
+        padding: 20px;
+        margin-top: 20px;
+    }
+    .advanced-features h6 {
+        color: #a78bfa;
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 10px;
+    }
+    .feature-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 10px;
+    }
+    .feature-item {
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+    }
+    .feature-item i {
+        margin-right: 8px;
+        color: #a78bfa;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="selection-container">
+    <a href="{{ url_for('dashboard_page') }}" class="back-to-dashboard">
+        <i class="fas fa-arrow-left me-2"></i>Dashboard
+    </a>
+
+    <div class="selection-card">
+        <div class="roleplay-header">
+            <h1 class="roleplay-title">Roleplay 2: Advanced Post-Pitch Training</h1>
+            <p class="roleplay-description">Master advanced conversation flow: Pitch → Objections → Qualification → Meeting Ask</p>
+        </div>
+
+        <!-- Unlock Status Banner -->
+        <div class="unlock-banner" id="unlock-banner">
+            <h4><i class="fas fa-lock me-2"></i>Advanced Training Locked</h4>
+            <p>Complete Marathon Mode (Roleplay 1.2) to unlock advanced post-pitch conversation training.</p>
+        </div>
+
+        <div class="modes-grid">
+            <!-- Post-Pitch Practice Mode (2.1) -->
+            <div class="mode-card disabled" data-mode-id="2.1">
+                <div class="mode-status status-locked">Locked</div>
+                <div>
+                    <div class="mode-icon"><i class="fas fa-bullhorn"></i></div>
+                    <h3 class="mode-name">Post-Pitch Practice</h3>
+                    <p class="mode-description">Advanced single-call practice covering pitch delivery, objection handling, qualification, and meeting asks.</p>
+                </div>
+                <div class="mode-requirements">Requires Marathon Mode completion</div>
+            </div>
+
+            <!-- Advanced Marathon Mode (2.2) -->
+            <div class="mode-card disabled" data-mode-id="2.2">
+                <div class="mode-status status-locked">Locked</div>
+                <div>
+                    <div class="mode-icon"><i class="fas fa-running"></i></div>
+                    <h3 class="mode-name">Advanced Marathon</h3>
+                    <p class="mode-description">10 advanced calls with complex objections, multiple decision-makers, and challenging scenarios.</p>
+                </div>
+                <div class="mode-requirements">Requires Post-Pitch Practice completion</div>
+            </div>
+        </div>
+
+        <!-- Advanced Features -->
+        <div class="advanced-features">
+            <h6><i class="fas fa-star me-2"></i>What Makes Roleplay 2 Advanced</h6>
+            <div class="feature-list">
+                <div class="feature-item">
+                    <i class="fas fa-comments"></i>
+                    Complex objection handling
+                </div>
+                <div class="feature-item">
+                    <i class="fas fa-check-circle"></i>
+                    Mandatory qualification
+                </div>
+                <div class="feature-item">
+                    <i class="fas fa-calendar"></i>
+                    Professional meeting asks
+                </div>
+                <div class="feature-item">
+                    <i class="fas fa-brain"></i>
+                    Advanced AI evaluation
+                </div>
+                <div class="feature-item">
+                    <i class="fas fa-chart-line"></i>
+                    Detailed performance metrics
+                </div>
+                <div class="feature-item">
+                    <i class="fas fa-graduation-cap"></i>
+                    Expert-level coaching
+                </div>
+            </div>
+        </div>
+
+        <div class="progress-info">
+            <div class="progress-title">
+                <i class="fas fa-chart-line me-2"></i>Your Progress Toward Advanced Training
+            </div>
+            <div class="progress-item">
+                <span>Marathon Mode Status:</span>
+                <span class="progress-status status-pending" id="marathon-status">Not completed</span>
+            </div>
+            <div class="progress-item">
+                <span>Post-Pitch Practice Best Score:</span>
+                <span class="progress-status status-pending" id="practice-21-score">Not attempted</span>
+            </div>
+            <div class="progress-item">
+                <span>Advanced Marathon Status:</span>
+                <span class="progress-status status-pending" id="marathon-22-status">Not attempted</span>
+            </div>
+            <div class="progress-item">
+                <span>Full Cold Call Access:</span>
+                <span class="progress-status status-pending" id="roleplay4-status">Complete Post-Pitch Practice to unlock</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden data for JavaScript -->
+<div id="user-progress-data" style="display: none;">
+    {{ user_progress | tojson if user_progress else '{}' }}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('🎯 Roleplay 2 Selection Page Initialized');
+    
+    let userProgress = {};
+    const progressElement = document.getElementById('user-progress-data');
+    if (progressElement && progressElement.textContent.trim()) {
+        try {
+            userProgress = JSON.parse(progressElement.textContent);
+            console.log('📊 User progress loaded:', userProgress);
+        } catch (e) {
+            console.error("Could not parse user progress JSON", e);
+        }
+    }
+
+    // Event listeners for mode cards
+    document.querySelectorAll('.mode-card').forEach(card => {
+        card.addEventListener('click', (event) => {
+            const modeId = card.dataset.modeId;
+            if (card.classList.contains('disabled')) {
+                event.preventDefault();
+                showAccessDeniedMessage(modeId);
+            } else {
+                console.log(`🚀 Navigating to roleplay/${modeId}`);
+                window.location.href = `/roleplay/${modeId}`;
+            }
+        });
+    });
+
+    function showAccessDeniedMessage(modeId) {
+        const messages = {
+            '2.1': 'Complete Marathon Mode (Roleplay 1.2) with 6/10 passing calls to unlock Post-Pitch Practice.',
+            '2.2': 'Complete Post-Pitch Practice (Roleplay 2.1) with a score of 70+ to unlock Advanced Marathon.'
+        };
+        
+        const message = messages[modeId] || 'This mode is currently locked.';
+        
+        // Create a better notification
+        const notification = document.createElement('div');
+        notification.className = 'alert alert-warning position-fixed';
+        notification.style.cssText = `
+            top: 20px; 
+            right: 20px; 
+            z-index: 9999; 
+            max-width: 350px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        `;
+        notification.innerHTML = `
+            <div class="d-flex align-items-center">
+                <i class="fas fa-lock me-2"></i>
+                <div>
+                    <strong>Access Restricted</strong><br>
+                    <small>${message}</small>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 5000);
+    }
+
+    function updateUIBasedOnProgress() {
+        const unlockBanner = document.getElementById('unlock-banner');
+        
+        // Check Marathon Mode (1.2) status
+        const marathonData = userProgress['1.2'];
+        const marathonPassed = marathonData && marathonData.marathon_passed;
+        
+        if (marathonPassed) {
+            // User has unlocked Roleplay 2!
+            unlockBanner.classList.remove('locked');
+            unlockBanner.innerHTML = `
+                <h4><i class="fas fa-unlock me-2"></i>Advanced Training Unlocked!</h4>
+                <p>Congratulations! You've completed Marathon Mode and unlocked advanced post-pitch conversation training.</p>
+            `;
+            
+            // Unlock 2.1
+            const card21 = document.querySelector('[data-mode-id="2.1"]');
+            if (card21) {
+                card21.classList.remove('disabled');
+                const statusBadge = card21.querySelector('.mode-status');
+                statusBadge.textContent = 'Available';
+                statusBadge.classList.remove('status-locked');
+                statusBadge.classList.add('status-available');
+            }
+        }
+        
+        // Update progress indicators
+        if (marathonData) {
+            const marathonStatus = document.getElementById('marathon-status');
+            const bestRun = marathonData.marathon_best_run || 0;
+            
+            if (marathonPassed) {
+                marathonStatus.textContent = `Completed (${bestRun}/10)`;
+                marathonStatus.className = 'progress-status status-pass';
+            } else {
+                marathonStatus.textContent = `${bestRun}/10 calls passed`;
+                marathonStatus.className = 'progress-status status-pending';
+            }
+        }
+        
+        // Update 2.1 progress
+        const practice21Data = userProgress['2.1'];
+        if (practice21Data) {
+            const score21 = document.getElementById('practice-21-score');
+            const bestScore = practice21Data.best_score || 0;
+            score21.textContent = `${bestScore}/100`;
+            score21.className = 'progress-status ' + (bestScore >= 70 ? 'status-pass' : 'status-fail');
+            
+            // If 2.1 is passed, unlock 2.2
+            if (bestScore >= 70) {
+                const card22 = document.querySelector('[data-mode-id="2.2"]');
+                if (card22) {
+                    card22.classList.remove('disabled');
+                    const statusBadge = card22.querySelector('.mode-status');
+                    statusBadge.textContent = 'Available';
+                    statusBadge.classList.remove('status-locked');
+                    statusBadge.classList.add('status-available');
+                }
+                
+                // Update Roleplay 4 access
+                const rp4Status = document.getElementById('roleplay4-status');
+                rp4Status.textContent = 'Unlocked!';
+                rp4Status.className = 'progress-status status-pass';
+            }
+        }
+        
+        // Update 2.2 progress if exists
+        const marathon22Data = userProgress['2.2'];
+        if (marathon22Data) {
+            const marathon22Status = document.getElementById('marathon-22-status');
+            const bestScore = marathon22Data.best_score || 0;
+            marathon22Status.textContent = `${bestScore}/100`;
+            marathon22Status.className = 'progress-status ' + (bestScore >= 70 ? 'status-pass' : 'status-fail');
+        }
+    }
+
+    updateUIBasedOnProgress();
+});
+</script>
+{% endblock %}

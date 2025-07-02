@@ -22,10 +22,49 @@ class UserProgressService:
                 self.supabase = None
         
         self.progression_rules = {
-            '1.3': {'requires_completion': '1.2', 'pass_needed': True},
-            '2.1': {'requires_completion': '1.3', 'pass_needed': True},
+        '1.3': {
+            'requires_completion': '1.2', 
+            'pass_needed': True,
+            'name': 'Legend Mode',
+            'description': 'Requires Marathon Mode completion'
+        },
+        '2.1': {
+            'requires_completion': '1.2',
+            'pass_needed': True,  # Must pass Marathon Mode
+            'name': 'Post-Pitch Practice', 
+            'description': 'Advanced practice unlocked by Marathon completion',
+            'unlock_benefits': [
+                'Access to advanced objection handling',
+                'Qualification training',
+                'Meeting ask practice',
+                'Module 2 content preview'
+            ]
+        },
+        '2.2': {
+            'requires_completion': '2.1',
+            'pass_needed': True,
+            'name': 'Advanced Marathon',
+            'description': 'Requires Post-Pitch Practice completion'
+        },
+        '3': {
+            'always_available': True,
+            'name': 'Warm-up Challenge',
+            'description': 'Always available for skill sharpening'
+        },
+        '4': {
+            'requires_completion': '2.1',
+            'pass_needed': True,
+            'name': 'Full Cold Call Simulation',
+            'description': 'Complete simulation requires advanced training'
+        },
+        '5': {
+            'requires_completion': '2.2',
+            'pass_needed': True,
+            'name': 'Power Hour Challenge',
+            'description': 'Ultimate endurance test'
         }
-        logger.info("UserProgressService initialized")
+    }
+    logger.info("UserProgressService initialized with enhanced progression rules")
 
     def get_user_roleplay_stats(self, user_id: str, roleplay_id: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -50,35 +89,81 @@ class UserProgressService:
             return {}
         
     def check_roleplay_access(self, user_id: str, roleplay_id: str) -> Dict[str, Any]:
-        """Check if user has access to a specific roleplay based on their stats."""
+        """Enhanced access check with detailed reasoning"""
         try:
-            # Practice mode is the entry point and is always available.
-            if roleplay_id in ['1.1', '1.2']:
-                return {'allowed': True, 'reason': 'Starting mode is always available.'}
+            # Always available roleplays
+            always_available = ['1.1', '1.2', '3']
+            if roleplay_id in always_available:
+                return {'allowed': True, 'reason': 'Always available'}
             
+            # Check progression rules
             rule = self.progression_rules.get(roleplay_id)
             if not rule:
-                return {'allowed': True, 'reason': 'No unlock rule defined.'}
+                return {'allowed': True, 'reason': 'No specific unlock requirement'}
 
             required_rp_id = rule.get('requires_completion')
-            required_rp_name = self.progression_rules.get(required_rp_id, {}).get('name', f"Roleplay {required_rp_id}")
-            
+            if not required_rp_id:
+                return {'allowed': True, 'reason': 'No prerequisite required'}
+                
+            # Get user's progress on required roleplay
             user_stats = self.get_user_roleplay_stats(user_id, required_rp_id)
             required_stats = user_stats.get(required_rp_id)
             
-            # For Legend mode (1.3), check if Marathon (1.2) has been passed.
-            if required_rp_id == '1.2':
-                if not required_stats or not required_stats.get('marathon_passed', False):
-                    return {'allowed': False, 'reason': f"Pass '{required_rp_name}' to unlock this."}
-            # For other unlocks, a simple 'completed' status is enough.
-            elif not required_stats or not required_stats.get('completed', False):
-                 return {'allowed': False, 'reason': f"Complete '{required_rp_name}' to unlock this."}
+            if not required_stats:
+                return {
+                    'allowed': False, 
+                    'reason': f'Complete {rule.get("description", required_rp_id)} first',
+                    'required_roleplay': required_rp_id,
+                    'required_name': rule.get('name', f'Roleplay {required_rp_id}')
+                }
+            
+            # ENHANCED: Check specific pass conditions for each roleplay type
+            if required_rp_id == '1.2':  # Marathon Mode
+                # For 2.1 and 1.3, check marathon_passed flag
+                if not required_stats.get('marathon_passed', False):
+                    return {
+                        'allowed': False,
+                        'reason': f'Pass Marathon Mode (6/10 calls) to unlock {roleplay_id}',
+                        'required_roleplay': required_rp_id,
+                        'required_name': 'Marathon Mode',
+                        'current_progress': f"{required_stats.get('marathon_best_run', 0)}/10 calls passed"
+                    }
+            elif required_rp_id == '1.3':  # Legend Mode
+                if not required_stats.get('legend_completed', False):
+                    return {
+                        'allowed': False,
+                        'reason': f'Complete Legend Mode to unlock {roleplay_id}',
+                        'required_roleplay': required_rp_id,
+                        'required_name': 'Legend Mode'
+                    }
+            elif required_rp_id == '2.1':  # Post-Pitch Practice
+                # Check if user has passed 2.1 (score >= 70)
+                if not required_stats.get('best_score', 0) >= 70:
+                    return {
+                        'allowed': False,
+                        'reason': f'Pass Post-Pitch Practice (70+ score) to unlock {roleplay_id}',
+                        'required_roleplay': required_rp_id,
+                        'required_name': 'Post-Pitch Practice',
+                        'current_progress': f"Best score: {required_stats.get('best_score', 0)}/100"
+                    }
+            else:
+                # Generic completion check
+                if not required_stats.get('completed', False):
+                    return {
+                        'allowed': False,
+                        'reason': f'Complete {required_rp_id} to unlock {roleplay_id}',
+                        'required_roleplay': required_rp_id
+                    }
 
-            return {'allowed': True, 'reason': 'Requirement met.'}
+            return {
+                'allowed': True, 
+                'reason': 'Requirement met',
+                'unlocked_by': required_rp_id
+            }
             
         except Exception as e:
             logger.error(f"Error in check_roleplay_access for {roleplay_id}: {e}", exc_info=True)
-            return {'allowed': False, 'reason': 'Error checking access.'}
+            return {'allowed': False, 'reason': 'Error checking access'}
 
     def get_user_roleplay_progress(self, user_id: str, roleplay_ids: Optional[List[str]] = None) -> Dict[str, Any]:
         """Get user's progress for specific roleplays or all roleplays"""
@@ -226,7 +311,7 @@ class UserProgressService:
             return None
         
     def update_user_progress_after_completion(self, completion_data: Dict[str, Any]) -> bool:
-        """Updates aggregate stats, usage, and special flags after a session."""
+        """Enhanced progress update with Roleplay 2.1 unlocking"""
         try:
             if not self.supabase: return False
 
@@ -235,6 +320,7 @@ class UserProgressService:
             score = completion_data.get('score', 0)
             duration = completion_data.get('duration_minutes', 1)
             marathon_results = completion_data.get('marathon_results', {})
+            advanced_results = completion_data.get('advanced_results', {})
 
             if not all([user_id, roleplay_id, score is not None]):
                 logger.warning(f"Insufficient data to update progress: {completion_data}")
@@ -242,30 +328,60 @@ class UserProgressService:
 
             client = self.supabase.get_service_client()
             
-            # --- START: NEW MARATHON PASS LOGIC ---
+            # --- ENHANCED: Marathon Mode completion unlocks 2.1 ---
             if roleplay_id == '1.2' and marathon_results.get('marathon_passed', False):
-                logger.info(f"Marathon passed for user {user_id}. Unlocking content and Legend Mode.")
+                logger.info(f"Marathon passed for user {user_id}. Unlocking Roleplay 2.1 and advanced content.")
                 
                 unlock_timestamp = datetime.now(timezone.utc)
                 twenty_four_hours_from_now = (unlock_timestamp + timedelta(hours=24)).isoformat()
                 
+                # Unlock advanced features
                 profile_updates = {
-                    'legend_attempt_used': False, # Grant one Legend try
-                    'module_2_unlocked_until': twenty_four_hours_from_now, # Unlock modules
+                    'legend_attempt_used': False,  # Grant Legend try
+                    'module_2_unlocked_until': twenty_four_hours_from_now,  # Unlock Module 2
+                    'roleplay_2_1_unlocked': True,  # NEW: Unlock 2.1
                     'updated_at': unlock_timestamp.isoformat()
                 }
                 self.supabase.update_data_by_id('user_profiles', {'id': user_id}, profile_updates)
-                logger.info(f"User {user_id} profile updated with Marathon Pass rewards.")
-            # --- END: NEW MARATHON PASS LOGIC ---
+                
+                # Create initial progress record for 2.1
+                try:
+                    client.table('user_roleplay_progress').insert({
+                        'user_id': user_id,
+                        'roleplay_id': '2.1',
+                        'is_unlocked': True,
+                        'unlocked_at': unlock_timestamp.isoformat(),
+                        'unlocked_by': '1.2',
+                        'created_at': unlock_timestamp.isoformat()
+                    }).execute()
+                    logger.info(f"Created initial progress record for Roleplay 2.1 for user {user_id}")
+                except Exception as insert_error:
+                    logger.warning(f"Could not create 2.1 progress record: {insert_error}")
+                
+                logger.info(f"User {user_id} profile updated with Marathon Pass rewards and 2.1 access.")
 
-            # --- START: NEW LEGEND MODE START LOGIC ---
-            if roleplay_id == '1.3': # If Legend Mode is starting
-                 self.supabase.update_data_by_id('user_profiles', {'id': user_id}, {'legend_attempt_used': True})
-                 logger.info(f"User {user_id} started Legend Mode, flag set to used.")
-            # --- END: NEW LEGEND MODE START LOGIC ---
+            # --- ENHANCED: Roleplay 2.1 completion unlocks further content ---
+            if roleplay_id == '2.1' and score >= 70:
+                logger.info(f"Post-Pitch Practice passed for user {user_id}. Unlocking advanced roleplays.")
+                
+                unlock_timestamp = datetime.now(timezone.utc)
+                
+                # Unlock 2.2 and 4
+                for unlock_id in ['2.2', '4']:
+                    try:
+                        client.table('user_roleplay_progress').insert({
+                            'user_id': user_id,
+                            'roleplay_id': unlock_id,
+                            'is_unlocked': True,
+                            'unlocked_at': unlock_timestamp.isoformat(),
+                            'unlocked_by': '2.1',
+                            'created_at': unlock_timestamp.isoformat()
+                        }).execute()
+                        logger.info(f"Unlocked Roleplay {unlock_id} for user {user_id}")
+                    except Exception as unlock_error:
+                        logger.warning(f"Could not unlock {unlock_id}: {unlock_error}")
 
-            # 1. Update user_roleplay_stats (existing logic is fine)
-            # THIS IS NOW user_roleplay_progress table
+            # Update user_roleplay_progress (main stats)
             current_stats_dict = self.get_user_roleplay_stats(user_id, roleplay_id)
             current_stats = current_stats_dict.get(roleplay_id)
             
@@ -280,27 +396,47 @@ class UserProgressService:
                     'best_score': max(current_stats.get('best_score', 0), score),
                     'completed': current_stats.get('completed') or (score >= 70)
                 })
-                # Add marathon-specific updates
+                
+                # Add type-specific updates
                 if marathon_results:
                     updates['marathon_passed'] = current_stats.get('marathon_passed') or marathon_results.get('marathon_passed')
+                    updates['marathon_best_run'] = max(
+                        current_stats.get('marathon_best_run', 0),
+                        marathon_results.get('calls_passed', 0)
+                    )
+                
+                if advanced_results:
+                    updates['advanced_completed'] = advanced_results.get('company_fit_qualified', False) and advanced_results.get('meeting_asked', False)
+                    updates['stages_completed'] = advanced_results.get('stages_completed', 0)
 
                 client.table('user_roleplay_progress').update(updates).eq('id', current_stats['id']).execute()
             else:
                 updates.update({
-                    'user_id': user_id, 'roleplay_id': roleplay_id, 'total_attempts': 1, 'best_score': score,
+                    'user_id': user_id, 
+                    'roleplay_id': roleplay_id, 
+                    'total_attempts': 1, 
+                    'best_score': score,
                     'completed': score >= 70
                 })
+                
                 if marathon_results:
                     updates['marathon_passed'] = marathon_results.get('marathon_passed')
+                    updates['marathon_best_run'] = marathon_results.get('calls_passed', 0)
+                
+                if advanced_results:
+                    updates['advanced_completed'] = advanced_results.get('company_fit_qualified', False) and advanced_results.get('meeting_asked', False)
+                    updates['stages_completed'] = advanced_results.get('stages_completed', 0)
+                    
                 client.table('user_roleplay_progress').insert(updates).execute()
             
             logger.info(f"Updated stats for user {user_id} on roleplay {roleplay_id}")
 
-            # 2. Update user_profiles for usage time (existing logic is fine)
+            # Update user_profiles for usage time
             client.rpc('increment_usage_minutes', { 'p_user_id': user_id, 'p_duration': duration }).execute()
             logger.info(f"Updated usage for user {user_id}: +{duration} minutes via RPC.")
             
             return True
+            
         except Exception as e:
             logger.error(f"Error in update_user_progress_after_completion: {e}", exc_info=True)
             return False
@@ -372,19 +508,24 @@ class UserProgressService:
     def get_available_roleplays(self, user_id: str) -> List[str]:
         """Get list of roleplays available to the user"""
         try:
-            progress = self.get_user_roleplay_progress(user_id)
             available = []
             
-            for roleplay_id, rules in self.progression_rules.items():
+            # Always available
+            always_available = ['1.1', '1.2', '3']
+            available.extend(always_available)
+            
+            # Check unlocked roleplays
+            for roleplay_id in ['1.3', '2.1', '2.2', '4', '5']:
                 access_check = self.check_roleplay_access(user_id, roleplay_id)
                 if access_check['allowed']:
                     available.append(roleplay_id)
             
+            logger.info(f"Available roleplays for user {user_id}: {available}")
             return available
             
         except Exception as e:
             logger.error(f"Error getting available roleplays: {e}")
-            return ['1.1']  # Always return at least Practice Mode
+            return ['1.1', '1.2', '3']  # Safe fallback
 
     def get_completion_stats(self, user_id: str) -> Dict[str, Any]:
         """Get user's overall completion statistics"""
@@ -466,37 +607,56 @@ class UserProgressService:
             return []
 
     def get_next_recommendations(self, user_id: str) -> List[Dict[str, Any]]:
-        """Get recommended next steps for the user"""
+        """Enhanced recommendations including 2.1 pathway"""
         try:
             progress = self.get_user_roleplay_progress(user_id)
             recommendations = []
             
-            # Check what's available and not completed
-            for roleplay_id, rules in self.progression_rules.items():
-                access_check = self.check_roleplay_access(user_id, roleplay_id)
-                
-                if access_check['allowed']:
-                    user_progress = progress.get(roleplay_id, {})
-                    
-                    if not user_progress.get('completed'):
-                        priority = 'high' if roleplay_id == '1.1' else 'medium'
-                        
-                        recommendations.append({
-                            'roleplay_id': roleplay_id,
-                            'name': rules['name'],
-                            'priority': priority,
-                            'reason': self._get_recommendation_reason(roleplay_id, user_progress),
-                            'best_score': user_progress.get('best_score', 0),
-                            'attempts': user_progress.get('total_attempts', 0)
-                        })
+            # Check progression pathway
+            marathon_progress = progress.get('1.2', {})
+            if marathon_progress.get('marathon_passed', False):
+                # User has passed marathon - recommend 2.1
+                rp21_progress = progress.get('2.1', {})
+                if not rp21_progress.get('best_score', 0) >= 70:
+                    recommendations.append({
+                        'roleplay_id': '2.1',
+                        'name': 'Post-Pitch Practice',
+                        'priority': 'high',
+                        'reason': 'Newly unlocked! Practice advanced conversation skills.',
+                        'best_score': rp21_progress.get('best_score', 0),
+                        'attempts': rp21_progress.get('total_attempts', 0),
+                        'unlock_benefit': 'Unlocks Advanced Marathon and Full Cold Call'
+                    })
+            else:
+                # User hasn't passed marathon yet
+                if marathon_progress.get('total_attempts', 0) == 0:
+                    recommendations.append({
+                        'roleplay_id': '1.2',
+                        'name': 'Marathon Mode',
+                        'priority': 'high',
+                        'reason': 'Complete this to unlock advanced content!',
+                        'best_score': marathon_progress.get('marathon_best_run', 0),
+                        'attempts': marathon_progress.get('total_attempts', 0),
+                        'unlock_benefit': 'Unlocks Legend Mode and Post-Pitch Practice'
+                    })
             
-            # Sort by priority and attempts
-            recommendations.sort(key=lambda x: (
-                0 if x['priority'] == 'high' else 1,
-                x['attempts']
-            ))
+            # Always recommend practice if struggling
+            practice_progress = progress.get('1.1', {})
+            if practice_progress.get('best_score', 0) < 80:
+                recommendations.append({
+                    'roleplay_id': '1.1',
+                    'name': 'Practice Mode',
+                    'priority': 'medium',
+                    'reason': 'Strengthen fundamentals before advancing',
+                    'best_score': practice_progress.get('best_score', 0),
+                    'attempts': practice_progress.get('total_attempts', 0)
+                })
             
-            return recommendations[:3]  # Return top 3 recommendations
+            # Sort by priority
+            priority_order = {'high': 0, 'medium': 1, 'low': 2}
+            recommendations.sort(key=lambda x: (priority_order.get(x['priority'], 3), x['attempts']))
+            
+            return recommendations[:3]
             
         except Exception as e:
             logger.error(f"Error getting recommendations: {e}")

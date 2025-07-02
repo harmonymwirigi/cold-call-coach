@@ -1,17 +1,17 @@
-# ===== FIXED: services/roleplay_engine.py =====
+# ===== UPDATED: services/roleplay_engine.py =====
+
 import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
 import uuid
 
-# Re-import just in case
 from .supabase_client import SupabaseService
 from .user_progress_service import UserProgressService
 
 logger = logging.getLogger(__name__)
 
 class RoleplayEngine:
-    """FIXED Roleplay Engine with robust session management and recovery"""
+    """Enhanced Roleplay Engine with Roleplay 2.1 support"""
     
     def __init__(self, openai_service=None, supabase_service=None):
         self.active_sessions = {}
@@ -33,85 +33,67 @@ class RoleplayEngine:
         logger.info(f"✅ RoleplayEngine initialized with {len(self.roleplay_implementations)} roleplay types")
     
     def _load_roleplay_implementations(self):
-        from .roleplay.roleplay_1_1 import Roleplay11
-        from .roleplay.roleplay_1_2 import Roleplay12
-        from .roleplay.roleplay_1_3 import Roleplay13
-        self.roleplay_implementations = {
-            '1.1': Roleplay11(self.openai_service),
-            '1.2': Roleplay12(self.openai_service),
-            '1.3': Roleplay13(self.openai_service),
-        }
+        """Load all available roleplay implementations"""
+        try:
+            # Import existing roleplays
+            from .roleplay.roleplay_1_1 import Roleplay11
+            from .roleplay.roleplay_1_2 import Roleplay12
+            
+            # Import new Roleplay 2.1
+            from .roleplay.roleplay_2_1 import Roleplay21
+            
+            self.roleplay_implementations = {
+                '1.1': Roleplay11(self.openai_service),
+                '1.2': Roleplay12(self.openai_service),
+                '2.1': Roleplay21(self.openai_service),  # NEW: Advanced Post-Pitch Practice
+            }
+            
+            # Try to load other roleplays if they exist
+            try:
+                from .roleplay.roleplay_1_3 import Roleplay13
+                self.roleplay_implementations['1.3'] = Roleplay13(self.openai_service)
+                logger.info("✅ Loaded Roleplay 1.3 (Legend Mode)")
+            except ImportError:
+                logger.info("⏳ Roleplay 1.3 not yet implemented")
+            
+            try:
+                from .roleplay.roleplay_2_2 import Roleplay22
+                self.roleplay_implementations['2.2'] = Roleplay22(self.openai_service)
+                logger.info("✅ Loaded Roleplay 2.2 (Advanced Marathon)")
+            except ImportError:
+                logger.info("⏳ Roleplay 2.2 not yet implemented")
+            
+            # Try to load direct roleplays (3, 4, 5)
+            for roleplay_id in ['3', '4', '5']:
+                try:
+                    module_name = f'.roleplay.roleplay_{roleplay_id}'
+                    class_name = f'Roleplay{roleplay_id}'
+                    module = __import__(f'services.roleplay.roleplay_{roleplay_id}', fromlist=[class_name])
+                    roleplay_class = getattr(module, class_name)
+                    self.roleplay_implementations[roleplay_id] = roleplay_class(self.openai_service)
+                    logger.info(f"✅ Loaded Roleplay {roleplay_id}")
+                except ImportError:
+                    logger.info(f"⏳ Roleplay {roleplay_id} not yet implemented")
+            
+            logger.info(f"🎮 Loaded roleplay implementations: {list(self.roleplay_implementations.keys())}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error loading roleplay implementations: {e}")
+            # Create fallback implementations
+            self._create_fallback_implementations()
 
-    def _create_fallback_roleplay(self, roleplay_id: str):
-        """Create a minimal fallback roleplay implementation"""
-        class FallbackRoleplay:
-            def __init__(self, roleplay_id):
-                self.roleplay_id = roleplay_id
-                self.active_sessions = {}
-                logger.warning(f"⚠️ Using fallback implementation for {roleplay_id}")
-            
-            def get_roleplay_info(self):
-                return {
-                    'id': roleplay_id,
-                    'name': f'Roleplay {roleplay_id}',
-                    'description': 'Basic roleplay training (fallback mode)',
-                    'type': 'practice',
-                    'features': {'ai_evaluation': False, 'basic_coaching': True}
-                }
-            
-            def create_session(self, user_id, mode, user_context):
-                session_id = f"{user_id}_{roleplay_id}_{int(datetime.now().timestamp())}"
-                session_data = {
-                    'session_id': session_id,
-                    'user_id': user_id,
-                    'roleplay_id': roleplay_id,
-                    'mode': mode,
-                    'started_at': datetime.now(timezone.utc).isoformat(),
-                    'conversation_history': [],
-                    'current_stage': 'phone_pickup',
-                    'session_active': True,
-                    'turn_count': 0,
-                    'user_context': user_context
-                }
-                self.active_sessions[session_id] = session_data
-                return { 'success': True, 'session_id': session_id, 'initial_response': 'Hello?'}
-            
-            def process_user_input(self, session_id, user_input):
-                if session_id not in self.active_sessions:
-                    return {'success': False, 'error': 'Session not found'}
-                
-                session = self.active_sessions[session_id]
-                session['turn_count'] += 1
-                
-                # Very basic logic - continue for a few turns then end
-                if session['turn_count'] < 5:
-                    return {
-                        'success': True,
-                        'ai_response': 'I see. Please continue.',
-                        'call_continues': True,
-                        'evaluation': {'score': 2, 'passed': True}
-                    }
-                else:
-                    return {
-                        'success': True,
-                        'ai_response': 'Thank you for calling.',
-                        'call_continues': False,
-                        'evaluation': {'score': 2, 'passed': True}
-                    }
-            
-            def end_session(self, session_id, forced_end=False):
-                session_data = self.active_sessions.pop(session_id, {})
-                return {
-                    'success': True,
-                    'duration_minutes': 2,
-                    'session_success': True,
-                    'coaching': {'overall': 'Good practice session! (Fallback mode)'},
-                    'overall_score': 75,
-                    'session_data': session_data
-                }
+    def _create_fallback_implementations(self):
+        """Create fallback implementations for missing roleplays"""
+        from .base_roleplay import BaseRoleplay
         
-        return FallbackRoleplay(roleplay_id)
-    
+        essential_roleplays = ['1.1', '1.2', '2.1']
+        for roleplay_id in essential_roleplays:
+            if roleplay_id not in self.roleplay_implementations:
+                logger.warning(f"⚠️ Creating fallback for {roleplay_id}")
+                fallback = BaseRoleplay(self.openai_service)
+                fallback.roleplay_id = roleplay_id
+                self.roleplay_implementations[roleplay_id] = fallback
+
     def get_available_roleplays(self) -> List[str]:
         """Get list of available roleplay IDs"""
         return list(self.roleplay_implementations.keys())
@@ -121,17 +103,91 @@ class RoleplayEngine:
         try:
             if roleplay_id not in self.roleplay_implementations:
                 return {'error': f'Roleplay {roleplay_id} not found'}
+            
             implementation = self.roleplay_implementations[roleplay_id]
             return implementation.get_roleplay_info()
+            
         except Exception as e:
             logger.error(f"❌ Error getting roleplay info for {roleplay_id}: {e}")
-            return {'error': str(e)}
+            return self._get_fallback_info(roleplay_id)
+
+    def _get_fallback_info(self, roleplay_id: str) -> Dict[str, Any]:
+        """Get fallback info for roleplays"""
+        fallback_info = {
+            '1.1': {
+                'id': '1.1',
+                'name': 'Practice Mode',
+                'description': 'Single call with detailed coaching',
+                'type': 'practice'
+            },
+            '1.2': {
+                'id': '1.2', 
+                'name': 'Marathon Mode',
+                'description': '10 calls, need 6 to pass',
+                'type': 'marathon'
+            },
+            '1.3': {
+                'id': '1.3',
+                'name': 'Legend Mode', 
+                'description': '6 perfect calls in a row',
+                'type': 'legend'
+            },
+            '2.1': {
+                'id': '2.1',
+                'name': 'Post-Pitch Practice',
+                'description': 'Advanced pitch, objections, qualification, and meeting ask',
+                'type': 'advanced_practice'
+            },
+            '2.2': {
+                'id': '2.2',
+                'name': 'Advanced Marathon',
+                'description': '10 advanced calls with complex scenarios', 
+                'type': 'advanced_marathon'
+            },
+            '3': {
+                'id': '3',
+                'name': 'Warm-up Challenge',
+                'description': '25 rapid-fire questions',
+                'type': 'challenge'
+            },
+            '4': {
+                'id': '4',
+                'name': 'Full Cold Call Simulation',
+                'description': 'Complete end-to-end call practice',
+                'type': 'simulation'
+            },
+            '5': {
+                'id': '5',
+                'name': 'Power Hour Challenge', 
+                'description': '10 consecutive calls for endurance',
+                'type': 'endurance'
+            }
+        }
+        
+        return fallback_info.get(roleplay_id, {
+            'id': roleplay_id,
+            'name': f'Roleplay {roleplay_id}',
+            'description': 'Roleplay training',
+            'type': 'unknown'
+        })
     
     def create_session(self, user_id: str, roleplay_id: str, mode: str, user_context: Dict) -> Dict[str, Any]:
-        """Create a roleplay session and store it in active memory."""
+        """Create a roleplay session with enhanced validation"""
         try:
             if not user_id or not roleplay_id:
                 return {'success': False, 'error': 'Missing required parameters'}
+            
+            # Enhanced access check for advanced roleplays
+            if roleplay_id in ['2.1', '2.2', '4', '5']:
+                access_check = self.progress_service.check_roleplay_access(user_id, roleplay_id)
+                if not access_check['allowed']:
+                    return {
+                        'success': False, 
+                        'error': 'Access denied',
+                        'reason': access_check['reason'],
+                        'required_roleplay': access_check.get('required_roleplay'),
+                        'access_denied': True
+                    }
             
             if roleplay_id not in self.roleplay_implementations:
                 return {'success': False, 'error': f'Roleplay {roleplay_id} not available'}
@@ -158,8 +214,9 @@ class RoleplayEngine:
                     'user_id': user_id,
                 }
                 logger.info(f"✅ Session {session_id} created and stored in active memory.")
-                # We no longer persist to the active_sessions table here.
-                # It's better managed in memory or a cache like Redis if needed.
+            
+            # Log the attempt for progress tracking
+            self.progress_service.log_roleplay_attempt(user_id, roleplay_id, session_id)
             
             return session_result
             
@@ -167,9 +224,8 @@ class RoleplayEngine:
             logger.error(f"❌ Error creating roleplay session: {e}", exc_info=True)
             return {'success': False, 'error': f'Failed to create session: {str(e)}'}
 
-    
     def process_user_input(self, session_id: str, user_input: str) -> Dict[str, Any]:
-        """Process user input by delegating to the correct implementation."""
+        """Process user input by delegating to the correct implementation"""
         try:
             if not session_id or not user_input:
                 return {'success': False, 'error': 'Missing required parameters'}
@@ -183,9 +239,6 @@ class RoleplayEngine:
             
             implementation_id = session_info['implementation_id']
             implementation = self.roleplay_implementations[implementation_id]
-            
-            # THE FIX: This function was removed, so we must remove the call to it.
-            # self._update_session_activity(session_id) 
             
             session_data = session_info['session_data']
             if not session_data.get('session_active', True):
@@ -202,18 +255,17 @@ class RoleplayEngine:
             return result
             
         except Exception as e:
-            logger.error(f"❌ Error processing user input: {e}", exc_info=True) # Added exc_info for better logging
+            logger.error(f"❌ Error processing user input: {e}", exc_info=True)
             return {'success': False, 'error': f"Processing failed: {str(e)}"}
     
     def end_session(self, session_id: str, forced_end: bool = False) -> Dict[str, Any]:
-        """End session, calculate results, and save the permanent record to the database."""
+        """End session with enhanced results processing"""
         try:
             logger.info(f"📞 Ending session {session_id} (forced: {forced_end})")
             
             session_info = self.active_sessions.get(session_id)
             if not session_info:
                 logger.warning(f"⚠️ Session {session_id} not found in active memory for ending.")
-                # Attempt to recover from implementation state if it exists
                 for impl in self.roleplay_implementations.values():
                     if session_id in impl.active_sessions:
                         session_info = {'session_data': impl.active_sessions.get(session_id)}
@@ -252,10 +304,15 @@ class RoleplayEngine:
                         'forced_end': forced_end
                     }
                     
-                    # 1. Save the final record to the correct 'roleplay_completions' table.
-                    self.progress_service.save_roleplay_completion(completion_data)
+                    # Add type-specific results
+                    if result.get('marathon_results'):
+                        completion_data['marathon_results'] = result.get('marathon_results')
                     
-                    # 2. Update the user's aggregate stats and usage.
+                    if result.get('advanced_results'):
+                        completion_data['advanced_results'] = result.get('advanced_results')
+                    
+                    # Save completion and update progress
+                    self.progress_service.save_roleplay_completion(completion_data)
                     self.progress_service.update_user_progress_after_completion(completion_data)
 
                     logger.info(f"✅ Session {session_id} results have been saved to the database.")
@@ -318,11 +375,6 @@ class RoleplayEngine:
             logger.info(f"🧹 Cleaning up stale active session {session_id} for user {user_id}")
             self.active_sessions.pop(session_id, None)
     
-        
-    def _cleanup_session_from_database(self, session_id: str):
-        # ...
-        pass
-    
     def cleanup_old_sessions(self, max_age_hours: int = 24):
         """Clean up old/abandoned sessions"""
         try:
@@ -338,7 +390,7 @@ class RoleplayEngine:
                             sessions_to_remove.append(session_id)
                     except Exception as parse_error:
                         logger.warning(f"⚠️ Error parsing last_activity for session {session_id}: {parse_error}")
-                        sessions_to_remove.append(session_id)  # Remove sessions with bad timestamps
+                        sessions_to_remove.append(session_id)
             
             for session_id in sessions_to_remove:
                 try:
@@ -355,6 +407,36 @@ class RoleplayEngine:
         except Exception as e:
             logger.error(f"❌ Error cleaning up old sessions: {e}")
             return 0
+
+    def get_user_available_roleplays(self, user_id: str) -> Dict[str, Any]:
+        """Get available roleplays for a specific user with access info"""
+        try:
+            available_roleplays = {}
+            
+            for roleplay_id in self.get_available_roleplays():
+                try:
+                    # Get roleplay info
+                    roleplay_info = self.get_roleplay_info(roleplay_id)
+                    
+                    # Check access
+                    access_check = self.progress_service.check_roleplay_access(user_id, roleplay_id)
+                    
+                    available_roleplays[roleplay_id] = {
+                        **roleplay_info,
+                        'access_allowed': access_check['allowed'],
+                        'access_reason': access_check['reason'],
+                        'required_roleplay': access_check.get('required_roleplay'),
+                        'unlock_benefit': access_check.get('unlock_benefit')
+                    }
+                    
+                except Exception as roleplay_error:
+                    logger.warning(f"Error checking roleplay {roleplay_id}: {roleplay_error}")
+            
+            return available_roleplays
+            
+        except Exception as e:
+            logger.error(f"Error getting user available roleplays: {e}")
+            return {}
 
 # Global instance for singleton pattern
 _roleplay_engine = None

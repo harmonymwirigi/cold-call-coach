@@ -176,52 +176,6 @@ def render_roleplay_selection(main_roleplay_id, user_id):
         return redirect(url_for('dashboard_page'))
 
 
-@app.route('/roleplay/<roleplay_id>')
-def roleplay_page(roleplay_id):
-    """Handle hierarchical roleplay routing - COMPLETE FIX"""
-    try:
-        # Check authentication
-        if 'user_id' not in session:
-            logger.warning("Unauthenticated access to roleplay page")
-            return redirect(url_for('login_page'))
-        
-        user_id = session.get('user_id')
-        logger.info(f"🎯 User {user_id} accessing roleplay {roleplay_id}")
-        
-        # Handle different roleplay ID formats
-        if roleplay_id == '1':
-            # Roleplay 1 - show selection page with modes 1.1, 1.2, 1.3
-            logger.info("📋 Showing Roleplay 1 selection page")
-            return render_roleplay_1_selection(user_id)
-        
-        elif roleplay_id == '2':
-            # Roleplay 2 - show selection page with modes 2.1, 2.2
-            logger.info("📋 Showing Roleplay 2 selection page")
-            return render_roleplay_2_selection(user_id)
-        
-        elif roleplay_id in ['3', '4', '5']:
-            # Roleplays 3, 4, 5 - go directly to training (no selection)
-            logger.info(f"🎮 Going directly to roleplay {roleplay_id}")
-            return render_specific_roleplay(roleplay_id, user_id)
-        
-        elif roleplay_id in ['1.1', '1.2', '1.3']:
-            # Roleplay 1 specific modes - go to training
-            logger.info(f"🎮 Starting Roleplay 1 mode: {roleplay_id}")
-            return render_specific_roleplay(roleplay_id, user_id)
-        
-        elif roleplay_id in ['2.1', '2.2']:
-            # Roleplay 2 specific modes - go to training
-            logger.info(f"🎮 Starting Roleplay 2 mode: {roleplay_id}")
-            return render_specific_roleplay(roleplay_id, user_id)
-        
-        else:
-            # Invalid roleplay ID
-            logger.warning(f"❌ Invalid roleplay ID: {roleplay_id}")
-            return redirect(url_for('dashboard_page'))
-            
-    except Exception as e:
-        logger.error(f"❌ Error in roleplay_page: {e}")
-        return redirect(url_for('dashboard_page'))
 
 def render_roleplay_1_selection(user_id):
     """Render Roleplay 1 selection page - FIXED with all variables"""
@@ -256,97 +210,7 @@ def render_roleplay_1_selection(user_id):
         logger.error(f"❌ Error rendering Roleplay 1 selection: {e}")
         return redirect(url_for('dashboard_page'))
 
-def render_roleplay_2_selection(user_id):
-    """Render Roleplay 2 selection page - FIXED with all variables"""
-    try:
-        logger.info(f"🎮 Rendering Roleplay 2 selection for user {user_id}")
-        
-        # Get user profile
-        profile = get_user_profile_safe(user_id)
-        
-        # Get roleplay info for Roleplay 2
-        roleplay_info = {
-            'id': '2',
-            'name': 'Roleplay 2: Pitch + Objections + Close',
-            'description': 'Perfect your pitch and close more meetings'
-        }
-        
-        # Get user progress for Roleplay 2 modes  
-        try:
-            from services.user_progress_service import UserProgressService
-            progress_service = UserProgressService()
-            user_progress = progress_service.get_user_roleplay_progress(user_id, ['2.1', '2.2'])
-            # Also get Roleplay 1 progress to check unlock status
-            rp1_progress = progress_service.get_user_roleplay_progress(user_id, ['1.3'])
-            user_progress.update(rp1_progress)  # Merge progress data
-            logger.info(f"📊 Loaded progress for 2.1, 2.2: {user_progress}")
-        except Exception as e:
-            logger.warning(f"⚠️ Could not load user progress: {e}")
-            user_progress = {}
-        
-        # Use the generic template for Roleplay 2
-        logger.info("📄 Rendering roleplay/roleplay-selection.html for Roleplay 2")
-        return render_template(
-            'roleplay/roleplay-selection.html',
-            main_roleplay_id='2',
-            roleplay_info=roleplay_info,
-            user_profile=profile,
-            user_progress=user_progress,
-            page_title="Roleplay 2: Choose Your Mode"
-        )
-        
-    except Exception as e:
-        logger.error(f"❌ Error rendering Roleplay 2 selection: {e}")
-        return redirect(url_for('dashboard_page'))
-def render_specific_roleplay(roleplay_id, user_id):
-    """Render specific roleplay training page - FIXED with access check"""
-    try:
-        # Get user profile
-        profile = get_user_profile_safe(user_id)
-        
-        # --- START: ADD ACCESS CHECK LOGIC ---
-        try:
-            from services.user_progress_service import UserProgressService
-            progress_service = UserProgressService()
-            access_check = progress_service.check_roleplay_access(user_id, roleplay_id)
-            
-            if not access_check['allowed']:
-                logger.warning(f"❌ User {user_id} access denied to {roleplay_id}: {access_check['reason']}")
-                # Redirect back to the selection page or dashboard with an error message
-                # This prevents users from accessing locked content via URL
-                main_id = roleplay_id.split('.')[0]
-                return redirect(url_for('roleplay_page', roleplay_id=main_id))
-        except Exception as e:
-            logger.warning(f"⚠️ Could not check access for roleplay {roleplay_id}: {e}")
-        # --- END: ADD ACCESS CHECK LOGIC ---
-
-        # Get roleplay info from structure or create default
-        roleplay_info = get_roleplay_info_from_structure(roleplay_id)
-        
-        if not roleplay_info:
-            # ... (rest of the function is the same)
-            logger.warning(f"No info found for roleplay {roleplay_id}")
-            roleplay_names = {
-                '1.1': 'Practice Mode', '1.2': 'Marathon Mode', '1.3': 'Legend Mode',
-                '2.1': 'Advanced Practice', '2.2': 'Advanced Marathon',
-                '3': 'Warm-up Challenge', '4': 'Full Cold Call Simulation', '5': 'Power Hour Challenge'
-            }
-            roleplay_info = { 'id': roleplay_id, 'name': roleplay_names.get(roleplay_id, f'Roleplay {roleplay_id}'), 'description': 'Cold calling training', 'icon': 'phone' }
-        
-        logger.info(f"👍 Rendering training page for {roleplay_id}")
-        
-        # Use the main roleplay training template
-        return render_template(
-            'roleplay.html',
-            roleplay_id=roleplay_id,
-            roleplay_info=roleplay_info,
-            user_profile=profile,
-            page_title=f"{roleplay_info['name']} - Cold Calling Coach"
-        )
-            
-    except Exception as e:
-        logger.error(f"❌ Error rendering specific roleplay: {e}")
-        return redirect(url_for('dashboard_page'))
+    
 
 @app.template_global()
 def get_file_version(filename):
@@ -391,91 +255,8 @@ def dashboard_page():
     """Dashboard page"""
     return render_template('dashboard.html')
 
-@app.route('/api/roleplay/info/<roleplay_id>', methods=['GET'])
-def get_roleplay_info_api(roleplay_id):
-    """Get roleplay information - FIXED VERSION"""
-    try:
-        # CRITICAL FIX: Handle parent categories first
-        original_id = roleplay_id
-        if roleplay_id == '1':
-            roleplay_id = '1.1'
-        elif roleplay_id == '2':
-            roleplay_id = '2.1'
-        
-        logger.info(f"API request for roleplay info: {original_id} -> {roleplay_id}")
-        
-        # Simple roleplay info
-        roleplay_configs = {
-            '1.1': {
-                'id': '1.1', 
-                'name': 'Practice Mode', 
-                'description': 'Single call with detailed coaching', 
-                'icon': 'user-graduate', 
-                'available': True
-            },
-            '1.2': {
-                'id': '1.2', 
-                'name': 'Marathon Mode', 
-                'description': '10 calls, need 6 to pass', 
-                'icon': 'running', 
-                'available': True
-            },
-            '1.3': {
-                'id': '1.3', 
-                'name': 'Legend Mode', 
-                'description': '6 perfect calls in a row', 
-                'icon': 'crown', 
-                'available': False
-            },
-            '2.1': {
-                'id': '2.1', 
-                'name': 'Pitch Practice', 
-                'description': 'Advanced pitch training', 
-                'icon': 'bullhorn', 
-                'available': False
-            },
-            '2.2': {
-                'id': '2.2', 
-                'name': 'Pitch Marathon', 
-                'description': '10 advanced calls', 
-                'icon': 'running', 
-                'available': False
-            },
-            '3': {
-                'id': '3', 
-                'name': 'Warm-up Challenge', 
-                'description': '25 rapid-fire questions', 
-                'icon': 'fire', 
-                'available': True
-            },
-            '4': {
-                'id': '4', 
-                'name': 'Full Cold Call', 
-                'description': 'Complete simulation', 
-                'icon': 'headset', 
-                'available': True
-            },
-            '5': {
-                'id': '5', 
-                'name': 'Power Hour', 
-                'description': '10 consecutive calls', 
-                'icon': 'bolt', 
-                'available': True
-            }
-        }
-        
-        if roleplay_id not in roleplay_configs:
-            logger.warning(f"Invalid roleplay ID: {roleplay_id}")
-            return jsonify({'error': f'Invalid roleplay ID: {roleplay_id}'}), 404
-        
-        result = roleplay_configs[roleplay_id]
-        logger.info(f"Returning roleplay info for {original_id}: {result['name']}")
-        return jsonify(result)
-        
-    except Exception as e:
-        logger.error(f"Error getting roleplay info: {e}")
-        return jsonify({'error': 'Internal server error'}), 500
-
+ 
+    
 @app.route('/api/test/simple-start', methods=['POST'])
 def test_simple_start():
     """Emergency test endpoint for Vercel"""
@@ -544,30 +325,364 @@ def favicon():
         response.headers['Content-Type'] = 'image/x-icon'
         response.headers['Content-Length'] = '0'
         return response
+# ===== UPDATED: api/index.py - Roleplay 2 Section =====
 
+def render_roleplay_2_selection(user_id):
+    """Render Roleplay 2 selection page - UPDATED with proper progress handling"""
+    try:
+        logger.info(f"🎯 Rendering Roleplay 2 selection for user {user_id}")
+        
+        # Get user profile
+        profile = get_user_profile_safe(user_id)
+        
+        # Get roleplay info for Roleplay 2
+        roleplay_info = {
+            'id': '2',
+            'name': 'Roleplay 2: Advanced Post-Pitch Training',
+            'description': 'Master advanced conversation flow: pitch, objections, qualification, and meeting asks'
+        }
+        
+        # Get user progress for Roleplay 2 modes and prerequisites
+        try:
+            from services.user_progress_service import UserProgressService
+            progress_service = UserProgressService()
+            # Get progress for 2.x modes and prerequisite 1.2
+            user_progress = progress_service.get_user_roleplay_progress(user_id, ['1.2', '2.1', '2.2'])
+            logger.info(f"📊 Loaded progress for Roleplay 2: {user_progress}")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not load user progress: {e}")
+            user_progress = {}
+        
+        # Use the Roleplay 2 specific template
+        logger.info("📄 Rendering roleplay/roleplay-2-selection.html")
+        return render_template(
+            'roleplay/roleplay-2-selection.html',
+            main_roleplay_id='2',
+            roleplay_info=roleplay_info,
+            user_profile=profile,
+            user_progress=user_progress,
+            page_title="Roleplay 2: Advanced Post-Pitch Training"
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ Error rendering Roleplay 2 selection: {e}")
+        return redirect(url_for('dashboard_page'))
+
+@app.route('/api/roleplay/info/<roleplay_id>', methods=['GET'])
+def get_roleplay_info_api(roleplay_id):
+    """Get roleplay information - UPDATED with Roleplay 2.1"""
+    try:
+        # Handle parent categories first
+        original_id = roleplay_id
+        if roleplay_id == '1':
+            roleplay_id = '1.1'
+        elif roleplay_id == '2':
+            roleplay_id = '2.1'
+        
+        logger.info(f"API request for roleplay info: {original_id} -> {roleplay_id}")
+        
+        # UPDATED: Enhanced roleplay configs with 2.1
+        roleplay_configs = {
+            '1.1': {
+                'id': '1.1', 
+                'name': 'Practice Mode', 
+                'description': 'Single call with detailed coaching', 
+                'icon': 'user-graduate', 
+                'difficulty': 'Beginner',
+                'available': True
+            },
+            '1.2': {
+                'id': '1.2', 
+                'name': 'Marathon Mode', 
+                'description': '10 calls, need 6 to pass', 
+                'icon': 'running', 
+                'difficulty': 'Intermediate',
+                'available': True
+            },
+            '1.3': {
+                'id': '1.3', 
+                'name': 'Legend Mode', 
+                'description': '6 perfect calls in a row', 
+                'icon': 'crown', 
+                'difficulty': 'Expert',
+                'available': False
+            },
+            '2.1': {
+                'id': '2.1', 
+                'name': 'Post-Pitch Practice', 
+                'description': 'Advanced pitch, objections, qualification, meeting ask', 
+                'icon': 'bullhorn', 
+                'difficulty': 'Advanced',
+                'available': False,
+                'requires': 'Marathon Mode completion',
+                'features': [
+                    'Advanced objection handling',
+                    'Mandatory qualification',
+                    'Professional meeting asks',
+                    'Expert-level coaching'
+                ]
+            },
+            '2.2': {
+                'id': '2.2', 
+                'name': 'Advanced Marathon', 
+                'description': '10 advanced calls with complex scenarios', 
+                'icon': 'running', 
+                'difficulty': 'Expert',
+                'available': False,
+                'requires': 'Post-Pitch Practice completion'
+            },
+            '3': {
+                'id': '3', 
+                'name': 'Warm-up Challenge', 
+                'description': '25 rapid-fire questions to sharpen skills', 
+                'icon': 'fire', 
+                'difficulty': 'All Levels',
+                'available': True,
+                'type': 'challenge'
+            },
+            '4': {
+                'id': '4', 
+                'name': 'Full Cold Call Simulation', 
+                'description': 'Complete end-to-end call practice', 
+                'icon': 'headset', 
+                'difficulty': 'Advanced',
+                'available': False,
+                'requires': 'Post-Pitch Practice completion'
+            },
+            '5': {
+                'id': '5', 
+                'name': 'Power Hour Challenge', 
+                'description': '10 consecutive calls for endurance testing', 
+                'icon': 'bolt', 
+                'difficulty': 'Expert',
+                'available': False,
+                'requires': 'Advanced Marathon completion'
+            }
+        }
+        
+        if roleplay_id not in roleplay_configs:
+            logger.warning(f"Invalid roleplay ID: {roleplay_id}")
+            return jsonify({'error': f'Invalid roleplay ID: {roleplay_id}'}), 404
+        
+        result = roleplay_configs[roleplay_id]
+        logger.info(f"Returning roleplay info for {original_id}: {result['name']}")
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error getting roleplay info: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/api/roleplay/user-access/<user_id>', methods=['GET'])
+def get_user_roleplay_access(user_id):
+    """Get user's access status for all roleplays"""
+    try:
+        from services.user_progress_service import UserProgressService
+        progress_service = UserProgressService()
+        
+        # Get user progress
+        user_progress = progress_service.get_user_roleplay_progress(user_id)
+        
+        # Check access for each roleplay
+        access_info = {}
+        roleplay_ids = ['1.1', '1.2', '1.3', '2.1', '2.2', '3', '4', '5']
+        
+        for roleplay_id in roleplay_ids:
+            access_check = progress_service.check_roleplay_access(user_id, roleplay_id)
+            progress_data = user_progress.get(roleplay_id, {})
+            
+            access_info[roleplay_id] = {
+                'allowed': access_check['allowed'],
+                'reason': access_check['reason'],
+                'required_roleplay': access_check.get('required_roleplay'),
+                'best_score': progress_data.get('best_score', 0),
+                'total_attempts': progress_data.get('total_attempts', 0),
+                'completed': progress_data.get('completed', False),
+                'marathon_passed': progress_data.get('marathon_passed', False),
+                'unlocked_by': access_check.get('unlocked_by')
+            }
+        
+        return jsonify({
+            'success': True,
+            'user_id': user_id,
+            'access_info': access_info,
+            'user_progress': user_progress
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting user roleplay access: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/api/roleplay/check-unlock/<user_id>/<roleplay_id>', methods=['GET'])
+def check_roleplay_unlock(user_id, roleplay_id):
+    """Check if a specific roleplay is unlocked for a user"""
+    try:
+        from services.user_progress_service import UserProgressService
+        progress_service = UserProgressService()
+        
+        access_check = progress_service.check_roleplay_access(user_id, roleplay_id)
+        
+        return jsonify({
+            'success': True,
+            'roleplay_id': roleplay_id,
+            'user_id': user_id,
+            'access_allowed': access_check['allowed'],
+            'reason': access_check['reason'],
+            'required_roleplay': access_check.get('required_roleplay'),
+            'current_progress': access_check.get('current_progress')
+        })
+        
+    except Exception as e:
+        logger.error(f"Error checking roleplay unlock: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+# UPDATED: Enhanced roleplay routing with 2.1 support
+@app.route('/roleplay/<roleplay_id>')
+def roleplay_page(roleplay_id):
+    """Handle hierarchical roleplay routing - ENHANCED for 2.1"""
+    try:
+        # Check authentication
+        if 'user_id' not in session:
+            logger.warning("Unauthenticated access to roleplay page")
+            return redirect(url_for('login_page'))
+        
+        user_id = session.get('user_id')
+        logger.info(f"🎯 User {user_id} accessing roleplay {roleplay_id}")
+        
+        # Handle different roleplay ID formats
+        if roleplay_id == '1':
+            # Roleplay 1 - show selection page with modes 1.1, 1.2, 1.3
+            logger.info("📋 Showing Roleplay 1 selection page")
+            return render_roleplay_1_selection(user_id)
+        
+        elif roleplay_id == '2':
+            # Roleplay 2 - show selection page with modes 2.1, 2.2
+            logger.info("📋 Showing Roleplay 2 selection page")
+            return render_roleplay_2_selection(user_id)
+        
+        elif roleplay_id in ['3', '4', '5']:
+            # Roleplays 3, 4, 5 - go directly to training (no selection)
+            logger.info(f"🎮 Going directly to roleplay {roleplay_id}")
+            return render_specific_roleplay(roleplay_id, user_id)
+        
+        elif roleplay_id in ['1.1', '1.2', '1.3']:
+            # Roleplay 1 specific modes - go to training
+            logger.info(f"🎮 Starting Roleplay 1 mode: {roleplay_id}")
+            return render_specific_roleplay(roleplay_id, user_id)
+        
+        elif roleplay_id in ['2.1', '2.2']:
+            # Roleplay 2 specific modes - go to training
+            logger.info(f"🎮 Starting Roleplay 2 mode: {roleplay_id}")
+            return render_specific_roleplay(roleplay_id, user_id)
+        
+        else:
+            # Invalid roleplay ID
+            logger.warning(f"❌ Invalid roleplay ID: {roleplay_id}")
+            return redirect(url_for('dashboard_page'))
+            
+    except Exception as e:
+        logger.error(f"❌ Error in roleplay_page: {e}")
+        return redirect(url_for('dashboard_page'))
+
+def render_specific_roleplay(roleplay_id, user_id):
+    """Render specific roleplay training page - ENHANCED with 2.1 access check"""
+    try:
+        # Get user profile
+        profile = get_user_profile_safe(user_id)
+        
+        # ENHANCED: Check access for advanced roleplays
+        if roleplay_id in ['2.1', '2.2', '4', '5']:
+            try:
+                from services.user_progress_service import UserProgressService
+                progress_service = UserProgressService()
+                access_check = progress_service.check_roleplay_access(user_id, roleplay_id)
+                
+                if not access_check['allowed']:
+                    logger.warning(f"❌ User {user_id} access denied to {roleplay_id}: {access_check['reason']}")
+                    # Redirect back to appropriate selection page
+                    if roleplay_id.startswith('2.'):
+                        return redirect(url_for('roleplay_page', roleplay_id='2'))
+                    else:
+                        return redirect(url_for('dashboard_page'))
+            except Exception as e:
+                logger.warning(f"⚠️ Could not check access for roleplay {roleplay_id}: {e}")
+
+        # Get roleplay info from structure or create default
+        roleplay_info = get_roleplay_info_from_structure(roleplay_id)
+        
+        if not roleplay_info:
+            logger.warning(f"No info found for roleplay {roleplay_id}")
+            roleplay_names = {
+                '1.1': 'Practice Mode', '1.2': 'Marathon Mode', '1.3': 'Legend Mode',
+                '2.1': 'Post-Pitch Practice', '2.2': 'Advanced Marathon',
+                '3': 'Warm-up Challenge', '4': 'Full Cold Call Simulation', '5': 'Power Hour Challenge'
+            }
+            roleplay_info = { 
+                'id': roleplay_id, 
+                'name': roleplay_names.get(roleplay_id, f'Roleplay {roleplay_id}'), 
+                'description': 'Cold calling training', 
+                'icon': 'phone' 
+            }
+        
+        logger.info(f"👍 Rendering training page for {roleplay_id}")
+        
+        # Use the main roleplay training template
+        return render_template(
+            'roleplay.html',
+            roleplay_id=roleplay_id,
+            roleplay_info=roleplay_info,
+            user_profile=profile,
+            page_title=f"{roleplay_info['name']} - Cold Calling Coach"
+        )
+            
+    except Exception as e:
+        logger.error(f"❌ Error rendering specific roleplay: {e}")
+        return redirect(url_for('dashboard_page'))
+
+# ENHANCED: Health check with 2.1 info
 @app.route('/api/health')
 def health_check():
-    """Basic health check endpoint"""
+    """Enhanced health check endpoint"""
     return jsonify({
         'status': 'healthy',
         'timestamp': datetime.utcnow().isoformat(),
         'environment': os.getenv('VERCEL_ENV', 'development'),
         'roleplay_structure': {
             'main_categories': list(ROLEPLAY_STRUCTURE.keys()),
-            'available_specific_ids': ['1.1', '1.2', '1.3', '2.1', '2.2', '3', '4', '5']
+            'available_specific_ids': ['1.1', '1.2', '1.3', '2.1', '2.2', '3', '4', '5'],
+            'advanced_roleplays': ['2.1', '2.2', '4', '5'],
+            'always_available': ['1.1', '1.2', '3']
         }
     })
 
 @app.route('/api/roleplay/structure', methods=['GET'])
 def get_roleplay_structure_api():
-    """Get available roleplay structure"""
+    """Get enhanced roleplay structure with access requirements"""
+    structure = ROLEPLAY_STRUCTURE.copy()
+    
+    # Add access requirements info
+    access_requirements = {
+        '1.1': {'always_available': True},
+        '1.2': {'always_available': True},
+        '1.3': {'requires': '1.2', 'condition': 'marathon_passed'},
+        '2.1': {'requires': '1.2', 'condition': 'marathon_passed'},
+        '2.2': {'requires': '2.1', 'condition': 'score_70_plus'},
+        '3': {'always_available': True},
+        '4': {'requires': '2.1', 'condition': 'score_70_plus'},
+        '5': {'requires': '2.2', 'condition': 'score_70_plus'}
+    }
+    
     return jsonify({
-        'roleplay_structure': ROLEPLAY_STRUCTURE,
+        'roleplay_structure': structure,
         'available_specific_ids': ['1.1', '1.2', '1.3', '2.1', '2.2', '3', '4', '5'],
-        'main_categories': ['1', '2', '3', '4', '5']
+        'main_categories': ['1', '2', '3', '4', '5'],
+        'access_requirements': access_requirements,
+        'progression_path': {
+            'beginner': ['1.1', '1.2'],
+            'intermediate': ['1.3', '2.1'],
+            'advanced': ['2.2', '4'],
+            'expert': ['5']
+        }
     })
-
-# ===== ERROR HANDLERS =====
 
 @app.errorhandler(404)
 def not_found(error):
