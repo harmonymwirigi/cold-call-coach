@@ -329,14 +329,16 @@ class UserProgressService:
     def check_roleplay_access(self, user_id: str, roleplay_id: str) -> Dict[str, Any]:
         """FIXED: Enhanced access check with detailed reasoning"""
         try:
-            # Always available roleplays
+            # FIXED: Always available roleplays (guaranteed access)
             always_available = ['1.1', '1.2', '3']
             if roleplay_id in always_available:
+                logger.info(f"✅ {roleplay_id} is always available for user {user_id}")
                 return {'allowed': True, 'reason': 'Always available'}
             
             # Check progression rules
             rule = self.progression_rules.get(roleplay_id)
             if not rule:
+                logger.info(f"✅ {roleplay_id} has no unlock requirements for user {user_id}")
                 return {'allowed': True, 'reason': 'No specific unlock requirement'}
 
             required_rp_id = rule.get('requires_completion')
