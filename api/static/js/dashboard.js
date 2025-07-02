@@ -1,10 +1,11 @@
-// ===== FIXED: STATIC/JS/DASHBOARD.JS =====
+// ===== FIXED: STATIC/JS/DASHBOARD.JS - CORRECT ROLEPLAY 2 UNLOCK LOGIC =====
 
 class Dashboard {
     constructor() {
         this.userProfile = null;
         this.userStats = null;
         this.roleplayAccess = null;
+        this.userProgress = null; // Add this to store progress data
         this.isLoading = false;
         
         this.initialize();
@@ -47,6 +48,7 @@ class Dashboard {
         setInterval(() => {
             if (!this.isLoading) {
                 this.loadUserStats();
+                this.loadDashboardProgress(); // Also refresh progress
             }
         }, 60000); // Refresh stats every minute
     }
@@ -63,7 +65,8 @@ class Dashboard {
                 this.loadUserProfile(),
                 this.loadUserStats(),
                 this.loadRoleplayAccess(),
-                this.loadRecentSessions()
+                this.loadRecentSessions(),
+                this.loadDashboardProgress() // Make sure progress is loaded
             ]);
 
             // Update UI
@@ -363,18 +366,73 @@ class Dashboard {
         }).join('');
     }
 
+    // FIXED: Updated unlock logic for Roleplay 2
     isRoleplayUnlocked(roleplayId) {
-        if (!this.roleplayAccess) return roleplayId === 1; // Roleplay 1 always unlocked
+        // Roleplay 1 is always unlocked
+        if (roleplayId === 1) return true;
+        
+        // Roleplay 2 is unlocked when Marathon Mode (1.2) is passed
+        if (roleplayId === 2) {
+            return this.isMarathonModePassed();
+        }
+        
+        // Roleplay 3 is always unlocked
+        if (roleplayId === 3) return true;
+        
+        // Roleplays 4 and 5 require advanced completion
+        if (roleplayId === 4 || roleplayId === 5) {
+            return this.isRoleplayTwoPassed();
+        }
+        
+        // Default to checking roleplayAccess
+        if (!this.roleplayAccess) return false;
         
         const access = this.roleplayAccess[roleplayId];
         return access ? access.unlocked : false;
     }
 
-    getRoleplayUnlockInfo(roleplayId) {
-        if (!this.roleplayAccess) return null;
+    // FIXED: Helper method to check Marathon Mode status
+    isMarathonModePassed() {
+        if (!this.userProgress) return false;
         
-        const access = this.roleplayAccess[roleplayId];
-        return access || null;
+        const marathonProgress = this.userProgress['1.2'];
+        if (!marathonProgress) return false;
+        
+        // Check if marathon was passed (6 out of 10 calls)
+        return marathonProgress.marathon_passed === true;
+    }
+
+    // Helper method to check if Roleplay 2 is passed
+    isRoleplayTwoPassed() {
+        if (!this.userProgress) return false;
+        
+        const rp2Progress = this.userProgress['2.1'];
+        if (!rp2Progress) return false;
+        
+        // Check if score is 70 or above
+        return rp2Progress.best_score >= 70;
+    }
+
+    getRoleplayUnlockInfo(roleplayId) {
+        // FIXED: Updated unlock requirements
+        const unlockRequirements = {
+            1: { unlocked: true, unlock_condition: 'Always available' },
+            2: { 
+                unlocked: this.isMarathonModePassed(), 
+                unlock_condition: 'Complete Marathon Mode (6/10 calls)'
+            },
+            3: { unlocked: true, unlock_condition: 'Always available' },
+            4: { 
+                unlocked: this.isRoleplayTwoPassed(), 
+                unlock_condition: 'Pass Post-Pitch Practice (70+ score)'
+            },
+            5: { 
+                unlocked: this.isRoleplayTwoPassed(), 
+                unlock_condition: 'Pass Advanced Marathon Mode'
+            }
+        };
+        
+        return unlockRequirements[roleplayId] || { unlocked: false, unlock_condition: 'Requirements not met' };
     }
 
     createRoleplayCard(roleplay, isUnlocked, unlockInfo) {
@@ -446,8 +504,8 @@ class Dashboard {
         }
 
         sessionsTable.innerHTML = this.recentSessions.map(session => {
-            const date = new Date(session.created_at || session.started_at).toLocaleDateString();
-            const time = new Date(session.created_at || session.started_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const date = new Date(session.completed_at || session.created_at || session.started_at).toLocaleDateString();
+            const time = new Date(session.completed_at || session.created_at || session.started_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             const duration = session.duration_minutes ? `${session.duration_minutes}m` : 'N/A';
             const resultIcon = session.success ? 
                 '<i class="fas fa-check-circle text-success"></i>' : 
@@ -456,15 +514,18 @@ class Dashboard {
             const score = session.score || 'N/A';
             
             const roleplayNames = {
-                1: 'Opener + Objections',
-                2: 'Pitch + Close',
-                3: 'Warm-up',
-                4: 'Full Call',
-                5: 'Power Hour'
+                '1.1': 'Practice Mode',
+                '1.2': 'Marathon Mode', 
+                '1.3': 'Legend Mode',
+                '2.1': 'Post-Pitch Practice',
+                '2.2': 'Advanced Marathon',
+                '3': 'Warm-up',
+                '4': 'Full Call',
+                '5': 'Power Hour'
             };
             
             const roleplayName = roleplayNames[session.roleplay_id] || `Roleplay ${session.roleplay_id}`;
-            const mode = session.mode.charAt(0).toUpperCase() + session.mode.slice(1);
+            const mode = session.mode ? session.mode.charAt(0).toUpperCase() + session.mode.slice(1) : 'Practice';
 
             return `
                 <tr>
@@ -560,6 +621,7 @@ class Dashboard {
             
             if (response.ok) {
                 const data = await response.json();
+                this.userProgress = data.progress; // FIXED: Store progress data
                 this.updateDashboardProgress(data);
                 console.log('✅ Dashboard progress loaded successfully');
             } else {
@@ -582,10 +644,19 @@ class Dashboard {
             const totalAttemptsEl = document.getElementById('total-attempts');
             const currentLevelEl = document.getElementById('current-level');
             
-            if (completionEl) completionEl.textContent = Math.round(completion_stats.completion_percentage || 0) + '%';
-            if (avgScoreEl) avgScoreEl.textContent = completion_stats.average_best_score || '--';
-            if (totalAttemptsEl) totalAttemptsEl.textContent = completion_stats.total_attempts || 0;
-            if (currentLevelEl) currentLevelEl.textContent = completion_stats.current_level || 'Beginner';
+            if (completionEl) completionEl.textContent = Math.round(completion_stats.completion_rate || 0) + '%';
+            if (avgScoreEl) avgScoreEl.textContent = Math.round(completion_stats.average_score || 0);
+            if (totalAttemptsEl) totalAttemptsEl.textContent = completion_stats.total_sessions || 0;
+            if (currentLevelEl) {
+                // Determine level based on progress
+                const avgScore = completion_stats.average_score || 0;
+                let level = 'Beginner';
+                if (avgScore >= 85) level = 'Expert';
+                else if (avgScore >= 70) level = 'Advanced';
+                else if (avgScore >= 50) level = 'Intermediate';
+                
+                currentLevelEl.textContent = level;
+            }
         }
         
         // Update Roleplay progress
@@ -598,7 +669,7 @@ class Dashboard {
         // Update recommendations
         this.updateRecommendations(recommendations || []);
         
-        // Update overall status
+        // FIXED: Update overall status with correct logic
         this.updateRoleplayStatus(progress || {});
     }
     
@@ -610,12 +681,22 @@ class Dashboard {
         const progressElement = document.getElementById(`rp${cleanId}-progress`);
         
         if (scoreElement && progressData.best_score > 0) {
-            scoreElement.textContent = `${progressData.best_score}/100`;
-            scoreElement.className = progressData.completed ? 'text-success' : 'text-warning';
+            if (roleplayId === '1.2' && progressData.marathon_passed) {
+                scoreElement.textContent = `Passed (${progressData.marathon_best_run || 6}/10)`;
+                scoreElement.className = 'text-success';
+            } else {
+                scoreElement.textContent = `${progressData.best_score}/100`;
+                scoreElement.className = progressData.passed ? 'text-success' : 'text-warning';
+            }
         }
         
         if (progressElement) {
-            const progressPercent = Math.min(100, progressData.best_score || 0);
+            let progressPercent = 0;
+            if (roleplayId === '1.2' && progressData.marathon_passed) {
+                progressPercent = 100; // Marathon passed = 100%
+            } else {
+                progressPercent = Math.min(100, progressData.best_score || 0);
+            }
             progressElement.style.width = progressPercent + '%';
         }
     }
@@ -625,28 +706,54 @@ class Dashboard {
         if (!container) return;
         
         if (recommendations.length === 0) {
-            container.innerHTML = '<div class="alert alert-info">No recommendations at this time.</div>';
+            // Check if Marathon is passed and suggest Roleplay 2
+            if (this.isMarathonModePassed()) {
+                container.innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="fas fa-star me-2"></i>
+                        Congratulations! You've unlocked <strong>Roleplay 2: Post-Pitch Practice</strong>
+                        <a href="/roleplay/2" class="btn btn-sm btn-primary ms-2">Start Now</a>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <div class="alert alert-info">
+                        <i class="fas fa-lightbulb me-2"></i>
+                        Complete Marathon Mode to unlock advanced training modules!
+                        <a href="/roleplay/1" class="btn btn-sm btn-primary ms-2">Continue</a>
+                    </div>
+                `;
+            }
             return;
         }
         
         container.innerHTML = recommendations.map(rec => `
             <div class="alert alert-${rec.priority === 'high' ? 'warning' : 'info'}">
-                <i class="fas fa-${rec.type === 'start' ? 'play' : 'arrow-right'} me-2"></i>
-                ${rec.message}
+                <i class="fas fa-${rec.priority === 'high' ? 'exclamation-triangle' : 'arrow-right'} me-2"></i>
+                ${rec.reason || rec.message || 'Continue your training!'}
                 ${rec.roleplay_id ? `<a href="/roleplay/${rec.roleplay_id}" class="btn btn-sm btn-outline-primary ms-2">Start</a>` : ''}
             </div>
         `).join('');
     }
     
+    // FIXED: Correct status update logic
     updateRoleplayStatus(progress) {
+        console.log('Updating roleplay status with progress:', progress);
+        
         // Update Roleplay 1 status
-        const rp1Completed = progress['1.3']?.completed;
         const rp1Status = document.getElementById('rp1-status');
         if (rp1Status) {
-            if (rp1Completed) {
+            const legendCompleted = progress['1.3']?.legend_completed;
+            const marathonPassed = progress['1.2']?.marathon_passed;
+            const practiceAttempts = progress['1.1']?.total_attempts || 0;
+            
+            if (legendCompleted) {
                 rp1Status.textContent = 'Mastered';
                 rp1Status.className = 'badge bg-success';
-            } else if (progress['1.1']?.attempts > 0) {
+            } else if (marathonPassed) {
+                rp1Status.textContent = 'Advanced';
+                rp1Status.className = 'badge bg-info';
+            } else if (practiceAttempts > 0) {
                 rp1Status.textContent = 'In Progress';
                 rp1Status.className = 'badge bg-warning';
             } else {
@@ -655,12 +762,20 @@ class Dashboard {
             }
         }
         
-        // Update Roleplay 2 status
+        // FIXED: Update Roleplay 2 status - check Marathon Mode, not Legend Mode
         const rp2Status = document.getElementById('rp2-status');
         if (rp2Status) {
-            if (rp1Completed) {
-                rp2Status.textContent = 'Available';
-                rp2Status.className = 'badge bg-success';
+            const marathonPassed = progress['1.2']?.marathon_passed;
+            const rp2Attempts = progress['2.1']?.total_attempts || 0;
+            
+            if (marathonPassed) {
+                if (rp2Attempts > 0) {
+                    rp2Status.textContent = 'In Progress';
+                    rp2Status.className = 'badge bg-warning';
+                } else {
+                    rp2Status.textContent = 'Available';
+                    rp2Status.className = 'badge bg-success';
+                }
             } else {
                 rp2Status.textContent = 'Locked';
                 rp2Status.className = 'badge bg-danger';
