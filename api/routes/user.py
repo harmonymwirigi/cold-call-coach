@@ -1,4 +1,4 @@
-# ===== FIXED api/routes/user.py =====
+# ===== API/ROUTES/USER.PY (COMPLETELY FIXED) =====
 from flask import Blueprint, request, jsonify, session
 from services.supabase_client import SupabaseService
 from services.user_progress_service import UserProgressService
@@ -6,7 +6,7 @@ from utils.decorators import require_auth
 from utils.constants import ROLEPLAY_CONFIG
 from datetime import datetime, timedelta, timezone
 import logging
-from typing import Dict, List, Any, Optional
+
 logger = logging.getLogger(__name__)
 user_bp = Blueprint('user', __name__)
 
@@ -27,17 +27,14 @@ def get_profile():
             logger.error(f"Profile not found for user {user_id}")
             return jsonify({'error': 'Profile not found'}), 404
         
-        # FIXED: Ensure default roleplay access for new users
-        _ensure_default_roleplay_access(user_id)
-        
-        # FIXED: Get user progress from the correct service
-        progress = progress_service.get_user_roleplay_progress(user_id)
+        # Get user progress
+        progress = supabase_service.get_user_progress(user_id)
         
         # Calculate usage limits and access
         access_info = _calculate_access_info(profile)
         
-        # FIXED: Get roleplay unlock status using the progress service
-        roleplay_access = _get_roleplay_access_fixed(user_id, progress, profile['access_level'])
+        # Get roleplay unlock status
+        roleplay_access = _get_roleplay_access(progress, profile['access_level'])
         
         logger.info(f"Successfully retrieved profile for user {user_id}")
         return jsonify({
@@ -50,11 +47,10 @@ def get_profile():
     except Exception as e:
         logger.error(f"Error getting profile: {e}")
         return jsonify({'error': 'Internal server error'}), 500
-
 @user_bp.route('/stats', methods=['GET'])
 @require_auth
 def get_user_stats():
-    """FIXED: Get user statistics with correct data"""
+    """Get user statistics - FIXED"""
     try:
         user_id = session['user_id']
         logger.info(f"Getting stats for user {user_id}")
@@ -63,10 +59,9 @@ def get_user_stats():
         if not profile:
             return jsonify({'error': 'Profile not found'}), 404
         
-        # FIXED: Get completions from the correct table with proper stats
+        # FIX: Get completions from the new table
         user_completions = supabase_service.get_user_completions(user_id, limit=1000)
         
-        # FIXED: Calculate stats properly
         stats = {
             'total_sessions': len(user_completions),
             'total_minutes': sum(c.get('duration_minutes', 0) or 0 for c in user_completions),
@@ -76,33 +71,23 @@ def get_user_stats():
             'sessions_this_week': 0,
             'sessions_this_month': 0,
             'monthly_usage_minutes': profile.get('monthly_usage_minutes', 0) or 0,
-            'lifetime_usage_minutes': profile.get('lifetime_usage_minutes', 0) or 0,
-            'average_score': 0,
-            'best_score': 0
+            'lifetime_usage_minutes': profile.get('lifetime_usage_minutes', 0) or 0
         }
         
-        # Calculate rates and averages
         if stats['total_sessions'] > 0:
             stats['success_rate'] = round((stats['successful_sessions'] / stats['total_sessions']) * 100, 1)
-            
-            # Calculate average and best scores
-            scores = [c.get('score', 0) for c in user_completions if c.get('score', 0) > 0]
-            if scores:
-                stats['average_score'] = round(sum(scores) / len(scores), 1)
-                stats['best_score'] = max(scores)
         
-        # FIXED: Date calculations for recent activity
         now = datetime.now(timezone.utc)
         week_ago = now - timedelta(days=7)
         month_ago = now - timedelta(days=30)
         
         for completion in user_completions:
             try:
-                completed_at = completion.get('completed_at')
-                if not completed_at:
+                # Use 'completed_at' from the new table
+                session_date_str = completion.get('completed_at')
+                if not session_date_str:
                     continue
-                    
-                session_date = _parse_iso_datetime(completed_at)
+                session_date = _parse_iso_datetime(session_date_str)
                 
                 if session_date >= week_ago:
                     stats['sessions_this_week'] += 1
@@ -110,33 +95,22 @@ def get_user_stats():
                     stats['sessions_this_month'] += 1
                     
             except (ValueError, TypeError) as e:
-                logger.warning(f"Could not parse completion date {completed_at}: {e}")
+                logger.warning(f"Could not parse completion date {session_date_str}: {e}")
                 continue
         
-        # FIXED: Calculate favorite roleplay
         roleplay_counts = {}
         for completion in user_completions:
-            rp_id = completion.get('roleplay_id')
-            if rp_id:
-                # Extract main ID for counting (e.g., '1' from '1.1')
-                try:
-                    main_rp_id = rp_id.split('.')[0] if '.' in str(rp_id) else str(rp_id)
-                    roleplay_counts[main_rp_id] = roleplay_counts.get(main_rp_id, 0) + 1
-                except:
-                    roleplay_counts[str(rp_id)] = roleplay_counts.get(str(rp_id), 0) + 1
+            rp_id_str = str(completion.get('roleplay_id'))
+            if rp_id_str:
+                # Use the main roleplay ID (e.g., '1' from '1.1')
+                main_rp_id = int(float(rp_id_str))
+                roleplay_counts[main_rp_id] = roleplay_counts.get(main_rp_id, 0) + 1
 
         if roleplay_counts:
             favorite_id = max(roleplay_counts, key=roleplay_counts.get)
-            roleplay_names = {
-                '1': 'Opener & Early Objections',
-                '2': 'Pitch & Close',
-                '3': 'Warm-up Challenge',
-                '4': 'Full Cold Call',
-                '5': 'Power Hour'
-            }
-            stats['favorite_roleplay'] = roleplay_names.get(favorite_id, f'Roleplay {favorite_id}')
+            stats['favorite_roleplay'] = ROLEPLAY_CONFIG.get(favorite_id, {}).get('name', f'Roleplay {favorite_id}')
         
-        logger.info(f"Successfully retrieved stats for user {user_id}: {stats['total_sessions']} sessions")
+        logger.info(f"Successfully retrieved stats for user {user_id}")
         return jsonify(stats)
         
     except Exception as e:
@@ -146,52 +120,22 @@ def get_user_stats():
 @user_bp.route('/sessions', methods=['GET'])
 @require_auth
 def get_user_sessions():
-    """FIXED: Get user's roleplay sessions with enhanced data"""
+    """Get user's roleplay sessions - FIXED"""
     try:
         user_id = session['user_id']
         page = request.args.get('page', 1, type=int)
         limit = request.args.get('limit', 20, type=int)
         
-        logger.info(f"Getting sessions for user {user_id}, page {page}, limit {limit}")
+        logger.info(f"Getting completions for user {user_id}, page {page}, limit {limit}")
         
         offset = (page - 1) * limit
+        # FIX: Get completions from the new table
         user_completions = supabase_service.get_user_completions(user_id, limit=limit, offset=offset)
         total_count = supabase_service.get_completion_count(user_id)
         
-        # FIXED: Enhance session data with proper formatting (renamed loop variable)
-        enhanced_sessions = []
-        for completion_record in user_completions:
-            try:
-                enhanced_session = {
-                    'id': completion_record.get('id'),
-                    'roleplay_id': completion_record.get('roleplay_id'),
-                    'mode': completion_record.get('mode', 'practice'),
-                    'score': completion_record.get('score', 0),
-                    'success': completion_record.get('success', False),
-                    'duration_minutes': completion_record.get('duration_minutes', 0),
-                    'completed_at': completion_record.get('completed_at'),
-                    'started_at': completion_record.get('started_at'),
-                    'created_at': completion_record.get('created_at'),
-                    
-                    # FIXED: Add formatted fields for display
-                    'roleplay_name': _get_roleplay_display_name(completion_record.get('roleplay_id')),
-                    'duration_display': _format_duration(completion_record.get('duration_minutes', 0)),
-                    'score_display': f"{completion_record.get('score', 0)}/100",
-                    'result_display': 'Success' if completion_record.get('success', False) else 'Practice',
-                    'date_display': _format_date(completion_record.get('completed_at')),
-                    
-                    # Additional helpful info
-                    'coaching_feedback': completion_record.get('coaching_feedback'),
-                    'forced_end': completion_record.get('forced_end', False)
-                }
-                enhanced_sessions.append(enhanced_session)
-            except Exception as session_error:
-                logger.warning(f"Error enhancing session data: {session_error}")
-                enhanced_sessions.append(completion_record)  # Fallback to original
-        
-        logger.info(f"Successfully retrieved {len(enhanced_sessions)} sessions for user {user_id}")
+        logger.info(f"Successfully retrieved {len(user_completions)} completions for user {user_id}")
         return jsonify({
-            'sessions': enhanced_sessions,
+            'sessions': user_completions, # Frontend expects 'sessions' key
             'total_count': total_count,
             'page': page,
             'limit': limit,
@@ -201,43 +145,6 @@ def get_user_sessions():
     except Exception as e:
         logger.error(f"Error getting user sessions: {e}")
         return jsonify({'error': 'Internal server error'}), 500
-
-@user_bp.route('/roleplay-progress', methods=['GET'])
-@require_auth
-def get_user_roleplay_progress():
-    """FIXED: Get comprehensive user roleplay progress"""
-    try:
-        user_id = session.get('user_id')
-        
-        # Get progress data from the service
-        progress = progress_service.get_user_roleplay_progress(user_id)
-        available_roleplays = _get_available_roleplays(user_id)
-        completion_stats = progress_service.get_completion_stats(user_id)
-        recommendations = _get_next_recommendations(user_id, progress)
-        
-        # Get recent activity
-        recent_completions = get_recent_completions(user_id, limit=5)
-        
-        # Get achievements
-        achievements = get_user_achievements_helper(user_id)
-        
-        response_data = {
-            'user_id': user_id,
-            'progress': progress,
-            'available_roleplays': available_roleplays,
-            'completion_stats': completion_stats,
-            'recommendations': recommendations,
-            'recent_activity': recent_completions,
-            'achievements': achievements,
-            'last_updated': datetime.now(timezone.utc).isoformat()
-        }
-        
-        return jsonify(response_data)
-        
-    except Exception as e:
-        logger.error(f"Error getting user progress: {e}")
-        return jsonify({'error': 'Failed to load progress data'}), 500
-
 @user_bp.route('/profile', methods=['PUT'])
 @require_auth
 def update_profile():
@@ -267,247 +174,7 @@ def update_profile():
     except Exception as e:
         logger.error(f"Error updating profile: {e}")
         return jsonify({'error': 'Internal server error'}), 500
-
-# ===== FIXED HELPER FUNCTIONS =====
-
-def _ensure_default_roleplay_access(user_id: str) -> bool:
-    """FIXED: Ensure user has default roleplay access records"""
-    try:
-        client = supabase_service.get_service_client()
-        now = datetime.now(timezone.utc).isoformat()
-        
-        # Default roleplays that should always be available
-        default_roleplays = ['1.1', '1.2', '3']
-        
-        for roleplay_id in default_roleplays:
-            try:
-                # Check if record exists
-                existing = client.table('user_roleplay_progress').select('*').eq(
-                    'user_id', user_id
-                ).eq('roleplay_id', roleplay_id).execute()
-                
-                if not existing.data:
-                    # Create default access record
-                    default_record = {
-                        'user_id': user_id,
-                        'roleplay_id': roleplay_id,
-                        'is_unlocked': True,
-                        'unlocked_at': now,
-                        'created_at': now,
-                        'total_attempts': 0,
-                        'successful_attempts': 0,
-                        'best_score': 0
-                    }
-                    
-                    client.table('user_roleplay_progress').insert(default_record).execute()
-                    logger.info(f"✅ Created default access record for {user_id}/{roleplay_id}")
-                else:
-                    # Ensure existing record is unlocked
-                    record = existing.data[0]
-                    if not record.get('is_unlocked', False):
-                        client.table('user_roleplay_progress').update({
-                            'is_unlocked': True,
-                            'unlocked_at': now,
-                            'updated_at': now
-                        }).eq('id', record['id']).execute()
-                        logger.info(f"✅ Fixed unlock status for {user_id}/{roleplay_id}")
-                        
-            except Exception as roleplay_error:
-                logger.warning(f"Error ensuring access for {roleplay_id}: {roleplay_error}")
-        
-        return True
-        
-    except Exception as e:
-        logger.error(f"Error ensuring default roleplay access: {e}")
-        return False
-
-def _get_roleplay_access_fixed(user_id: str, progress: Dict[str, Any], access_level: str) -> Dict[str, Any]:
-    """FIXED: Get roleplay unlock status using progress service"""
-    access = {}
     
-    roleplay_ids = ['1.1', '1.2', '1.3', '2.1', '2.2', '3', '4', '5']
-    
-    # FIXED: Always available roleplays
-    always_available = ['1.1', '1.2', '3']
-    
-    for roleplay_id in roleplay_ids:
-        try:
-            progress_data = progress.get(roleplay_id, {})
-            
-            # FIXED: Force always-available roleplays to be unlocked
-            if roleplay_id in always_available:
-                access[roleplay_id] = {
-                    'unlocked': True,
-                    'unlock_condition': 'Always available',
-                    'expires_at': None,
-                    'required_roleplay': None,
-                    'current_progress': None,
-                    'best_score': progress_data.get('best_score', 0),
-                    'total_attempts': progress_data.get('total_attempts', 0),
-                    'marathon_passed': progress_data.get('marathon_passed', False),
-                    'completed': progress_data.get('completed', False)
-                }
-                logger.info(f"✅ {roleplay_id} set as always available for user {user_id}")
-            else:
-                # Use the progress service for access checking
-                access_check = progress_service.check_roleplay_access(user_id, roleplay_id)
-                
-                access[roleplay_id] = {
-                    'unlocked': access_check['allowed'],
-                    'unlock_condition': access_check.get('reason', 'Unknown'),
-                    'expires_at': None,  # Not used for now
-                    'required_roleplay': access_check.get('required_roleplay'),
-                    'current_progress': access_check.get('current_progress'),
-                    'best_score': progress_data.get('best_score', 0),
-                    'total_attempts': progress_data.get('total_attempts', 0),
-                    'marathon_passed': progress_data.get('marathon_passed', False),
-                    'completed': progress_data.get('completed', False)
-                }
-                logger.info(f"🔍 {roleplay_id} access check for user {user_id}: {access_check['allowed']}")
-                
-        except Exception as e:
-            logger.warning(f"Error checking access for {roleplay_id}: {e}")
-            # FIXED: Fallback logic with safe defaults
-            is_always_available = roleplay_id in always_available
-            access[roleplay_id] = {
-                'unlocked': is_always_available,
-                'unlock_condition': 'Always available' if is_always_available else 'Error checking access',
-                'expires_at': None
-            }
-    
-    return access
-
-def _get_available_roleplays(user_id: str) -> List[str]:
-    """FIXED: Get list of roleplays available to the user"""
-    try:
-        # FIXED: Always available roleplays (guaranteed)
-        always_available = ['1.1', '1.2', '3']
-        available = always_available.copy()
-        
-        logger.info(f"🔓 Always available for user {user_id}: {always_available}")
-        
-        # Check unlocked roleplays using progress service
-        for roleplay_id in ['1.3', '2.1', '2.2', '4', '5']:
-            try:
-                access_check = progress_service.check_roleplay_access(user_id, roleplay_id)
-                if access_check['allowed']:
-                    available.append(roleplay_id)
-                    logger.info(f"🔓 {roleplay_id} unlocked for user {user_id}: {access_check['reason']}")
-                else:
-                    logger.info(f"🔒 {roleplay_id} locked for user {user_id}: {access_check['reason']}")
-            except Exception as e:
-                logger.warning(f"Error checking access for {roleplay_id}: {e}")
-        
-        logger.info(f"✅ Final available roleplays for user {user_id}: {available}")
-        return available
-        
-    except Exception as e:
-        logger.error(f"Error getting available roleplays: {e}")
-        # FIXED: Safe fallback with guaranteed defaults
-        return ['1.1', '1.2', '3']
-
-def _get_next_recommendations(user_id: str, progress: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Get next recommended actions for the user"""
-    try:
-        recommendations = []
-        
-        # Check Marathon progression
-        marathon_progress = progress.get('1.2', {})
-        if marathon_progress.get('marathon_passed', False):
-            # User has passed marathon - recommend advanced content
-            rp21_progress = progress.get('2.1', {})
-            if not rp21_progress.get('best_score', 0) >= 70:
-                recommendations.append({
-                    'roleplay_id': '2.1',
-                    'name': 'Post-Pitch Practice',
-                    'priority': 'high',
-                    'reason': 'Newly unlocked! Practice advanced conversation skills.',
-                    'best_score': rp21_progress.get('best_score', 0),
-                    'attempts': rp21_progress.get('total_attempts', 0)
-                })
-        else:
-            # User hasn't passed marathon yet
-            if marathon_progress.get('total_attempts', 0) == 0:
-                recommendations.append({
-                    'roleplay_id': '1.2',
-                    'name': 'Marathon Mode',
-                    'priority': 'high',
-                    'reason': 'Complete this to unlock advanced content!',
-                    'best_score': marathon_progress.get('marathon_best_run', 0),
-                    'attempts': marathon_progress.get('total_attempts', 0)
-                })
-        
-        # Always recommend practice if struggling
-        practice_progress = progress.get('1.1', {})
-        if practice_progress.get('best_score', 0) < 80:
-            recommendations.append({
-                'roleplay_id': '1.1',
-                'name': 'Practice Mode',
-                'priority': 'medium',
-                'reason': 'Strengthen fundamentals before advancing',
-                'best_score': practice_progress.get('best_score', 0),
-                'attempts': practice_progress.get('total_attempts', 0)
-            })
-        
-        # Sort by priority
-        priority_order = {'high': 0, 'medium': 1, 'low': 2}
-        recommendations.sort(key=lambda x: (priority_order.get(x['priority'], 3), x['attempts']))
-        
-        return recommendations[:3]
-        
-    except Exception as e:
-        logger.error(f"Error getting recommendations: {e}")
-        return []
-
-def _get_roleplay_display_name(roleplay_id: str) -> str:
-    """Get display name for roleplay ID"""
-    names = {
-        '1.1': 'Practice Mode',
-        '1.2': 'Marathon Mode', 
-        '1.3': 'Legend Mode',
-        '2.1': 'Post-Pitch Practice',
-        '2.2': 'Advanced Marathon',
-        '3': 'Warm-up Challenge',
-        '4': 'Full Cold Call',
-        '5': 'Power Hour'
-    }
-    return names.get(str(roleplay_id), f'Roleplay {roleplay_id}')
-
-def _format_duration(minutes: int) -> str:
-    """Format duration in minutes to readable string"""
-    if minutes < 1:
-        return "< 1 min"
-    elif minutes < 60:
-        return f"{minutes} min"
-    else:
-        hours = minutes // 60
-        remaining_minutes = minutes % 60
-        if remaining_minutes == 0:
-            return f"{hours}h"
-        else:
-            return f"{hours}h {remaining_minutes}m"
-
-def _format_date(date_string: str) -> str:
-    """Format date string for display"""
-    try:
-        if not date_string:
-            return "Unknown"
-        
-        date_obj = _parse_iso_datetime(date_string)
-        now = datetime.now(timezone.utc)
-        diff = now - date_obj
-        
-        if diff.days == 0:
-            return "Today"
-        elif diff.days == 1:
-            return "Yesterday"
-        elif diff.days < 7:
-            return f"{diff.days} days ago"
-        else:
-            return date_obj.strftime("%b %d, %Y")
-    except:
-        return "Unknown"
-
 def _calculate_access_info(profile):
     """Calculate user's access limits and usage"""
     access_level = profile.get('access_level', 'limited_trial')
@@ -561,6 +228,57 @@ def _calculate_access_info(profile):
     
     return result
 
+def _get_roleplay_access(progress, access_level):
+    """Get roleplay unlock status"""
+    access = {}
+    
+    for roleplay_id in range(1, 6):
+        config = ROLEPLAY_CONFIG.get(roleplay_id, {})
+        progress_item = next((p for p in progress if p.get('roleplay_id') == roleplay_id), None)
+        
+        if roleplay_id == 1:
+            # Roleplay 1 always unlocked
+            access[roleplay_id] = {
+                'unlocked': True,
+                'unlock_condition': 'Always available',
+                'expires_at': None
+            }
+        elif access_level == 'unlimited_pro':
+            # Pro users have everything unlocked
+            access[roleplay_id] = {
+                'unlocked': True,
+                'unlock_condition': 'Pro access',
+                'expires_at': None
+            }
+        elif progress_item and progress_item.get('unlocked_at'):
+            # Check if unlock has expired (for Basic users)
+            is_unlocked = True
+            expires_at = progress_item.get('expires_at')
+            
+            if expires_at and access_level == 'unlimited_basic':
+                try:
+                    expire_time = _parse_iso_datetime(expires_at)
+                    current_time = datetime.now(timezone.utc)
+                    is_unlocked = current_time < expire_time
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Could not parse expiry date {expires_at}: {e}")
+                    is_unlocked = True  # Default to unlocked if can't parse
+            
+            access[roleplay_id] = {
+                'unlocked': is_unlocked,
+                'unlock_condition': config.get('unlock_condition', 'Unknown'),
+                'expires_at': expires_at
+            }
+        else:
+            # Not unlocked
+            access[roleplay_id] = {
+                'unlocked': False,
+                'unlock_condition': config.get('unlock_condition', 'Unknown'),
+                'expires_at': None
+            }
+    
+    return access
+
 def _parse_iso_datetime(date_string: str) -> datetime:
     """Parse ISO datetime string with timezone handling"""
     if not date_string:
@@ -582,8 +300,45 @@ def _parse_iso_datetime(date_string: str) -> datetime:
         logger.warning(f"Could not parse datetime {date_string}: {e}")
         return datetime.now(timezone.utc)
 
+@user_bp.route('/roleplay-progress', methods=['GET'])
+@require_auth
+def get_user_roleplay_progress():
+    """Get comprehensive user roleplay progress - FIXED"""
+    try:
+        user_id = session.get('user_id')
+        
+        # Get progress data
+        progress = progress_service.get_user_roleplay_progress(user_id)
+        available_roleplays = progress_service.get_available_roleplays(user_id)
+        completion_stats = progress_service.get_completion_stats(user_id)
+        recommendations = progress_service.get_next_recommendations(user_id)
+        
+        # Get recent activity
+        recent_completions = get_recent_completions(user_id, limit=5)
+        
+        # Get achievements - FIXED: Call helper function
+        achievements = get_user_achievements_helper(user_id)
+        
+        response_data = {
+            'user_id': user_id,
+            'progress': progress,
+            'available_roleplays': available_roleplays,
+            'completion_stats': completion_stats,
+            'recommendations': recommendations,
+            'recent_activity': recent_completions,
+            'achievements': achievements,
+            'last_updated': datetime.now(timezone.utc).isoformat()
+        }
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        logger.error(f"Error getting user progress: {e}")
+        return jsonify({'error': 'Failed to load progress data'}), 500
+
+# ADD this new helper function:
 def get_user_achievements_helper(user_id: str):
-    """Helper function to get user achievements"""
+    """Helper function to get user achievements (not a route)"""
     try:
         result = supabase_service.get_service_client().table('user_achievements').select(
             '*'
@@ -601,39 +356,238 @@ def get_user_achievements_helper(user_id: str):
         logger.error(f"Error getting achievements for user {user_id}: {e}")
         return {'achievements': [], 'total_points': 0, 'total_count': 0}
 
+# UPDATE the existing route function:
 @user_bp.route('/achievements', methods=['GET'])
 @require_auth  
 def get_user_achievements():
-    """Get user's achievements"""
+    """Get user's achievements (route function) - UPDATED"""
     try:
         user_id = session.get('user_id')
+        
+        # Call the helper function
         return jsonify(get_user_achievements_helper(user_id))
         
     except Exception as e:
         logger.error(f"Error getting achievements: {e}")
         return jsonify({'achievements': [], 'total_points': 0, 'total_count': 0})
 
+@user_bp.route('/leaderboard/<roleplay_id>', methods=['GET'])
+@require_auth
+def get_roleplay_leaderboard(roleplay_id):
+    """Get leaderboard for specific roleplay"""
+    try:
+        limit = min(int(request.args.get('limit', 10)), 50)
+        user_id = session.get('user_id')
+        
+        leaderboard = progress_service.get_leaderboard(roleplay_id, limit)
+        
+        # Find user's rank
+        user_rank = None
+        user_score = None
+        for entry in leaderboard:
+            if entry['user_id'] == user_id:
+                user_rank = entry['rank']
+                user_score = entry['score']
+                break
+        
+        # If user not in top, find their rank
+        if user_rank is None:
+            user_stats = supabase_service.get_service_client().table('user_roleplay_stats').select(
+                'best_score'
+            ).eq('user_id', user_id).eq('roleplay_id', roleplay_id).execute()
+            
+            if user_stats.data and user_stats.data[0]['best_score']:
+                user_score = user_stats.data[0]['best_score']
+                
+                # Count how many users have higher scores
+                higher_scores = supabase_service.get_service_client().table('user_roleplay_stats').select(
+                    'user_id', count='exact'
+                ).eq('roleplay_id', roleplay_id).gt('best_score', user_score).execute()
+                
+                user_rank = (higher_scores.count or 0) + 1
+        
+        return jsonify({
+            'roleplay_id': roleplay_id,
+            'leaderboard': leaderboard,
+            'user_rank': user_rank,
+            'user_score': user_score,
+            'total_participants': len(leaderboard)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting leaderboard: {e}")
+        return jsonify({'error': 'Failed to load leaderboard'}), 500
+    
+@user_bp.route('/export-progress', methods=['GET'])
+@require_auth
+def export_user_progress():
+    """Export user's complete progress data"""
+    try:
+        user_id = session.get('user_id')
+        format_type = request.args.get('format', 'json')  # json, csv
+        
+        # Get all user data
+        progress = progress_service.get_user_roleplay_progress(user_id)
+        completions = get_all_completions(user_id)
+        achievements = get_user_achievements(user_id)
+        
+        export_data = {
+            'user_id': user_id,
+            'exported_at': datetime.now(timezone.utc).isoformat(),
+            'progress_summary': progress,
+            'all_completions': completions,
+            'achievements': achievements['achievements'],
+            'statistics': progress_service.get_completion_stats(user_id)
+        }
+        
+        if format_type == 'csv':
+            # Convert to CSV format
+            return export_to_csv(export_data)
+        else:
+            # Return JSON
+            return jsonify(export_data)
+        
+    except Exception as e:
+        logger.error(f"Error exporting progress: {e}")
+        return jsonify({'error': 'Failed to export data'}), 500
+
+# ===== Helper Functions =====
+
 def get_recent_completions(user_id: str, limit: int = 5):
     """Get recent roleplay completions"""
     try:
         result = supabase_service.get_service_client().table('roleplay_completions').select(
-            'roleplay_id, score, completed_at, duration_minutes, success, mode'
+            'roleplay_id, score, completed_at, duration_minutes, success'
         ).eq('user_id', user_id).order('completed_at', desc=True).limit(limit).execute()
         
-        # Enhance the data for display
-        enhanced_completions = []
-        for completion in (result.data or []):
-            enhanced_completions.append({
-                **completion,
-                'roleplay_name': _get_roleplay_display_name(completion.get('roleplay_id')),
-                'duration_display': _format_duration(completion.get('duration_minutes', 0)),
-                'date_display': _format_date(completion.get('completed_at'))
-            })
-        
-        return enhanced_completions
+        return result.data if result.data else []
         
     except Exception as e:
         logger.error(f"Error getting recent completions: {e}")
         return []
 
-logger.info("User progress routes initialized with fixes")
+def get_all_completions(user_id: str):
+    """Get all user completions for export"""
+    try:
+        result = supabase_service.get_service_client().table('roleplay_completions').select(
+            '*'
+        ).eq('user_id', user_id).order('completed_at', desc=True).execute()
+        
+        return result.data if result.data else []
+        
+    except Exception as e:
+        logger.error(f"Error getting all completions: {e}")
+        return []
+
+def calculate_improvement_trend(user_id: str):
+    """Calculate if user is improving over time"""
+    try:
+        # Get recent scores vs older scores
+        recent_completions = supabase_service.get_service_client().table('roleplay_completions').select(
+            'score, completed_at'
+        ).eq('user_id', user_id).order('completed_at', desc=True).limit(10).execute()
+        
+        if not recent_completions.data or len(recent_completions.data) < 3:
+            return 'insufficient_data'
+        
+        scores = [c['score'] for c in recent_completions.data]
+        recent_avg = sum(scores[:3]) / 3  # Last 3
+        older_avg = sum(scores[3:]) / len(scores[3:])  # Earlier ones
+        
+        if recent_avg > older_avg + 5:
+            return 'improving'
+        elif recent_avg < older_avg - 5:
+            return 'declining'
+        else:
+            return 'stable'
+            
+    except Exception as e:
+        logger.error(f"Error calculating improvement trend: {e}")
+        return 'unknown'
+
+def calculate_consistency_score(scores):
+    """Calculate how consistent user's performance is"""
+    if not scores or len(scores) < 2:
+        return 0
+    
+    # Calculate standard deviation
+    mean = sum(scores) / len(scores)
+    variance = sum((x - mean) ** 2 for x in scores) / len(scores)
+    std_dev = variance ** 0.5
+    
+    # Convert to consistency score (lower std_dev = higher consistency)
+    # Scale from 0-100 where 100 is perfect consistency
+    max_possible_std = 50  # Assume max std dev of 50 points
+    consistency = max(0, 100 - (std_dev / max_possible_std * 100))
+    
+    return round(consistency, 1)
+
+def export_to_csv(data):
+    """Convert export data to CSV format"""
+    import csv
+    import io
+    from flask import Response
+    
+    output = io.StringIO()
+    
+    # Write completions data
+    if data['all_completions']:
+        writer = csv.DictWriter(output, fieldnames=[
+            'roleplay_id', 'score', 'completed_at', 'duration_minutes', 'success'
+        ])
+        writer.writeheader()
+        for completion in data['all_completions']:
+            writer.writerow({
+                'roleplay_id': completion['roleplay_id'],
+                'score': completion['score'],
+                'completed_at': completion['completed_at'],
+                'duration_minutes': completion['duration_minutes'],
+                'success': completion['success']
+            })
+    
+    csv_data = output.getvalue()
+    output.close()
+    
+    return Response(
+        csv_data,
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=roleplay_progress.csv'}
+    )
+
+# ===== Achievement Tracking =====
+
+@user_bp.route('/award-achievement', methods=['POST'])
+@require_auth
+def award_achievement():
+    """Award achievement to user (internal use)"""
+    try:
+        data = request.get_json()
+        user_id = session.get('user_id')
+        
+        # Verify this is an internal request or admin
+        # Add proper authorization logic here
+        
+        achievement_data = {
+            'user_id': user_id,
+            'achievement_type': data['type'],
+            'roleplay_id': data.get('roleplay_id'),
+            'title': data['title'],
+            'description': data['description'],
+            'badge_icon': data.get('badge_icon', 'fas fa-trophy'),
+            'points': data.get('points', 0)
+        }
+        
+        result = supabase_service.get_service_client().table('user_achievements').insert(
+            achievement_data
+        ).execute()
+        
+        if result.data:
+            return jsonify({'success': True, 'achievement': result.data[0]})
+        else:
+            return jsonify({'success': False, 'error': 'Failed to award achievement'}), 500
+            
+    except Exception as e:
+        logger.error(f"Error awarding achievement: {e}")
+        return jsonify({'error': 'Failed to award achievement'}), 500
+
+logger.info("User progress routes initialized")
