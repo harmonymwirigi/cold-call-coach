@@ -1,4 +1,4 @@
-<!-- ===== templates/roleplay/roleplay-1-selection.html (FIXED) ===== -->
+<!-- ===== FIXED templates/roleplay/roleplay-1-selection.html ===== -->
 {% extends "base.html" %}
 
 {% block title %}Roleplay 1: Opener & Early Objections - Cold Calling Coach{% endblock %}
@@ -66,7 +66,7 @@
         transition: all 0.3s ease;
         backdrop-filter: blur(10px);
         position: relative;
-        text-decoration: none; /* Ensure it doesn't look like a default link */
+        text-decoration: none;
     }
     .mode-card:hover:not(.disabled) {
         background: rgba(255, 255, 255, 0.2);
@@ -160,7 +160,7 @@
                 <div class="mode-icon"><i class="fas fa-running"></i></div>
                 <h3 class="mode-name">Marathon Mode</h3>
                 <p class="mode-description">10 calls in a row. Pass 6 to complete. Tests consistency.</p>
-                <div class="mode-requirements">Need 6/10 passes • Unlocks Legend Mode</div>
+                <div class="mode-requirements">Need 6/10 passes • Unlocks Legend Mode & Roleplay 2</div>
             </div>
 
             <!-- Legend Mode (1.3) - Dynamically handled by JS -->
@@ -185,12 +185,13 @@
             </div>
             <div class="progress-item">
                 <span>Roleplay 2 Access:</span>
-                <span class="progress-status status-pending" id="roleplay2-status">Complete Legend to unlock</span>
+                <span class="progress-status status-pending" id="roleplay2-status">Complete Marathon to unlock</span>
             </div>
         </div>
     </div>
 </div>
 
+<!-- FIXED: Hidden data element for progress -->
 <div id="user-progress-data" style="display: none;">
     {{ user_progress | tojson if user_progress else '{}' }}
 </div>
@@ -206,12 +207,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (progressElement && progressElement.textContent.trim()) {
         try {
             userProgress = JSON.parse(progressElement.textContent);
+            console.log('📊 Loaded user progress:', userProgress);
         } catch (e) {
             console.error("Could not parse user progress JSON", e);
         }
     }
 
-    // --- START: NEW EVENT LISTENER LOGIC ---
+    // Event listeners for mode cards
     document.querySelectorAll('.mode-card').forEach(card => {
         card.addEventListener('click', (event) => {
             const modeId = card.dataset.modeId;
@@ -224,50 +226,102 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
-    // --- END: NEW EVENT LISTENER LOGIC ---
 
     function updateUIBasedOnProgress() {
-        // Update Practice Mode (1.1) score
+        console.log('🔄 Updating UI based on progress data');
+        
+        // FIXED: Update Practice Mode (1.1) score display
         const practiceData = userProgress['1.1'];
+        const practiceScoreEl = document.getElementById('practice-score');
+        
         if (practiceData && practiceData.best_score > 0) {
-            const scoreEl = document.getElementById('practice-score');
-            scoreEl.textContent = `${practiceData.best_score}/100`;
-            scoreEl.className = 'progress-status ' + (practiceData.best_score >= 70 ? 'status-pass' : 'status-fail');
+            practiceScoreEl.textContent = `${practiceData.best_score}/100`;
+            practiceScoreEl.className = 'progress-status ' + (practiceData.best_score >= 70 ? 'status-pass' : 'status-fail');
+            console.log(`✅ Practice Mode: ${practiceData.best_score}/100 (${practiceData.best_score >= 70 ? 'PASS' : 'FAIL'})`);
+        } else {
+            practiceScoreEl.textContent = 'Not attempted';
+            practiceScoreEl.className = 'progress-status status-pending';
+            console.log('📝 Practice Mode: Not attempted');
         }
 
+        // FIXED: Update Marathon Mode (1.2) status display
         const marathonData = userProgress['1.2'];
+        const marathonStatusEl = document.getElementById('marathon-status');
+        
         if (marathonData) {
-            const statusEl = document.getElementById('marathon-status');
             const bestRun = marathonData.marathon_best_run || 0;
-            // THIS IS THE FIX: Check the specific `marathon_passed` flag
-            const passed = marathonData.marathon_passed;
-            statusEl.textContent = passed ? `Passed (${bestRun}/10)` : `${bestRun}/10 Passed`;
-            statusEl.className = 'progress-status ' + (passed ? 'status-pass' : 'status-pending');
+            const marathonPassed = marathonData.marathon_passed || false;
+            const totalAttempts = marathonData.total_attempts || 0;
+            
+            console.log(`📊 Marathon Data:`, {
+                bestRun,
+                marathonPassed,
+                totalAttempts,
+                marathonCompleted: marathonData.marathon_completed
+            });
+            
+            if (marathonPassed) {
+                marathonStatusEl.textContent = `Passed (${bestRun}/10)`;
+                marathonStatusEl.className = 'progress-status status-pass';
+                console.log(`✅ Marathon Mode: PASSED with ${bestRun}/10 calls`);
+            } else if (totalAttempts > 0) {
+                marathonStatusEl.textContent = `${bestRun}/10 calls passed`;
+                marathonStatusEl.className = 'progress-status status-fail';
+                console.log(`📈 Marathon Mode: ${bestRun}/10 calls passed (not yet passed)`);
+            } else {
+                marathonStatusEl.textContent = 'Not attempted';
+                marathonStatusEl.className = 'progress-status status-pending';
+                console.log('📝 Marathon Mode: Not attempted');
+            }
+        } else {
+            marathonStatusEl.textContent = 'Not attempted';
+            marathonStatusEl.className = 'progress-status status-pending';
+            console.log('📝 Marathon Mode: No data available');
         }
 
-        // Update Legend Mode (1.3) availability
-        const legendUnlocked = marathonData && marathonData.marathon_passed;
+        // FIXED: Update Legend Mode (1.3) availability
+        const marathonPassed = marathonData && marathonData.marathon_passed;
         const legendCard = document.querySelector('[data-mode-id="1.3"]');
+        
         if (legendCard) {
-            if (legendUnlocked) {
+            if (marathonPassed) {
                 legendCard.classList.remove('disabled');
                 const statusBadge = legendCard.querySelector('.mode-status');
                 statusBadge.textContent = 'Available';
                 statusBadge.classList.remove('status-locked');
                 statusBadge.classList.add('status-available');
+                console.log('🔓 Legend Mode: UNLOCKED');
+            } else {
+                console.log('🔒 Legend Mode: Still locked (Marathon not passed)');
             }
         }
         
-        // Update Roleplay 2 access status
-        const legendCompleted = userProgress['1.3']?.legend_completed;
+        // FIXED: Update Roleplay 2 access status
         const rp2StatusEl = document.getElementById('roleplay2-status');
-        if (rp2StatusEl && legendCompleted) {
-            rp2StatusEl.textContent = 'Unlocked!';
-            rp2StatusEl.className = 'progress-status status-pass';
+        if (rp2StatusEl) {
+            if (marathonPassed) {
+                rp2StatusEl.textContent = 'Unlocked! (Marathon passed)';
+                rp2StatusEl.className = 'progress-status status-pass';
+                console.log('🔓 Roleplay 2: UNLOCKED');
+            } else {
+                rp2StatusEl.textContent = 'Complete Marathon to unlock';
+                rp2StatusEl.className = 'progress-status status-pending';
+                console.log('🔒 Roleplay 2: Still locked');
+            }
         }
     }
 
+    // Call the update function
     updateUIBasedOnProgress();
+    
+    // FIXED: Debug logging
+    console.log('🔍 Debug Info:', {
+        hasProgressData: Object.keys(userProgress).length > 0,
+        progressKeys: Object.keys(userProgress),
+        practiceData: userProgress['1.1'],
+        marathonData: userProgress['1.2'],
+        legendData: userProgress['1.3']
+    });
 });
 </script>
 {% endblock %}
